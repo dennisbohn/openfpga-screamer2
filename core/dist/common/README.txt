@@ -8,7 +8,7 @@ The core needs the files of your own copy of Screamer 2 (1996). Copy these into 
 
 This folder is Assets/screamer2/common/ on the SD card. The core is tested with the GOG version.
 When it starts, the core lists the files it found and the ones that are missing, and says what is
-wrong with the ZIP. GAME.GOG and GAME.DAT only bring the music.
+wrong with the ZIP. GAME.GOG and GAME.DAT are optional: without them there is no music.
 
 Make the ZIP with compression method "Store" (no compression): the core reads it fast.
 Deflate, the usual ZIP compression, works too, but loading is slow; the core tells you when it is

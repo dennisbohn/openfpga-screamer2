@@ -269,8 +269,7 @@ void files_draw(volatile uint8_t *fb, int failed)
 
     if (!zip_err) {
         con_text(fb, 1, 3, "Needed for a race", WHITE, BLACK);
-        con_text(fb, 1, 10, "Optional (grey: not there, fine)", GREY, BLACK);
-        int idx = 0;
+        int idx = 0, music_missing = 0;
         char tok[16];
         for (int i = 0; i < NGROUPS; i++) {
             const struct group *g = &groups[i];
@@ -278,9 +277,12 @@ void files_draw(volatile uint8_t *fb, int failed)
             int col = ITEM_COL;
             for (const char *s = g->items; (s = next_item(s, tok)) && idx < MAX_ITEMS; idx++) {
                 int st = state[idx];
+                if (g->slots && st != ST_OK) music_missing = 1;
                 col = con_text(fb, col, g->row, tok, st == ST_OK || st == ST_DEFLATED ? GREEN : g->must || st == ST_METHOD ? RED : GREY, BLACK) + 1;
             }
         }
+        /* Screamer 2 has no MIDI songs: without the CD files there is no music at all */
+        con_text(fb, 1, 10, music_missing ? "Optional. Without Music (CD): no music" : "Optional (grey: not there, fine)", GREY, BLACK);
     }
 
     /* rows 21 to 24: the state, then what is missing or why the read test failed, then the hint or the notice */
