@@ -64,8 +64,10 @@ controller, caches, clock phase): `docs/memory.md`. Overall architecture:
 | `0xF400_0000` | 64 MB | SDRAM, the same memory uncached | no |
 
 SDRAM layout (set by the firmware and the data slot addresses in `core/data.json`). The Screamer 2
-program so far uses only the ZIP's directory scratch at `0x12D6_0000` and, for the read test of its files
-screen, 8 MB at `0x1100_0000`; the rows that name Screamer 1's slots (3 to 20, 25) describe the Screamer 1
+program uses, for the files screen, the ZIP's directory scratch at `0x12D6_0000` and 8 MB at `0x1100_0000`
+for the read test, and, for the viewer (`firmware/viewer.c`), the track image at `0x1210_0000` (7 MB window,
+3.5 to 5.4 MB used) with the three containers of the track read whole from the ZIP above it (rows below) and the
+build's scratch; the rows that name Screamer 1's slots (3 to 20, 25) describe the Screamer 1
 game code still in the tree, which is replaced step by step and not reached now. Data slot 3 is
 `SCREAMER2.zip` (all the game's `DATA`, `GFX` and `ANIMS` files, read with `firmware/zip.c`), 21 and 22
 the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
@@ -81,9 +83,9 @@ the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
 | `0x11C0_0000` | sound effects `SOUND.DAT` (slot 8, up to 2 MB; the mixer plays them from there; the nine menu samples already at start, each at its place) |
 | `0x11E0_0000` | music ring (256 KB, from the CD image, slot 22) |
 | `0x11F4_0000` | `MUSIC.DAT` (slot 25, up to 256 KB; 200 KB: the FM music's songs and instrument banks, read when the FM music is first needed) |
-| `0x1210_0000` | track image (built by the firmware) |
-| `0x1280_0000` | game files: `MAPnH.DAT` `0x1280_0000` (slots 3, 9-13), `GAME.DAT` `0x12C0_0000` (4), `MAPn.DAT` `0x12D0_0000` (5, 14-18), `GEN.DAT` `0x12D4_0000` (6), `LOCAL.DAT` `0x12D5_0000` (7) |
-| `0x12D6_0000` | working memory of the track build; the directory scratch of `zip_open` (72 KB) |
+| `0x1210_0000` | track image (built by the firmware, `track_build_s2()`: car materials, MLB with the cars' libraries, meshes, ...; up to 7 MB, 28 blocks of 256 KB) |
+| `0x1280_0000` | the viewer's containers, read whole from the ZIP: `GFX/MAPnH01.DAT` `0x1280_0000` (up to 4 MB, 2.2 to 2.6 MB used), `GFX/CARS101.DAT` `0x12C0_0000` (up to 1 MB, 0.76 MB), `DATA/MAPn.DAT` `0x12D0_0000` (up to 256 KB, 5 to 20 KB) |
+| `0x12D6_0000` | working memory of the track build (up to the program: 2.75 MB, about 1.7 MB used); the directory scratch of `zip_open` (72 KB) |
 | `0x1300_0000` | the program (slot 2, at most 1 MB) |
 | `0x13F0_0000` | saved game `CHOICE.DAT` (slot 23, nonvolatile) |
 | `0x13F1_0000` | saved game `ATTACK.DAT` (slot 24, nonvolatile) |

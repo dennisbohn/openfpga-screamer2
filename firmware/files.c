@@ -314,5 +314,17 @@ void files_draw(volatile uint8_t *fb, int failed)
         con_text(fb, 1, 24, "Assets/screamer2/common/ (see README)", WHITE, BLACK);
     } else if (req_deflated && load_state != 2) {
         for (int i = 0; i < 3; i++) con_text(fb, 1, 22 + i, slow_text[i], WHITE, BLACK);
+    } else if (load_state == 1) {
+        con_text(fb, 1, 23, "Starting the viewer (A or B: now)", WHITE, BLACK);
     }
+}
+
+int files_ready(void)
+{
+    return !needed && !zip_err && load_state == 1;
+}
+
+struct zip *files_zip(void)
+{
+    return &zip;
 }

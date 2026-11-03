@@ -30,6 +30,7 @@
 #include "hw.h"
 #include "track.h"
 #include "car.h"
+#include "road.h"
 #include "perf.h"
 
 void perf_set_far(float far, float reach);      /* track.c's copy (perf_patch.py) */
@@ -200,6 +201,25 @@ static void carinfo(void)
     }
 }
 
+/* one frame of the viewer's scene (firmware/road.c) s units along the road loop with ncars cars: the same
+   counters, idx = s */
+static void road_frame(FILE *out, const char *label, float s, int ncars)
+{
+    static struct track_object objs[ROAD_CARS];
+    struct track_cam cam;
+    int nobj = road_scene(s, ncars, &cam, objs);
+    const struct rs_clip clip = { 0, 0, FB_W, FB_H };
+    struct track_stats ts;
+    memset(&ts, 0, sizeof ts);
+    perf_reset();
+    track_mode = TRACK_MODEL;
+    track_draw_cam(FB(0), &clip, &cam, objs, nobj, &ts);
+    fprintf(out, "%s,road,%.0f,%.0f,%.0f,%.0f,%d,%u,%u,%u,%u,%u,%u", label, s, cam.x, cam.y, cam.h, ncars, ts.pieces,
+            ts.faces, ts.triangles, ts.vertices, ts.objects, ts.nearest);
+    perf_row(out);
+    fprintf(out, "\n");
+}
+
 int main(int argc, char **argv)
 {
     if (argc >= 3 && !strcmp(argv[2], "carinfo")) {
@@ -240,6 +260,13 @@ int main(int argc, char **argv)
     perf_header(out);
     fprintf(out, "\n");
     fprintf(stderr, "%s: %d placements, %d road points\n", argv[2], placements, nd);
+    if (getenv("ROAD_S")) {                     /* ROAD_S=185,370,...: the viewer's frames instead of the sweep */
+        fprintf(stderr, "road loop %d points, %.0f units\n", road_build(), road_length());
+        for (char *q = strtok(getenv("ROAD_S"), ","); q; q = strtok(0, ","))
+            for (int v = 0; v < ncv; v++) road_frame(out, argv[2], (float)atof(q), cars[v]);
+        fclose(out);
+        return 0;
+    }
 
     /* the road's height at every point; where track_under finds nothing (the middle of the road is
        not always over a drivable piece), that of the nearest point that has one */

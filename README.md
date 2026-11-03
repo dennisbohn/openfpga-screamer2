@@ -19,3 +19,10 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   `firmware/zip.c`, the files screen `firmware/files.c`, tested by `tools/check_zip.sh`.
 - **Quality:** the VGA version (320x200, 256 colours) at DETAIL HIGH with the original's level of
   detail (docs/screamer2/performance.md, section 6). No quality options in the menu, as in Screamer.
+- **Track viewer (milestone 2):** the firmware builds a Screamer 2 track image from the ZIP (`track_build_s2()`,
+  checked byte for byte against `tools/s2/make_track_s2.py` for all seven tracks) and shows it from the game's
+  chase camera over a car driving the road at 150 km/h, with four cars (player + 3), through the hardware
+  path with the original's level of detail at DETAIL HIGH (placed meshes 6,000 / 9,000 units, cars 2,000 /
+  6,000; far plane from TRACK_DATA). A timing overlay (B) and `debug.txt` give the frame times to hold against the
+  forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
+  gaps: white car windows, no shadows, smoke, props, fade, night, mirror, menus, physics, sound, music.

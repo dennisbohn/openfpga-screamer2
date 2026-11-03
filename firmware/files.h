@@ -7,6 +7,7 @@
  */
 #pragma once
 #include <stdint.h>
+#include "zip.h"
 
 /* Open the ZIP (scratch: ZIP_SCRATCH bytes of the SDRAM, free afterwards), look for every file
    and return how many of the files a race needs are missing or cannot be read (a method other
@@ -27,3 +28,8 @@ void files_draw(volatile uint8_t *fb, int failed);
    a file above limit bytes is skipped. The screen shows the result on its next drawing. Call it
    once the first picture is up, so the notice for a compressed ZIP is on screen while it runs. */
 void files_load_check(uint8_t *dest, uint32_t max, uint32_t limit);
+
+/* After files_check() and files_load_check(): 1 if nothing a race needs is missing and the read test
+   passed (the viewer may go on); the ZIP the screen opened, for the viewer to read from */
+int files_ready(void);
+struct zip *files_zip(void);

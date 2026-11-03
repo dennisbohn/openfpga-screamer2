@@ -3,7 +3,7 @@
 #   tools/s2/framestats.sh build
 #       copies firmware/ to build/stats/src_s2, puts the counters of perf_patch.py into the copies and builds
 #       framestats_s2 (tools/s2/framestats.c); NOLOD=1: every block at level 0 (-DTRACK_NO_LOD)
-#   tools/s2/framestats.sh sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]
+#   tools/s2/framestats.sh sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]   (ROAD_S=185,370: the viewer's frames at those places instead)
 #       the frames along the road, see framestats.c
 # The firmware is never changed; the counters live in the copies. Game data only under build/.
 set -e
@@ -12,7 +12,7 @@ st="$root/build/stats"
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); else mount=$root/build; fi
 img=verilator/verilator:v5.050
 docker_sh() { MSYS_NO_PATHCONV=1 docker run --rm "$@"; }
-LIST="track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c"
+LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c"
 
 cmd=$1
 shift
@@ -45,7 +45,7 @@ PY
 sweep)
     v=$1; image=$2; label=$3; out=$4; step=$5; cars=$6; grid=$7
     cp "$image" "$st/$(basename "$image")"
-    docker_sh ${FAR:+-e FAR=$FAR} ${REACH:+-e REACH=$REACH} ${MIRROR:+-e MIRROR=$MIRROR} ${LOD:+-e LOD=$LOD} -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats && ./framestats_$v $(basename "$image") $label $(basename "$out") $step $cars $grid"
+    docker_sh ${FAR:+-e FAR=$FAR} ${REACH:+-e REACH=$REACH} ${MIRROR:+-e MIRROR=$MIRROR} ${ROAD_S:+-e ROAD_S=$ROAD_S} -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats && ./framestats_$v $(basename "$image") $label $(basename "$out") $step $cars $grid"
     mv "$st/$(basename "$out")" "$out"
     ;;
 *)

@@ -209,6 +209,7 @@ struct Sim {
     // of run().
     std::map<uint32_t, std::vector<uint8_t>> files;     // by slot id
     bool race = false;                                  // every game file is there (not for Screamer 2 yet: the program lists them)
+    bool viewer = false;                                // SIM_IMAGE: the track viewer runs (firmware/viewer.c): its 3D picture ends the run
     int slot_reads = 0;
     uint32_t keys = 0;                                  // SIM_KEYS, held from the program's first read
 
@@ -374,7 +375,7 @@ static int check_run(Sim &s, const std::string &prefix, int frames, bool done, c
     // end, where there is no text), or the trap handler's box (rows 18..24 in COL_ALERT; text
     // row 22 is empty); the race (the game's files) draws no band
     if (last.size() == size_t(W * H * 3)) {
-        bool race = s.race && !expect_trap;
+        bool race = (s.race || s.viewer) && !expect_trap;
         auto wrong = [&](int y0, int x0, int x1, bool band, uint32_t fixed) {
             int bad = 0;
             for (int y = y0; y < y0 + 8; y++)
@@ -398,7 +399,7 @@ static int check_run(Sim &s, const std::string &prefix, int frames, bool done, c
             else bad = band;
         }
         printf("%s: %s\n", what,
-               race ? "none in the race, not checked"
+               race ? "none in the race or the viewer, not checked"
                : bad ? (std::to_string(bad) + " of " + std::to_string(n) + " pixels wrong").c_str()
                    : ("all " + std::to_string(n) + " pixels match").c_str());
         fails += bad != 0;
@@ -456,7 +457,7 @@ static int check_run(Sim &s, const std::string &prefix, int frames, bool done, c
         if (text.find("windows of 2048 bytes") == std::string::npos) { printf("FAIL: the log does not name the simulation windows\n"); fails++; }
         // the race (the game's files) checks its whole picture, without them the program says
         // which files it misses
-        const char *check = s.race ? "track check: ok" : "game files: ";
+        const char *check = s.viewer ? "viewer: track " : s.race ? "track check: ok" : "game files: ";
         if (!negative && text.find(check) == std::string::npos) { printf("FAIL: no \"%s\" in the log\n", check); fails++; }
     }
     return fails;
@@ -543,6 +544,7 @@ int main(int argc, char **argv) {
         std::vector<uint8_t> f;
         if (*img && read_file(img, f) && !f.empty()) {
             s.files[30] = f;
+            s.viewer = true;
             printf("%s: %zu bytes (slot 30, the track image)\n", img, f.size());
         }
     }

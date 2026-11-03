@@ -35,6 +35,8 @@
 #include "champ.h"
 #include "save.h"
 #include "intro.h"
+#include "frame.h"
+#include "viewer.h"
 
 uint32_t frames_shown;            /* read by the trap handler */
 
@@ -115,7 +117,7 @@ static void __attribute__((noinline)) stack_fill(void)
         *p = STACK_FILL;
 }
 
-static uint32_t stack_used(void)
+uint32_t stack_used(void)
 {
     uint32_t *p = (uint32_t *)STACK_LOW;
     while (*p == STACK_FILL)
@@ -123,28 +125,28 @@ static uint32_t stack_used(void)
     return BOOTRAM_SIZE - (uint32_t)(uintptr_t)p;
 }
 
-static void log_head(const char *what, uint32_t n)
+void log_head(const char *what, uint32_t n)
 {
     char buf[DLOG_HEAD + 16];
     fmt_udec(fmt_str(fmt_str(buf, "Screamer Pocket step 3, "), what), n);
     dlog_head(buf);
 }
 
-static uint32_t draw_buf;               /* the back buffer, for the hardware's draw commands */
-static uint32_t draw_wait;              /* cycles the DRAW writes waited for the rasterizer */
-static int back_wait;                   /* the backdrop is with the blitter: the first piece waits */
-static uint32_t back_clocks, back_cycles;   /* the blitter's clocks for it, the CPU's wait */
+uint32_t draw_buf;                      /* the back buffer, for the hardware's draw commands (frame.h) */
+uint32_t draw_wait;                     /* cycles the DRAW writes waited for the rasterizer */
+int back_wait;                          /* the backdrop is with the blitter: the first piece waits */
+uint32_t back_clocks, back_cycles;      /* the blitter's clocks for it, the CPU's wait */
 
 /* The frame's timeline (tools/make_timeline_svg.py draws it): at each mark the cycles since
    the frame began, the busy clocks of the geometry unit, setup unit, rasterizer and blitter
    and the CPU's cycles writing to them, each as its counter holds it (cleared during the
    frame; a mark follows every clear). Two buffers: the last whole frame is logged. */
-enum { TL_START, TL_PHYS, TL_PREP, TL_CULL, TL_PIECES, TL_SCENE, TL_CLEAR, TL_HUD, TL_WAIT, TL_END, TL_MUSIC };
 #define TL_MAX 48
 static struct tl_mark { uint32_t t, gu, su, rs, bl, wait, tag; } tl[2][TL_MAX];
-static uint32_t tl_n[2], tl_cur, tl_t0, tl_pieces, tl_scene;
+static uint32_t tl_n[2], tl_cur, tl_t0, tl_pieces;
+uint32_t tl_scene;                      /* hw_piece marks the pieces while this is set (frame.h) */
 
-static void tl_mark(uint32_t tag)
+void tl_mark(uint32_t tag)
 {
     uint32_t n = tl_n[tl_cur];
     if (n < TL_MAX) {
@@ -154,7 +156,7 @@ static void tl_mark(uint32_t tag)
     }
 }
 
-static void tl_begin(uint32_t t_frame)
+void tl_begin(uint32_t t_frame)
 {
     tl_cur ^= 1;
     tl_t0 = t_frame;
@@ -163,7 +165,7 @@ static void tl_begin(uint32_t t_frame)
     tl_n[tl_cur] = 1;
 }
 
-static void tl_log(void)
+void tl_log(void)
 {
     const uint32_t c = tl_cur ^ 1;
     dlog_str("  timeline (t gu su rs bl wait tag):");
@@ -186,7 +188,7 @@ static void tl_log(void)
 #define CD_SIZE     0x10000
 
 /* the projection into the setup unit's registers */
-static void su_view_regs(const struct su_view *v)
+void su_view_regs(const struct su_view *v)
 {
     SU_CENTRE = RS_XY(v->cx, v->cy);
     SU_SCALE = v->scale;
@@ -195,7 +197,7 @@ static void su_view_regs(const struct su_view *v)
 
 /* a piece into the geometry unit's buffer: its place in view space and its mesh; a word
    waits only while the buffer is full */
-static void hw_piece(const struct gu_piece *g)
+void hw_piece(const struct gu_piece *g)
 {
     if (tl_scene) {
         if (tl_pieces++ == 0)
@@ -224,7 +226,7 @@ static void hw_piece(const struct gu_piece *g)
 }
 
 /* the palette entry nearest to an RGB colour, for text on the track's palette */
-static uint8_t nearest(const volatile uint32_t *pal, int r, int g, int b)
+uint8_t nearest(const volatile uint32_t *pal, int r, int g, int b)
 {
     uint32_t best = ~0u;
     uint8_t n = 0;
@@ -246,7 +248,7 @@ static struct blit_list back;           /* this frame's backdrop, the same */
 static struct blit_list dashboard;      /* the cockpit's dashboard, the same */
 
 /* the blitter's commands (blit.v): a copy's first word is its SDRAM byte address */
-static void hw_blit(const struct blit_list *l)
+void hw_blit(const struct blit_list *l)
 {
     for (int i = 0; i < l->n; i++) {
         const uint32_t *c = l->c[i];
@@ -356,7 +358,7 @@ static void still_show(const struct blit_list *l)
 #define FADE_RACE   1311        /* a race in and out: 2 a second (0x21e50, 0x21d8c) */
 
 /* pal at f of 0x8000 into the back buffer's palette: towards black, as the game's 0x27de8 */
-static void pal_faded(const uint32_t *pal, int32_t f)
+void pal_faded(const uint32_t *pal, int32_t f)
 {
     uint32_t k = f < 0 ? 0 : f > 0x8000 ? 0x8000 : (uint32_t)f;
     for (int i = 0; i < 256; i++) {
@@ -1537,15 +1539,22 @@ static void championship(int resume, int *car)
     }
 }
 
-/* The list of the game's files (files.c) for ever: the swaps go on, and the simulation gets
-   its result after three frames. failed: they are all there, but loading them failed */
+/* The list of the game's files (files.c): the swaps go on, and the simulation gets its result after three
+   frames. When nothing is missing and the read test passed, the viewer (viewer.h) starts from here: at a
+   press of A, B or START, after 5 s, in the simulation after the third frame. failed: they are all there,
+   but loading them failed (then for ever) */
 static void __attribute__((noreturn)) files_loop(int failed)
 {
-    uint32_t drawn = 0;
+    uint32_t drawn = 0, keys_before = in_keys();
     for (;;) {
         uint32_t st = wait_swap_done();
         frames_shown = drawn;       /* every frame drawn so far has been swapped in */
-        if (drawn == 3) {           /* three frames drawn and swapped */
+        uint32_t keys = in_keys(), press = keys & ~keys_before;
+        keys_before = keys;
+        int go = !failed && files_ready();
+        if (go && drawn >= 3 && ((SYS_FLAGS & FLAG_SIM) || (press & (KEY_A | KEY_B | KEY_START)) || drawn >= 5 * VID_HZ))
+            viewer_run(results);
+        if (drawn == 3 && !go) {    /* three frames drawn and swapped */
             SYS_SIM = SIM_DONE | results;
             dlog_str("stack used ");
             dlog_dec((int32_t)stack_used());
@@ -1571,9 +1580,9 @@ void prog_main(uint32_t boot_results, uint32_t log_pos, uint32_t log_cur)
     save_load();                    /* first: until then an exit would save the SDRAM as it is */
     menu_options_load();
     volumes();
-    /* Milestone 1 of Screamer 2: the ZIP of the game's files is read and listed, for ever (the
-       status screen, "ready" when nothing is missing). The code below is Screamer 1's game, still
-       in the tree and not reached; it is replaced step by step. */
+    /* Screamer 2: the ZIP of the game's files is read and listed (the status screen); when nothing
+       is missing and the read test passed, the viewer (viewer.h) goes on from there. The code below
+       is Screamer 1's game, still in the tree and not reached; it is replaced step by step. */
     files_check((uint8_t *)BUILD_SCRATCH, PROG_BASE - BUILD_SCRATCH);
     files_loop(0);
     int sim = (SYS_FLAGS & FLAG_SIM) != 0;
