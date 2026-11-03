@@ -1,0 +1,36 @@
+{
+    "core": {
+        "magic": "APF_VER_1",
+        "metadata": {
+            "platform_ids": [
+                "screamer"
+            ],
+            "shortname": "Screamer",
+            "description": "Screamer (1995): RISC-V soft core and a hardware 3D renderer",
+            "author": "Chainy",
+            "url": "https://github.com/dennisbohn/openfpga-screamer",
+            "version": "1.0.2",
+            "date_release": "2026-11-03"
+        },
+        "framework": {
+            "target_product": "Analogue Pocket",
+            "version_required": "1.1",
+            "sleep_supported": false,
+            "dock": {
+                "supported": true,
+                "analog_output": false
+            },
+            "hardware": {
+                "link_port": false,
+                "cartridge_adapter": -1
+            }
+        },
+        "cores": [
+            {
+                "name": "default",
+                "id": 0,
+                "filename": "bitstream.rbf_r"
+            }
+        ]
+    }
+}

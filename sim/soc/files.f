@@ -1,0 +1,24 @@
+--top-module soc_system
+sim/lint.vlt
+-Wno-SYNCASYNCNET
+-Wno-PINCONNECTEMPTY
+core/src/fpga/core/cpu/VexPocketIMFC.v
+core/src/fpga/core/cfu_fixmul.v
+core/src/fpga/core/ram_lane.v
+core/src/fpga/core/sdram.v
+core/src/fpga/core/sdram_port.v
+core/src/fpga/core/pll_dps.v
+core/src/fpga/core/soc.v
+core/src/fpga/core/raster.v
+core/src/fpga/core/raster_tex.v
+core/src/fpga/core/setup.v
+core/src/fpga/core/clipper.v
+core/src/fpga/core/geom.v
+core/src/fpga/core/blit.v
+core/src/fpga/core/audio.v
+core/src/fpga/core/opl.v
+sim/models/jtopl2_stub.v
+core/src/fpga/core/framebuffer.v
+core/src/fpga/core/video_out.v
+sim/models/sdram_model.v
+sim/soc/soc_system.v
