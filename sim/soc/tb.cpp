@@ -208,7 +208,7 @@ struct Sim {
     // file, its last word filled up with zeros. The clocks it takes do not count as frames
     // of run().
     std::map<uint32_t, std::vector<uint8_t>> files;     // by slot id
-    bool race = false;                                  // every game file is there
+    bool race = false;                                  // every game file is there (not for Screamer 2 yet: the program lists them)
     int slot_reads = 0;
     uint32_t keys = 0;                                  // SIM_KEYS, held from the program's first read
 
@@ -219,6 +219,10 @@ struct Sim {
     std::string cd_path;
     uint32_t cd_id = 0, cd_addr = 0;
     uint64_t cd_size = 0;
+    // SCREAMER2.zip: 186 MB, read from the file where asked, sent at once like the other game files
+    std::string zip_path;
+    uint32_t zip_id = 0;
+    uint64_t zip_size = 0;
     std::vector<uint8_t> cd_part;
     size_t cd_k = 0;
     int cd_wait = 0, cd_state = 0;                      // 0 none, 1 sending, 2 sent, 3 done: until ds_read falls
@@ -266,6 +270,21 @@ struct Sim {
                 cd_state = 1;
                 return;
             }
+        }
+        if (id == zip_id && zip_size) {
+            uint64_t end = len == 0xFFFFFFFFu ? zip_size : uint64_t(off) + len;
+            std::vector<uint8_t> part;
+            if (off < zip_size && end <= zip_size && read_part(zip_path, off, end - off, part)) {
+                while (part.size() % 4) part.push_back(0);
+                load(addr, part, 12);
+                err = 0;
+            }
+            printf("data slot read %u: %u bytes from %u to 0x%08x, result %u\n", id, len, off, addr, err);
+            slot_reads++;
+            rise_74(8);
+            top.ds_err = err; top.ds_done = 1; top.eval();
+            while (top.ds_read) rise_74();
+            return;
         }
         auto it = files.find(id);
         if (it != files.end()) {
@@ -485,7 +504,19 @@ int main(int argc, char **argv) {
             if (slot.id <= 2 || slot.save) continue;
             wanted++;
             std::string path = std::string(game) + "/" + slot.name;
-            if (slot.name.size() > 4 && slot.name.compare(slot.name.size() - 4, 4, ".gog") == 0) {
+            std::string ext = slot.name.size() > 4 ? slot.name.substr(slot.name.size() - 4) : "";
+            for (char &c : ext) c = char(tolower(c));
+            if (ext == ".zip") {
+                s.zip_size = file_size(path);           // the game's ZIP: read where asked
+                if (s.zip_size) {
+                    s.zip_path = path;
+                    s.zip_id = slot.id;
+                    found++;
+                    printf("%s: %llu bytes (slot %u, read where asked)\n", path.c_str(), (unsigned long long)s.zip_size, slot.id);
+                } else printf("%s: missing (slot %u)\n", path.c_str(), slot.id);
+                continue;
+            }
+            if (ext == ".gog") {
                 s.cd_size = file_size(path);            // the CD image: read where asked
                 if (s.cd_size) {
                     s.cd_path = path;
@@ -503,7 +534,8 @@ int main(int argc, char **argv) {
                 printf("%s/%s: %zu bytes (slot %u)\n", game, slot.name.c_str(), f.size(), slot.id);
             } else printf("%s/%s: missing (slot %u)\n", game, slot.name.c_str(), slot.id);
         }
-        s.race = wanted > 0 && found == wanted;
+        s.race = false;                                 // Screamer 2: the program only lists its files so far (found == wanted would mean the race)
+        (void)wanted;
     }
     // SIM_IMAGE (tools/simcheck.sh): the finished track image as data slot 30, which
     // core/data.json does not have; the firmware takes it instead of building the image
@@ -537,7 +569,7 @@ int main(int argc, char **argv) {
     for (size_t k = 0; k < slots.size() && k < 32; k++) {
         uint32_t id = slots[k].id;
         auto it = s.files.find(id);
-        uint32_t size = id == 0 ? uint32_t(fw.size()) : id == s.cd_id && s.cd_size ? uint32_t(s.cd_size)
+        uint32_t size = id == 0 ? uint32_t(fw.size()) : id == s.cd_id && s.cd_size ? uint32_t(s.cd_size) : id == s.zip_id && s.zip_size ? uint32_t(s.zip_size)
                         : it != s.files.end() ? uint32_t(it->second.size()) : 0;
         s.bridge_write(0xF8002000u + 8 * uint32_t(k), id);
         s.bridge_write(0xF8002004u + 8 * uint32_t(k), size);

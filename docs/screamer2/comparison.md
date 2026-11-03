@@ -58,8 +58,12 @@ Seen in E1/E2: `MAP1L01` has 594 objects and 1,609 placements, `MAP1H01` 642 and
 | Slot sizes | 4 MB track slot, 4 MB `GRAF.DAT`, 1 MB `GAME.DAT` | track files 2.16 to 2.63 MB fit; `GRAF1.DAT` is 4,203,916 bytes, 9.6 KB over a 4 MiB slot; `GAME1.DAT` 0.45 MB; CD image 569 MB fits 1 GiB | small change | file sizes |
 | **Slots needed** | 26 of 32 | minimum for a race, day + fog, HUD, CD music: firmware, log, program (3) + saves (2) + CD cue and image (2) + `DATA/GAME GEN LOCAL SOUND` (4) + `GAME1` (1) + 7 `MAPnH01` + 7 `DATA/MAPn` (14) + 4 `CARSt01` (4) + `GRAF1` (1) = **31**. Not in it: 7 `ENVP`, night (5 `MAPnH11`, 4 `CARSt11`, 5 `ENVP`), 4 `MENUt1`, `LOGO1`, `MAPS1`, `PLATES1`, the `ANIMS` scenes | **new problem** | counted from E1; APF limit 32 |
 
-Slot economy is a design question for the user: merging the two saves (-1), building the cue in (-1),
-one `ENVP` for all tracks, no night or no 3D menu rooms, or another way to name files. Not tried.
+**Decided (2026-11-03): one ZIP.** The player puts the original `DATA`, `GFX` and `ANIMS` folders into ONE
+ZIP in a single data slot (`SCREAMER2.zip`; entries stored, or deflated at the price of a slow load), and the
+music image `GAME.GOG` and its cue sheet `GAME.DAT` stay two slots of their own. Slots now: firmware, log, program
+(3) + ZIP (1) + cue and image (2) + saves (2) = 8 of 32, and every file of the game is reachable, night, reflections,
+menu rooms and scenes included. The ZIP reader is `firmware/zip.c`, the files screen `firmware/files.c`
+(`docs/development.md`, "Game data").
 
 ## b) Data formats
 

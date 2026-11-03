@@ -13,8 +13,12 @@ the memory system and its test in [`docs/memory.md`](../docs/memory.md).
 At start the firmware clears the debug log, writes the checksum of its own image into it and
 tests the CPU (integer multiply, divide and shifts, floating point, the CFU). A short memory
 test of the SDRAM follows; only a failure leaves its results on the screen. Then `program.bin`
-loads the game's files from the data slots and runs the game. If a file the game needs is
-missing, it lists all the files with [OK] or [MISSING] instead (`files.c`). A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
+reads the game's ZIP from its data slot (`zip.c`) and shows the list of the game's files (`files.c`):
+green where they are, red where a needed one is missing, grey for the optional ones, and in plain words
+what is wrong with the ZIP. When nothing is missing it says "ready" and reads the first race's small
+files whole as a test, logging the time of each (`zip: <name> method <m> <bytes> bytes in <ms> ms`).
+That screen is all of Screamer 2 so far; the Screamer 1 game code is still in the tree and not
+reached. A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
 
 ## Building
 
@@ -37,6 +41,7 @@ and package versions pinned); the script builds the image on first use. The resu
 | `main.c` | program flow: loading, menus, race loop, pause, replay, restart |
 | `hw.h` | addresses and registers from `docs/soc.md`, `rdcycle`, `fixmul` (CFU), cache instructions |
 | `slot.c`, `dat.c`, `crc32.c` | data slots (deferred load), the game's `.DAT` containers, CRC-32 |
+| `zip.c` | the game's single ZIP in a data slot: the central directory (up to 512 files, names matched on the end of the path), stored entries read through word-aligned slot reads, deflated entries inflated into the destination buffer (own inflate, 64 KB input chunks, CRC-32 checked). 110 KB of .bss; tested by `tools/check_zip.sh` |
 | `setup.c`, `geom.c`, `raster.c`, `blit.c` | C models of the hardware units and their drivers: setup, geometry, rasterizer, blitter. Each model is bit-exact with its Verilog. |
 | `mixer.c` | C model of the audio mixer (`audio.v`) |
 | `track.c`, `track_build.c`, `tb_gfx.c`, `tb_hud.c`, `tb_mmp.c`, `tb_spl.c` | the track: drawing it, and building its image from the game's own files |
@@ -47,7 +52,7 @@ and package versions pinned); the script builds the image on first use. The resu
 | `menu.c`, `hud.c`, `intro.c` | menus, the race screen, the intro |
 | `sound.c`, `speech.c`, `music.c` | sound effects, the race commentary, the music: streamed from the CD image, or the MIDI songs on the FM chip |
 | `fm.c` | the FM music: HMI's song player and OPL2 driver, queueing the chip's register writes with their times |
-| `files.c` | the list of the game's files with [OK] or [MISSING], shown when one is missing |
+| `files.c` | the files screen: the ZIP's state, every file green/red/grey, the notice for a compressed ZIP, the read test |
 | `console.c`, `screen.c`, `dlog.c`, `selftest.c`, `memtest.c`, `trap.c` | text drawing, the test band, the debug log, self-tests, the memory test, the trap handler |
 | `font8x8_basic.h` | font from [dhepper/font8x8](https://github.com/dhepper/font8x8) (public domain), unchanged |
 

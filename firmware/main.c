@@ -1538,7 +1538,7 @@ static void championship(int resume, int *car)
 }
 
 /* The list of the game's files (files.c) for ever: the swaps go on, and the simulation gets
-   its result after three frames */
+   its result after three frames. failed: they are all there, but loading them failed */
 static void __attribute__((noreturn)) files_loop(int failed)
 {
     uint32_t drawn = 0;
@@ -1553,6 +1553,8 @@ static void __attribute__((noreturn)) files_loop(int failed)
             dlog_hex(SIM_DONE | results);
             dlog_char('\n');
         }
+        if (drawn == 1)             /* the first picture is up (with the notice for a compressed ZIP): the read test */
+            files_load_check((uint8_t *)(SDRAM_BASE + 0x1000000), 0x800000, (SYS_FLAGS & FLAG_SIM) ? 0x19000 : 0xFFFFFFFFu);
         files_draw(FB(!(st & VID_FRONT)), failed);
         VID_SWAP = 1;
         log_head("frames drawn: ", ++drawn);
@@ -1569,7 +1571,11 @@ void prog_main(uint32_t boot_results, uint32_t log_pos, uint32_t log_cur)
     save_load();                    /* first: until then an exit would save the SDRAM as it is */
     menu_options_load();
     volumes();
-    if (files_missing()) files_loop(0);         /* a file the game needs is missing: the list, for ever */
+    /* Milestone 1 of Screamer 2: the ZIP of the game's files is read and listed, for ever (the
+       status screen, "ready" when nothing is missing). The code below is Screamer 1's game, still
+       in the tree and not reached; it is replaced step by step. */
+    files_check((uint8_t *)BUILD_SCRATCH, PROG_BASE - BUILD_SCRATCH);
+    files_loop(0);
     int sim = (SYS_FLAGS & FLAG_SIM) != 0;
     const uint32_t *shown = sim ? 0 : first_picture(intro_track());    /* the simulation's race: none */
 

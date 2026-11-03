@@ -12,8 +12,10 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
 - **Identity:** core `Chainy.Screamer2`, platform `screamer2`, version 0.1.0 (no release yet), game
   files in `Assets/screamer2/common/`, saves in `Saves/screamer2/Chainy.Screamer2/`. The platform
   image is still Screamer's until there is one for this game.
-- **Game files:** one uncompressed ZIP ("Store") of the game's `DATA`, `GFX` and `ANIMS` folders in
-  a single data slot, plus the music image `GAME.GOG` in its own slot (the 32-slot limit, see
-  docs/screamer2/comparison.md). Not built yet.
+- **Game files:** one ZIP of the game's `DATA`, `GFX` and `ANIMS` folders in a single data slot
+  (`SCREAMER2.zip`), plus the music image `GAME.GOG` and its cue sheet `GAME.DAT` in slots of their own
+  (the 32-slot limit, see docs/screamer2/comparison.md). Entries stored ("Store", fast) or deflated
+  (slow to load, the player is told before); other compression is refused in plain words. Built:
+  `firmware/zip.c`, the files screen `firmware/files.c`, tested by `tools/check_zip.sh`.
 - **Quality:** the VGA version (320x200, 256 colours) at DETAIL HIGH with the original's level of
   detail (docs/screamer2/performance.md, section 6). No quality options in the menu, as in Screamer.

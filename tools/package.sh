@@ -4,9 +4,11 @@
 #   Platforms/screamer2.json   platform definition
 #   Platforms/_images/         platform image
 #   Assets/screamer2/Chainy.Screamer2/  firmware.bin, program.bin (tools/fw.sh)
+#   Assets/screamer2/common/   README.txt: which game files go there and how to make the ZIP
 # Copy the contents of build/sdcard/ onto the root of the Pocket's SD card. A release never
-# holds game data: the player copies the game's own files to Assets/screamer2/common/
-# (tools/deploy.sh does that from a game folder).
+# holds game data: the player puts SCREAMER2.zip (the game's DATA, GFX and ANIMS folders, stored)
+# and the music image GAME.GOG with its cue sheet GAME.DAT into Assets/screamer2/common/
+# (tools/deploy.sh copies them from a game folder).
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
 core="$root/core"
@@ -26,7 +28,8 @@ cp "$core/dist/platforms/_images/screamer2.bin" "$out/Platforms/_images/"
 
 # the firmware only: build/assets/ may also hold files made from the game data
 assets="$root/build/assets/screamer2/$name"
-mkdir -p "$out/Assets/screamer2/$name" "$out/Assets/screamer2/common"      # common: empty, for the game files
+mkdir -p "$out/Assets/screamer2/$name" "$out/Assets/screamer2/common"      # common: for the game files
+cp "$core/dist/common/README.txt" "$out/Assets/screamer2/common/"        # which game files to copy
 for f in firmware.bin program.bin; do
     [ -f "$assets/$f" ] || { echo "$assets/$f is missing: run tools/fw.sh first"; exit 1; }
     cp "$assets/$f" "$out/Assets/screamer2/$name/"

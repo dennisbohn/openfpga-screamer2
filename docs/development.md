@@ -25,12 +25,21 @@ The firmware is built by GCC 14 and picolibc from Debian trixie in Docker
 
 A release holds the bitstream, the core's JSON files, the platform files and the firmware,
 never game data. `tools/deploy.sh <sd card> [game folder]` additionally copies your own game
-files (default folder `C:/GOG Games/Screamer`, or `$GAME_DIR`) to `Assets/screamer2/common/`
-and leaves everything else on the card alone.
+files (default folder `C:/GOG Games/Screamer 2`, or `$GAME_DIR`): `SCREAMER2.zip`, `GAME.GOG`
+and `GAME.DAT`, to `Assets/screamer2/common/`, and leaves everything else on the card alone.
 
 ## Game data
 
-The core reads the container files unchanged. The firmware unpacks them and builds each
+The game's files reach the core as ONE ZIP in one data slot (the APF allows 32 slots, and Screamer 2
+has about 140 files): `SCREAMER2.zip` holds the original `DATA`, `GFX` and `ANIMS` folders, entries
+stored (method 0, fast) or deflated (method 8, loads slowly; the firmware inflates them and checks the
+CRC-32). The music image `GAME.GOG` and its cue sheet `GAME.DAT` stay separate slots. How a player makes
+the ZIP is in `core/dist/common/README.txt` (Windows 11 Explorer, `tar`, 7-Zip). The firmware reads the
+ZIP with `firmware/zip.c` (the central directory only: Windows writes sizes 0 into the local headers;
+names are matched on the end of the path, ignoring case, so a folder in front does not matter).
+`tools/check_zip.sh` tests the reader natively against the real ZIP and broken ones.
+
+The core reads the container files inside the ZIP unchanged. The firmware unpacks them and builds each
 track's image at load time (placements, palette, camera path, the drivable parts per grid
 cell, markers, walls, the cars from `CARS.DTR`, the race screen, the background, the
 opponents' lines and values). Nothing is converted on the PC.
@@ -43,8 +52,11 @@ and compares the result byte for byte.
 loads the `L` set only for LOW and the `H` set from MID on (more scenery, same textures). The
 core uses the `H` sets.
 
-If a file the game needs is missing, the core lists all its files with [OK] or [MISSING] and
-stops there. `SCREAM.gog`, `SCREAM.DAT` and `MUSIC.DAT` are optional: they only bring the music.
+The core lists its files on the screen (green there, red missing and needed, grey missing and
+optional) and says in plain words what is wrong with the ZIP (not found, not a ZIP, unsupported
+compression: repack with Store; a deflated ZIP gets a notice that loading is slow). `GAME.GOG` and
+`GAME.DAT` are optional: they only bring the music. `tools/files_screens.sh` draws these screens on the
+PC (`build/check/screens/*.png`).
 
 ## PC renderer
 
@@ -97,11 +109,11 @@ The SDRAM model in `sim/models/sdram_model.v` checks the datasheet timings in cl
 built with injected faults for the counter-checks (`SIM_DEFINES`, see `tools/sim.sh`).
 
 `tools/simcheck.sh [--full] [--save] [name]` runs the SoC simulation with the game files from
-`build/gamedata/` and summarizes it in a few lines (`tools/simsum.py`): the result, the pixel
-comparison with the C models, and the counters of the first race frame with the change against
-the saved reference (`--save`). Without `--full` it is the quick run (no resets, and the
-finished track image as a testbench slot); `--full` behaves like the Pocket. The audio of the
-run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`. It also needs `DATA/SOUND.DAT`.
+`build/gamedata/` (`SCREAMER2.zip`, which the testbench reads where the firmware asks, and small
+`GAME.GOG` and `GAME.DAT`) and summarizes it in a few lines (`tools/simsum.py`). Without `--full` it
+is the quick run (no resets); `--full` behaves like the Pocket. The program so far shows the files
+screen, so the check is its title bar and the log (`SCREAMER2.zip: ...`, `game files: ...`, one line per
+file of the read test). The audio of the run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 
 ## Tools
 
@@ -109,6 +121,8 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`. It also needs `DA
 |---|---|
 | `tools/dat_sizes.py <file.DAT>...` | lists a game container with unpacked sizes (`-v`: every file) |
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
+| `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
+| `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/fmcheck.sh [song ...]`, `tools/fmsongs.py`, `tools/host/fmdump.c`, `tools/host/fmref.c` | the FM music on the PC: `fmsongs.py` reads the songs of `DATA/MUSIC.DAT` independently (tracks, messages, lengths); `fmdump.c` runs `firmware/fm.c` against a model of the hardware's write queue; `fmref.c` is openscreamer's driver with the chip replaced by a log; `fmcheck.sh` runs all of them (Docker) and compares the register writes tick by tick |
 | `tools/dis.sh [-h] [-f] <from> <to>` | disassembles part of `STARTL.EXE` (`-h`: `STARTH.EXE`) at the addresses of OpenScreamer's notes; `tools/unle.py` (from OpenScreamer) unpacks the program into `build/exe/` on first use |
 | `tools/dosram.py` | reads the memory of the original game running in DOSBox, to compare with the firmware |

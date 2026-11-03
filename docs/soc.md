@@ -23,8 +23,8 @@ controller, caches, clock phase): `docs/memory.md`. Overall architecture:
   `0x00000000`, the boot RAM: the loader (self-tests, quick memory test). Data slot 2
   `program.bin` (at most 1 MB, `core/data.json`) goes to `0x1300_0000` in the SDRAM: the
   program.
-- **SDRAM slots only after the phase search:** slot 2 (`program.bin`) and slots 3 to 8 (the
-  game files) are `deferload`; the Pocket does not load them by itself. The memory test's
+- **SDRAM slots only after the phase search:** slot 2 (`program.bin`), slot 3 (`SCREAMER2.zip`, the
+  game's files) and the music slots 21 and 22 are `deferload`; the Pocket does not load them by itself. The memory test's
   phase search runs the SDRAM at bad phases too, where the chip can misread commands and
   addresses and write anywhere (measured: 15 of 63 MB changed). The loader therefore
   requests `program.bin` only after the SDRAM tests (`DS_*`, `core_bridge_cmd` target
@@ -63,7 +63,12 @@ controller, caches, clock phase): `docs/memory.md`. Overall architecture:
 | `0xF101_0000` | 64,000 B | Framebuffer 1 | no |
 | `0xF400_0000` | 64 MB | SDRAM, the same memory uncached | no |
 
-SDRAM layout (set by the firmware and the data slot addresses in `core/data.json`):
+SDRAM layout (set by the firmware and the data slot addresses in `core/data.json`). The Screamer 2
+program so far uses only the ZIP's directory scratch at `0x12D6_0000` and, for the read test of its files
+screen, 8 MB at `0x1100_0000`; the rows that name Screamer 1's slots (3 to 20, 25) describe the Screamer 1
+game code still in the tree, which is replaced step by step and not reached now. Data slot 3 is
+`SCREAMER2.zip` (all the game's `DATA`, `GFX` and `ANIMS` files, read with `firmware/zip.c`), 21 and 22
+the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
 
 | Address | Content |
 |---|---|
@@ -72,12 +77,13 @@ SDRAM layout (set by the firmware and the data slot addresses in `core/data.json
 | `0x1020_0000` | parts of `MENU.DAT` (slot 19) |
 | `0x1060_0000` | parts of `GRAF.DAT` (slot 20); each at its place as in the file |
 | `0x10A0_0000` | images, sprites and fonts of the menu pages and of the track and car selection, the unpacked loading screen |
+| `0x1100_0000` | read test of the files screen (`files_load_check`, up to 8 MB) |
 | `0x11C0_0000` | sound effects `SOUND.DAT` (slot 8, up to 2 MB; the mixer plays them from there; the nine menu samples already at start, each at its place) |
-| `0x11E0_0000` | music ring (256 KB, from `SCREAM.gog`, slot 22) |
+| `0x11E0_0000` | music ring (256 KB, from the CD image, slot 22) |
 | `0x11F4_0000` | `MUSIC.DAT` (slot 25, up to 256 KB; 200 KB: the FM music's songs and instrument banks, read when the FM music is first needed) |
 | `0x1210_0000` | track image (built by the firmware) |
 | `0x1280_0000` | game files: `MAPnH.DAT` `0x1280_0000` (slots 3, 9-13), `GAME.DAT` `0x12C0_0000` (4), `MAPn.DAT` `0x12D0_0000` (5, 14-18), `GEN.DAT` `0x12D4_0000` (6), `LOCAL.DAT` `0x12D5_0000` (7) |
-| `0x12D6_0000` | working memory of the track build |
+| `0x12D6_0000` | working memory of the track build; the directory scratch of `zip_open` (72 KB) |
 | `0x1300_0000` | the program (slot 2, at most 1 MB) |
 | `0x13F0_0000` | saved game `CHOICE.DAT` (slot 23, nonvolatile) |
 | `0x13F1_0000` | saved game `ATTACK.DAT` (slot 24, nonvolatile) |
@@ -176,7 +182,7 @@ values (44,100 / 48,000, 3 ppm too slow). The two lines around the position (16 
 one MLAB; when the position moves into the second, the pass fetches the following one over the
 line port, once per eight values. The voices' multiplier computes the four products (hence
 18 x 18 bits wide); the sums have 22 bits. The firmware (`firmware/music.c`) fills the ring
-from `SCREAM.gog` (slot 22): completely at the start of a song, afterwards once per frame
+from the CD image (`GAME.GOG`, slot 22): completely at the start of a song, afterwards once per frame
 with a 32 KB read command that it only starts (`slot_start`); `AU_MUSIC` tells it how far the
 mixer is. This costs the CPU about 500 clocks per frame (`docs/frame_timeline.svg`, "music");
 the bridge writes 176 KB/s into the SDRAM. In the simulation the output is the CD track value
