@@ -1,13 +1,14 @@
 /*
- * EXPERIMENT (docs/screamer2/comparison.md, task 2): frames of a track image from the firmware's own
- * code (track.c, geom.c, setup.c, raster.c, blit.c; the C models of the units) on the PC, from
- * camera positions on the player's line or given freely. No cars, no race: only the track.
+ * Frames of a Screamer 2 track image from the firmware's own code (road.c, track.c, car.c, geom.c, setup.c,
+ * raster.c, blit.c; the C models of the units) on the PC, from camera positions on the road or given freely.
  * Built and run by tools/s2/render_s2.sh. Not part of the firmware.
  *
  * Usage: render_s2 <track image> <out prefix> <camera>...
- *   camera: p<i>    path point i (modulo the length), the camera over the line and looking ahead
- *           r<i>    road-centre point i of the map (MMP array 2) in the road's direction, over the
- *                   drivable surface there (track_under); S2's path (the opponents' line) leaves the road
+ *   camera: v<s>[,<cars>]   the viewer's scene (firmware/road.c) s units along the road loop: the near chase
+ *                           camera over the player's car, cars = 0, 1 or 4 (default 4); s may be followed by
+ *                           'f' as a fraction of the loop (v0.25f = a quarter of the way)
+ *           r<i>            road point i of the map (MMP array 2, in the map's order), the camera over the
+ *                           drivable surface there, looking along the road's heading
  *           c<x>,<y>,<h>,<yaw>,<pitch>   free camera (yaw 0 = towards -y, radians)
  * Writes <prefix><k>.rgb (320 x 200 x 3) per camera and prints what the renderer reports.
  */
@@ -20,8 +21,9 @@
 #include "hw.h"
 #include "track.h"
 #include "blit.h"
+#include "road.h"
 
-#define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as main.c */
+#define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as the viewer */
 
 static void map(void)
 {
@@ -50,7 +52,7 @@ static void write_rgb(const char *path, const uint32_t *pal)
 
 int main(int argc, char **argv)
 {
-    if (argc < 4) { fprintf(stderr, "usage: render_s2 <image> <prefix> <p<i>|c<x>,<y>,<h>,<yaw>,<pitch>>...\n"); return 2; }
+    if (argc < 4) { fprintf(stderr, "usage: render_s2 <image> <prefix> <v<s>[,<cars>]|r<i>|c<x>,<y>,<h>,<yaw>,<pitch>>...\n"); return 2; }
     map();
     FILE *f = fopen(argv[1], "rb");
     if (!f) { perror(argv[1]); return 1; }
@@ -59,20 +61,20 @@ int main(int argc, char **argv)
     if (!track_open(TEX_FILE)) { fprintf(stderr, "track_open: not a track image (%zu bytes)\n", n); return 1; }
     int pieces = track_init();
     if (!pieces) { fprintf(stderr, "track_init: the image does not fit the limits (objects > MAX_OBJ or pieces > MAX_PIECES)\n"); return 1; }
-    uint32_t np = track_path_length();
-    printf("image %zu bytes, %d placements, path %u points\n", n, pieces, np);
+    int loop = road_build();
+    printf("image %zu bytes, %d placements, road loop %d points, %.0f units\n", n, pieces, loop, road_length());
 
     for (int a = 3; a < argc; a++) {
         struct track_cam cam;
-        if (argv[a][0] == 'p') {
-            uint32_t i = (uint32_t)atoi(argv[a] + 1) % np, il = (i + 12) % np;
-            float x, y, h, x2, y2, h2;
-            track_path_point(i, &x, &y, &h);
-            track_path_point(il, &x2, &y2, &h2);
-            cam.x = x; cam.y = y; cam.h = h + 700.0f;
-            cam.yaw = atan2f(x2 - x, -(y2 - y));
-            cam.pitch = atan2f(-(250.0f), hypotf(x2 - x, y2 - y));      /* a little down, as track_draw's */
-            cam.roll = 0.0f;
+        static struct track_object objs[ROAD_CARS];
+        int nobj = 0;
+        if (argv[a][0] == 'v') {
+            char *end;
+            double s = strtod(argv[a] + 1, &end);
+            int ncars = 4;
+            if (*end == 'f') { s *= road_length(); end++; }
+            if (*end == ',') ncars = atoi(end + 1);
+            nobj = road_scene((float)s, ncars, &cam, objs);
         } else if (argv[a][0] == 'r') {
             int nd;
             const struct track_dir *d = track_dirs(&nd);
@@ -95,12 +97,12 @@ int main(int argc, char **argv)
         struct track_stats ts;
         memset(&ts, 0, sizeof ts);
         track_mode = TRACK_MODEL;
-        track_draw_cam(fb, &clip, &cam, 0, 0, &ts);
+        track_draw_cam(fb, &clip, &cam, objs, nobj, &ts);
         char name[512];
         snprintf(name, sizeof name, "%s%d.rgb", argv[2], a - 3);
         write_rgb(name, track_palette());
-        printf("camera %.0f %.0f %.0f yaw %.3f: %u pieces handed on, %u faces, %u triangles, %u vertices, %u see-through; %s\n",
-               cam.x, cam.y, cam.h, cam.yaw, ts.pieces, ts.faces, ts.triangles, ts.vertices, ts.see_through, name);
+        printf("camera %.0f %.0f %.0f yaw %.3f: %u pieces handed on, %u faces, %u triangles, %u vertices, %u see-through, %u objects; %s\n",
+               cam.x, cam.y, cam.h, cam.yaw, ts.pieces, ts.faces, ts.triangles, ts.vertices, ts.see_through, ts.objects, name);
     }
     return 0;
 }

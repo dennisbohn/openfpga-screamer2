@@ -1,8 +1,9 @@
 /*
- * The track (track.h). The file (tools/make_track.py): "SCRK", version 6, then MAPn.MLB and
- * MAPn.UNR unchanged, the palette, the placements, the camera path, the ground index, the
- * markers, the cars, the car models, road points and walls, the start, the race screen, the
- * backdrop and its ground colour, the opponents' curves and numbers.
+ * The track (track.h). The file (Screamer 2: tools/s2/make_track_s2.py, "SCRK" version 7; Screamer 1's
+ * was tools/make_track.py, version 6): the car materials, MAPn.MLB with the cars' libraries after it
+ * and MAPn.UNR unchanged, the palette, the placements, the camera path (empty), the ground index, the
+ * markers (empty), the cars, the car models, road points and walls, the start, the race screen
+ * (empty), the backdrop and its ground colour, the opponents (empty); the far plane in the header.
  *
  * The game's structures (openscreamer docs/NOTES.md, "How the track is built"):
  *   UNR    int32 blob size, int32 count, count offsets into the blob; an object's block at
@@ -32,16 +33,16 @@
 #include <string.h>
 
 #define BLOCK       0x40000     /* bytes per CRC block (tools/make_track.py) */
-#define MAX_PIECES  2560        /* placements (H set): track 1 has 1164, track 5 the most, 2359 */
-#define MAX_OBJ     512         /* meshes; up to 360 on a track */
-#define MAX_BLOCKS  8           /* blocks of a mesh drawn (track 1: two, the football helmet's) */
+#define MAX_PIECES  4096        /* placements (Screamer 2's H01 set): 1099 to 3742 on its seven tracks */
+#define MAX_OBJ     1024        /* meshes; 345 to 705 on a track */
+#define MAX_BLOCKS  16          /* blocks of a mesh drawn (a car has twelve, track 1's football helmet two) */
 
-/* How far the game draws (openscreamer docs/NOTES.md, DETAIL): a piece only while its
-   position is within 52000 units of the camera (0x83164: dist^2 >> 2 < 676000000), and
-   every face cut at a depth set by the DETAIL option (the table at 0x21d4: -27808, -27808,
-   -43808, the view's z from the camera, 0x8baa4) */
-#define REACH2      2704000000.0f
-static const float far_depth[3] = { 27808.0f, 27808.0f, 43808.0f };     /* LOW, MID, HI */
+/* How far Screamer 2 draws at DETAIL HIGH (docs/screamer2/performance.md, section 6; STARTL.EXE
+   0x7f6d4): every face cut at the depth TRACK_DATA gives (the image's header, 0x70: 50000, track 4
+   60000, the view's z from the camera), a piece only while its position is within that + 8192
+   units of the camera */
+#define REACH2      reach2
+#define REACH_PLUS  8192.0f
 /* The original's lens: screen = centre + 128 x / (128 + z), z the depth from the camera. The
    corners' divide (0x83420) reads TABS\PERSP01.TAB (loaded by 0x4cd4c, its address patched in
    by 0x8ba28): entry z = -65536 x 128 / (128 + z); a cut at the near plane z = 0 (0xd7470)
@@ -136,7 +137,8 @@ struct gpiece { float x, y, ox, oy, r2, c, s; int32_t obj, h; };
 static struct gpiece gpieces[MAX_GROUND];
 static float sin_q[513];                /* sin(2 pi i / 2048) for i = 0..512 */
 static float under_n[3];                /* track_under's face: its normal in world axes (x, y, up) */
-static float far_z = 43808.0f;          /* the far plane of the DETAIL level */
+static float far_z = 50000.0f;          /* the far plane (the image's header, track_init) */
+static float reach2 = (50000.0f + REACH_PLUS) * (50000.0f + REACH_PLUS);   /* the pieces' reach, squared */
 static float radius[MAX_OBJ];           /* of each mesh around its origin */
 /* the placements as the culling reads them, from the track's set-up: place as floats (the same
    values), its mesh's reach (-1: no mesh) and class key */
@@ -285,7 +287,7 @@ static void gpiece_make(int at, struct gpiece *g)
 int track_open(const volatile uint8_t *file)
 {
     const uint8_t *f = (const uint8_t *)file;
-    if(rd32(f) != 0x4B524353 || rd32(f + 4) != 6) return 0;    /* "SCRK", version 6 */
+    if(rd32(f) != 0x4B524353 || rd32(f + 4) != 7) return 0;    /* "SCRK", version 7 (Screamer 2) */
     file_start = f;
     file_size = (uint32_t)rd32(f + 0x88);
     nblocks = rd32(f + 0x8C);
@@ -318,7 +320,10 @@ int track_init(void)
     nwalls = rd32(f + 0x58);
     start = (const struct start *)(f + 0x5C);
     unr_count = rd32(unr + 4);
-    if(unr_count > MAX_OBJ || npieces > MAX_PIECES || npath < LOOK + 2 || ncars < 1 || nmodels < 1) return 0;
+    if(unr_count > MAX_OBJ || npieces > MAX_PIECES || ncars < 1 || nmodels < 1) return 0;
+    int32_t far = rd32(f + 0x70);
+    far_z = far > 0 ? (float)far : 50000.0f;
+    reach2 = (far_z + REACH_PLUS) * (far_z + REACH_PLUS);
     unr_off = (const int32_t *)(unr + 8);
     unr_blob = unr + 8 + 4 * unr_count;
 
@@ -429,8 +434,27 @@ int track_init(void)
 
 int track_class_key(const uint8_t *obj)
 {
-    int32_t cl = rd32(obj + 0x32C);                     /* 0x8a8d7 */
-    return cl == 3 ? -6000 : cl == 1 ? -1500 : cl == 2 ? -800 : cl == 4 ? -200 : 0;
+    (void)obj;      /* Screamer 2's object header (0xC8 bytes) has no class word at +0x32C: 0 for every mesh */
+    return 0;
+}
+
+/* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and
+   other moving objects; docs/screamer2/performance.md, section 6): the distance of the block's middle
+   from the camera, rounded to nearest (even). Placed: key = -(dist >> 1), level 0 above -3000 (dist <
+   6000), level 1 above -4500 (dist < 9000), else 2. Moving: key = -dist, -2000 and -6000. These are
+   constants of the game's image, no option. The mirror's pass (at least level 1) is not in this core
+   yet. -DTRACK_NO_LOD (the PC renderer, tools/s2/render_s2.sh) draws every block at level 0. */
+int track_lod_level(float dist, int moving)
+{
+#ifdef TRACK_NO_LOD
+    (void)dist;
+    (void)moving;
+    return 0;
+#else
+    int32_t d = (int32_t)lrintf(dist);
+    int32_t key = moving ? -d : -(d >> 1);
+    return key > (moving ? -2000 : -3000) ? 0 : key > (moving ? -6000 : -4500) ? 1 : 2;
+#endif
 }
 
 const uint32_t *track_palette(void)
@@ -731,7 +755,7 @@ void track_cam_axes(const struct track_cam *cam, float f[3], float r[3], float u
 
 void track_detail(int level)
 {
-    far_z = far_depth[level < 0 ? 0 : level > 2 ? 2 : level];
+    (void)level;    /* Screamer 2 draws at DETAIL HIGH only: the far plane is the image's (track_init) */
 }
 
 uint32_t track_size(void)
@@ -864,7 +888,14 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
         for(int i = 0; i < 3; i++)
             w[i] = o[i] + m[3 * i] * rd16(blk + 4) + m[3 * i + 1] * rd16(blk + 6) + m[3 * i + 2] * rd16(blk + 8) - c[i];
         key[b] = -(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
-        int i = b;
+        int lvl = track_lod_level(sqrtf(-key[b]), 0);       /* level of detail, per block (the middle and the sort key stay level 0's) */
+        if(lvl) {
+            int32_t off = rd32(obj + 0x18 + 4 * (b + 13 * lvl));
+            if(!off) continue;
+            block_piece(c, f, r, u, m, o, obj + off, g);
+            g->mirror = moving;
+        }
+        int i = n;
         while(i > 0 && key[ord[i - 1]] > key[b]) { ord[i] = ord[i - 1]; i--; }
         ord[i] = b;
         n++;
@@ -1059,6 +1090,19 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         float ca = sin2048((uint32_t)pc->t + 512), sa = sin2048((uint32_t)pc->t);
         float dx = pc->x - cx, dy = pc->y - cy, dh = pc->h - ch;
 
+        /* level of detail: the block's table entry 13 L on (level 0's middle gives the distance;
+           0 = no block at that level = nothing drawn) */
+        {
+            float lx = rd16(g.blk + 4), ly = rd16(g.blk + 6), lz = rd16(g.blk + 8);
+            float wx = dx + lx * ca - lz * sa, wy = dy + lx * sa + lz * ca, wh = dh + ly;
+            int lvl = track_lod_level(sqrtf(wx * wx + wy * wy + wh * wh), 0);
+            if(lvl) {
+                int32_t off = rd32(g.obj + 0x18 + 4 * 13 * lvl);
+                if(!off) continue;
+                g.blk = g.obj + off;
+            }
+        }
+
         /* local to view: per axis A, A . D + x (Ax cos + Ay sin) + y Ah + z (Ay cos - Ax sin) */
         const float m[9] = { rx * ca + ry * sa, rh, ry * ca - rx * sa,
                              ux * ca + uy * sa, uh, uy * ca - ux * sa,
@@ -1097,6 +1141,7 @@ void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const stru
 void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, struct track_stats *st)
 {
     /* the camera on the player's line, looking LOOK points ahead and a little down */
+    if(npath < LOOK + 2) return;                /* (Screamer 2's images have no path) */
     uint32_t i0 = (pos >> 8) % (uint32_t)npath, i1 = (i0 + 1) % (uint32_t)npath;
     uint32_t il = (i0 + LOOK) % (uint32_t)npath;
     float fr = (float)(pos & 255) / 256.0f;

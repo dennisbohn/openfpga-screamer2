@@ -95,9 +95,15 @@ const struct blit_font *track_hud_fonts(int *n);
 void track_hud_picture(int k, int *first, int *count);
 const char *track_hud_text(int k);
 
-/* The game's DETAIL option, 0 LOW, 1 MID, 2 HI (the default): how deep faces are drawn.
-   The track file goes with it: the L set at LOW, the H set from MID up. */
+/* Screamer 2 draws at DETAIL HIGH only (the H01 set, the far plane from TRACK_DATA in the image's
+   header): this does nothing now. Screamer 1's option, still called by its code in the tree. */
 void track_detail(int level);
+
+/* The original's level of detail of a block (docs/screamer2/performance.md, section 6): 0, 1 or 2 for a
+   block whose middle is dist units from the camera. moving: a car or another moving object (levels
+   change at 2000 and 6000 units), else a placed mesh of the track (6000 and 9000). A block's table entry
+   at level L is entry b + 13 L of its object's header (+0x18), 0 = no block there = not drawn. */
+int track_lod_level(float dist, int moving);
 
 /* The file's size and its blocks of 256 KB from offset 0x100 on, each with a CRC-32 in the
    header: whether block k (0 .. track_blocks() - 1) arrived as written */
@@ -173,8 +179,9 @@ void track_reflection_rate(float k);
    for a model drawn without a track (the menu's, menu.h) */
 void track_block_piece(const struct track_cam *cam, const struct track_block *b, struct gu_piece *g);
 
-/* The change of the drawing key for a mesh (an object of the UNR or a .3DX file) by its class,
-   the header's last word at +0x32c (0x8a8d7): 3 -6000, 1 -1500, 2 -800, 4 -200, else 0 */
+/* The change of the drawing key for a mesh (an object of the UNR or a .3DX file) by its class: Screamer 1
+   has it in the header's last word at +0x32c (0x8a8d7: 3 -6000, 1 -1500, 2 -800, 4 -200, else 0);
+   Screamer 2's header is shorter and has none: always 0 */
 int track_class_key(const uint8_t *obj);
 
 /* The camera's frame as the drawing takes it: forward, right, up (unit vectors in world x, y,

@@ -1026,7 +1026,9 @@ static void place_block(const struct cblock *q, const struct pose *ps, struct tr
 }
 
 /* m's blocks placed as lk, the body dropped by drop, into out in the game's order for the
-   camera: how many */
+   camera, each at its level of detail (STARTL.EXE 0x7f010, track_lod_level(): the table entry b + 13 L of
+   the mesh, by the distance of the block's middle; a block without one at that level is not drawn, so
+   a car at level 2 is its body alone): how many */
 static int draw_model(const struct cmodel *m, const struct car_look *lk, float drop, const struct track_cam *cam,
                       struct track_block *out)
 {
@@ -1035,7 +1037,7 @@ static int draw_model(const struct cmodel *m, const struct car_look *lk, float d
                        { cosf(lk->pitch), sinf(lk->pitch), cosf(lk->roll), sinf(lk->roll), cosf(lk->yaw), sinf(lk->yaw) },
                        { cosf(lk->body_pitch), sinf(lk->body_pitch), cosf(lk->body_roll), sinf(lk->body_roll) },
                        lk->body_pitch != 0.0f || lk->body_roll != 0.0f || drop != 0.0f, lk->x, lk->y, lk->z, drop };
-    int ord[MAX_BLOCKS];
+    int ord[MAX_BLOCKS], nl = 0;
     float key[MAX_BLOCKS];
     for(int b = 0; b < m->ncb; b++) {
         const struct cblock *q = &m->cb[b];
@@ -1050,13 +1052,21 @@ static int draw_model(const struct cmodel *m, const struct car_look *lk, float d
         for(int j = 0; j < 3; j++) mid[j] = q->mid[j] - q->t[j];
         block_point(q, &ps, mid, mw);
         float dx = mw[0] - cam->x, dy = mw[1] - cam->y, dh = mw[2] - cam->h;
-        key[b] = -rintf(sqrtf(dx * dx + dy * dy + dh * dh)) - (float)q->back;
-        int i = b;
+        float dist = rintf(sqrtf(dx * dx + dy * dy + dh * dh));
+        key[b] = -dist - (float)q->back;
+        int lvl = track_lod_level(dist, 1);
+        if(lvl) {
+            int32_t off = *(const int32_t *)(m->mesh + 0x18 + 4 * (b + 13 * lvl));
+            if(!off) continue;
+            t->blk = m->mesh + off;
+        }
+        int i = nl;
         while(i > 0 && key[ord[i - 1]] > key[b]) { ord[i] = ord[i - 1]; i--; }
         ord[i] = b;
+        nl++;
     }
-    for(int b = 0; b < m->ncb; b++) out[b] = tb[ord[b]];
-    return m->ncb;
+    for(int b = 0; b < nl; b++) out[b] = tb[ord[b]];
+    return nl;
 }
 
 static int draw_car(int model, const struct car_look *lk, float drop, const struct track_cam *cam,
@@ -1064,12 +1074,12 @@ static int draw_car(int model, const struct car_look *lk, float drop, const stru
 {
     const struct cmodel *m = cmodel(model);
     if(!m->ncb) return 0;
-    draw_model(m, lk, drop, cam, out);
+    int nl = draw_model(m, lk, drop, cam, out);
     obj->x = lk->x;
     obj->y = lk->y;
     obj->h = lk->z;
     obj->radius = 1200.0f;
-    obj->n = m->ncb;
+    obj->n = nl;
     obj->b = out;
     return 1;
 }
