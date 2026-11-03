@@ -16,6 +16,8 @@
  * FAR=n [REACH=m] in the environment: the far plane (faces) and the reach (placements) in units,
  * default as the firmware has them for HI detail (43808, 52000); Screamer 2: TRACK_DATA's far
  * plane and 1.2 times it (OpenScreamer's rule for the reach).
+ * LOD=n in the environment (Screamer 2 build): the original's level of detail per block, 1 = placed meshes,
+ * 2 = cars, 3 = both (perf.h); 0 or unset = every block at level 0 as the firmware draws them.
  * The camera is the game's near chase camera (car.c, views[2]): 1300 behind, 300 above, looking
  * down 0.1885 rad, over a car standing on the road at that point.
  */
@@ -118,7 +120,9 @@ static void frame(FILE *out, const char *label, int idx, float x, float y, float
     static struct track_object objs[MAX_CARS + 2];
     static struct track_block blocks[MAX_CARS + 2][CAR_BLOCKS];
     int nobj = 0, nm;
+    perf_reset();
     track_models(&nm);
+    perf_lod_min = mirror;                      /* the mirror's pass takes level 1 at least (STARTL.EXE 0x7f0fc) */
     struct track_cam cam = chase_cam(x, y, z, yaw);
     /* the rear-view mirror (NOTES2 S2-5zh): the scene again from the car's place, 400 above the
        body, looking back, 35 rows of 320, without the car; the others are behind it */
@@ -149,7 +153,9 @@ static void frame(FILE *out, const char *label, int idx, float x, float y, float
     const struct rs_clip clip = { 0, 0, FB_W, mirror ? 35 : FB_H };
     struct track_stats ts;
     memset(&ts, 0, sizeof ts);
+    uint32_t c1 = perf_c.lod_c1, c2 = perf_c.lod_c2, cd = perf_c.lod_cd;      /* counted when the cars were made */
     perf_reset();
+    perf_c.lod_c1 = c1; perf_c.lod_c2 = c2; perf_c.lod_cd = cd;
     track_mode = TRACK_MODEL;
     track_draw_cam(FB(0), &clip, &cam, objs, nobj, &ts);
     fprintf(out, "%s,%s,%d,%.0f,%.0f,%.0f,%d,%u,%u,%u,%u,%u,%u", label, tag, idx, x, y, z, ncars, ts.pieces, ts.faces,

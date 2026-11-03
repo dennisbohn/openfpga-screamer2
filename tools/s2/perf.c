@@ -3,11 +3,29 @@
  * PC maps the SDRAM at the firmware's address, as tools/host/render.c does).
  */
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include "hw.h"
 #include "perf.h"
 
 struct perf_counts perf_c;
+int perf_lod, perf_lod_min;
+__attribute__((constructor)) static void perf_lod_init(void)    /* LOD=n for any program with these counters */
+{
+    if (getenv("LOD")) perf_lod = atoi(getenv("LOD"));
+}
+
+/* The original's level of a block (STARTL.EXE 0x7f148 placed meshes, 0x7f010 cars): the distance of
+   the block's middle from the camera, rounded to nearest (even). Placed: key = -(dist >> 1), level 0
+   above -3000 (dist < 6000), 1 above -4500 (dist < 9000), else 2; cars: key = -dist, -2000 and -6000.
+   The rear-view mirror's pass (0xae6b4 = 1) takes at least level 1. */
+int perf_lod_level(float dist, int moving, int min_level)
+{
+    int32_t d = (int32_t)nearbyintf(dist);
+    int32_t key = moving ? -d : -(d >> 1);
+    int lvl = key > (moving ? -2000 : -3000) ? 0 : key > (moving ? -6000 : -4500) ? 1 : 2;
+    return lvl < min_level ? min_level : lvl;
+}
 
 #define TEX_LINES   512                     /* 16 KB / 32 */
 #define GU_LINES    128                     /* 4 KB / 32 */
