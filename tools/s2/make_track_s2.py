@@ -13,6 +13,8 @@ The adapters, each marked ADAPTER below, are what Screamer 2's files need beyond
   - the race screen (GAME.DAT): left empty (a track picture does not draw it)
 
 Usage: python tools/s2/make_track_s2.py <Screamer 2 folder> <track 1..7> <out.bin> [H|L] [look 0|1]
+  S2START_ROAD=k in the environment: the player's start place is road point k (MMP array 2) instead of
+  the grid's (a chosen frame for the simulation)
 """
 import os
 import struct
@@ -52,6 +54,7 @@ def s2_track_data(dtr):
 
 
 def main():
+    global grid_pose
     root, n, out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     detail = sys.argv[4] if len(sys.argv) > 4 else "H"
     look = sys.argv[5] if len(sys.argv) > 5 else "0"
@@ -82,6 +85,10 @@ def main():
         files += f + b"\0" * (-len(f) % 256)
     models += files
     dirs, walls = cell_arrays(mmp)
+    sr = os.environ.get("S2START_ROAD")                                 # EXPERIMENT: the player starts on road point k, to put a
+    if sr:                                                              # chosen frame in the simulation (docs/screamer2/performance.md)
+        sa, sx_, sy_ = struct.unpack("<f2i", dirs[int(sr)])
+        grid_pose = lambda spl_, mmp_: struct.pack("<2if", sx_, sy_, sa)
     car = os.environ.get("S2CAR")                                       # "CARS101:AUTO3": the car alone (see below)
     if car:
         # EXPERIMENT 2b: one S2 car through the track renderer: its .MLB as the track's, its .3DX as the
