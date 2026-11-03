@@ -6,6 +6,8 @@
 #pragma once
 #include <stdint.h>
 
+#define SLOT_REST       0xFFFFFFFFu         /* slot_read: the rest of the file */
+
 /* Read len bytes (a multiple of 4, or SLOT_REST for the rest of the file: the APF sizes
    it, the last word filled up) of data slot id from byte offset into the memory at addr
    (a bridge address, the same as the CPU's for the SDRAM). Waits until the APF is done;

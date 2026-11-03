@@ -28,3 +28,8 @@ core/src/fpga/apf/build_id.mif
 
 # Local assistant state
 .claude/
+
+# The game's ZIP and CD image (core/data.json), also never committed
+SCREAMER2.zip
+*.GOG
+*.gog
