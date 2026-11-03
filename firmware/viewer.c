@@ -206,12 +206,12 @@ struct stats {
     uint32_t n, max, over;              /* frames, the longest, the ones over 20 ms */
     uint32_t faces, pieces;             /* sums over the frames */
     float worst_s;                      /* where the longest frame was: units along the road */
-    uint32_t vf0;                       /* the video frame count at the first frame */
+    uint32_t video;                     /* video frames (1/50 s) since the first frame */
 };
 
-static void stats_text(char *p, int n, int cars, const struct stats *s, uint32_t vf, int full)
+static void stats_text(char *p, int n, int cars, const struct stats *s, int full)
 {
-    uint32_t dvf = (vf - s->vf0) & 0xFFFF, fps10 = dvf ? s->n * 500 / dvf : 0;
+    uint32_t dvf = s->video, fps10 = dvf && s->n > 1 ? (s->n - 1) * 500 / dvf : 0;   /* n - 1 intervals */
     char *q = fmt_udec(fmt_str(fmt_udec(fmt_str(p, full ? "viewer: track " : "Screamer Pocket T"), (uint32_t)n),
                                full ? ", cars " : " c"), (uint32_t)cars);
     q = fmt_udec(fmt_str(q, full ? ", frames " : " fr"), s->n);
@@ -235,10 +235,10 @@ static void stats_text(char *p, int n, int cars, const struct stats *s, uint32_t
     }
 }
 
-static void log_stats(int n, int cars, const struct stats *s, uint32_t vf, const char *tag)
+static void log_stats(int n, int cars, const struct stats *s, const char *tag)
 {
     char buf[160];
-    stats_text(buf, n, cars, s, vf, 1);
+    stats_text(buf, n, cars, s, 1);
     dlog_str(tag);
     dlog_str(buf);
     dlog_char('\n');
@@ -275,17 +275,16 @@ static int visit(int n, int *cars, int *overlay)
             dlog_hex(SIM_DONE | results);
             dlog_char('\n');
         }
-        if (drawn == 0) {
-            st_all.vf0 = vf;
-            window_vf = vf;
-        }
+        uint32_t dvf = drawn ? (vf - last_vf) & 0xFFFF : 0;     /* video frames since the last frame started */
+        if (drawn == 0) window_vf = vf;
+        st_all.video += dvf;
         /* a button: another track (this visit ends), the cars, the overlay */
         if (press & (KEY_LEFT | KEY_RIGHT)) {
-            log_stats(n, *cars, &st_all, vf, "left: ");
+            log_stats(n, *cars, &st_all, "left: ");
             return (press & KEY_RIGHT) ? n % TRACKS + 1 : (n + TRACKS - 2) % TRACKS + 1;
         }
         if (press & KEY_A) {
-            log_stats(n, *cars, &st_all, vf, "left: ");
+            log_stats(n, *cars, &st_all, "left: ");
             *cars = *cars == 4 ? 0 : *cars == 0 ? 1 : 4;
             resume_s = s;
             return -n;                                  /* the same track, the statistics from the start */
@@ -293,9 +292,8 @@ static int visit(int n, int *cars, int *overlay)
         if (press & KEY_B) *overlay = !*overlay;
 
         /* the camera moves with real time: a video frame is 1/50 s whatever the frame took */
-        uint32_t steps = drawn ? (vf - last_vf) & 0xFFFF : 1;
+        uint32_t steps = drawn ? (dvf > 10 ? 10 : dvf) : 1;
         last_vf = vf;
-        if (steps > 10) steps = 10;
         s += (float)steps * STEP_S * SPEED;
         if (s > road_length()) s -= road_length();
         struct track_cam cam;
@@ -369,6 +367,7 @@ static int visit(int n, int *cars, int *overlay)
         win_sum += work > 0x20000000u ? 0x20000000u : work;
         if (work > win_max) win_max = work;
         shown_faces = faces;
+        if (drawn == 0) shown_mean = shown_max = work;      /* until the first second is full */
         if (((vf - window_vf) & 0xFFFF) >= VID_HZ && win_n) {
             shown_mean = win_sum / win_n;
             shown_max = win_max;
@@ -377,12 +376,12 @@ static int visit(int n, int *cars, int *overlay)
         }
         if (drawn % 25 == 0) {
             char head[96];
-            stats_text(head, n, *cars, &st_all, vf, 0);
+            stats_text(head, n, *cars, &st_all, 0);
             dlog_head(head);                            /* debug.txt's first line, live */
         }
-        uint32_t since = (vf - st_all.vf0) & 0xFFFF;
-        if (sim ? drawn + 1 == sim_frames : (since >= next_log && since < 0x8000)) {
-            log_stats(n, *cars, &st_all, vf, "");
+        uint32_t since = st_all.video;
+        if (sim ? drawn + 1 == sim_frames : since >= next_log) {
+            log_stats(n, *cars, &st_all, "");
             if (!timeline_done) {                       /* the previous frame's timeline, once: it is a kilobyte */
                 timeline_done = 1;
                 tl_log();

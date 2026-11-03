@@ -6,6 +6,11 @@
 #   l   the same with the original's level of detail (LOD=3: placed meshes and cars)
 #   ls  placed meshes only (LOD=1); lc  cars only (LOD=2)
 #   dc  MEDIUM: far plane x 0.8, pieces to 0.8 far + 8192, no level of detail; dl  MEDIUM with it
+# NOTE (milestone 2): the study's sweeps came from the counting build as it was then. framestats.sh now builds the
+# firmware as it is (the level of detail always on, Screamer 2 images only, version 7): the s1 sweeps, the
+# LOD=0/1/2 variants and the start frames are gone. What still runs: the s2 sweeps (framestats.sh sweep s2 ...)
+# and, with NOLOD=1 at build, the sweeps without the level of detail. The tables of performance.md are the
+# study's record.
 # Needs: tools/s2/framestats.sh build (the counters, with perf_patch.py's level-of-detail edits);
 # build/s2/track<n>.bin (tools/s2/make_track_s2.py <Screamer 2 folder> n build/s2/track<n>.bin); for the model
 # the S1 start frames as tools/s2/perf_sweeps.sh needs them. Output: build/stats/lod/*.csv, lod_report.md.

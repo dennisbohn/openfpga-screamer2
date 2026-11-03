@@ -965,6 +965,12 @@ static const struct cmodel *cmodel(int k)
     return m;
 }
 
+void car_models_reset(void)
+{
+    for(int k = 0; k < MAX_MODELS; k++)         /* each track's image has its own car models */
+        cmodels[k].ready = 0;
+}
+
 int car_model_index(const struct car_spec *sp)
 {
     return (sp->name[4] - '0') * 10 + (sp->name[5] - '0');           /* "AUTO03" -> 3 */

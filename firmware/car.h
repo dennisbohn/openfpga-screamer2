@@ -65,6 +65,9 @@ void car_reflection(const float acc[3], uint32_t phase);
 #define CAR_BLOCKS  16
 struct car_look { float x, y, z, yaw, pitch, roll, body_pitch, body_roll, spin, steer; uint32_t phase; };
 int car_model_index(const struct car_spec *sp);
+/* Forget the car models made from the track image set up before (car_init does it; the viewer, which has
+   no car_init, after each track_init) */
+void car_models_reset(void);
 int car_draw(int model, const struct car_look *lk, const struct track_cam *cam, struct track_block *out,
              struct track_object *obj);
 /* The same for a car's mesh that is not the track's (the car screen's AAUTOnn.3DX, menu.h): its

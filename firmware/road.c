@@ -18,6 +18,7 @@ int road_build(void)
     int nd;
     const struct track_dir *d = track_dirs(&nd);
     static int16_t next[ROAD_MAX];
+    car_models_reset();                         /* the cars of the scene come from this track's image */
     static uint8_t seen[ROAD_MAX], has[ROAD_MAX];
     npts = 0;
     if(nd < 3 || nd > ROAD_MAX) return 0;

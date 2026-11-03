@@ -106,7 +106,7 @@ tail: track 1 10.1 / 12.2, 2 10.6 / 13.0, 3 10.5 / 13.6, 4 12.7 / 15.8, 5 11.1 /
 17.4. The viewer has neither, so expect about 1 to 2 ms less; a mean within ±10 % of that and no frame
 over 20 ms on any track confirms the forecast.
 
-Simulation of the viewer (one frame series at the start of track 1, about 8 minutes of Verilator): the
+Simulation of the viewer (8 frames at the start of track 1, about 6 minutes of Verilator once the model is built): the
 firmware takes the finished image from the testbench instead of building it (the build is checked
 natively, above), `tools/s2/make_track_s2.py` makes it:
 
@@ -117,6 +117,10 @@ SIM_QUICK=1 SIM_GAME=build/gamedata SIM_IMAGE=build/s2/track1.bin SIM_TRACK=1 SI
     tools/sim.sh soc build/firmware/firmware.bin build/sim/viewer 1500 > build/sim/viewer.log
 python -I tools/rgb2png.py build/sim/viewer.rgb build/sim/viewer.png
 ```
+
+The run of 2026-11-04: no trap, 6.1 ms mean and 6.3 ms worst for the 8 frames (the cost model gives 6.0 ms for
+them without the game's own physics), the picture equal to the PC render of the same camera
+(`tools/s2/render_s2.sh build/s2/track1.bin <prefix> v1482.4,4`) in every pixel outside the overlay's box.
 
 ## PC renderer
 
