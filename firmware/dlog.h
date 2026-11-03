@@ -1,6 +1,6 @@
 /*
  * Debug log: text in the 4 KB at DLOG_BASE, which the Pocket saves as
- * /Saves/screamer/Chainy.Screamer/debug.txt when the core is quit (docs/soc.md).
+ * /Saves/screamer2/Chainy.Screamer2/debug.txt when the core is quit (docs/soc.md).
  *
  * The first DLOG_HEAD bytes are one line that dlog_head() rewrites in place (firmware
  * name and a live frame count, so a hang shows how far it got); the other functions append

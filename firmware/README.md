@@ -25,7 +25,7 @@ tools/fw.sh
 GCC 14 and picolibc from Debian trixie run in Docker (`firmware/docker/Dockerfile`, base image
 and package versions pinned); the script builds the image on first use. The result is in
 `build/firmware/`: `firmware.bin`, `program.bin`, and for each the `.elf`, `.lst`
-(disassembly) and `.map`. Both binaries are copied to `build/assets/screamer/Chainy.Screamer/`;
+(disassembly) and `.map`. Both binaries are copied to `build/assets/screamer2/Chainy.Screamer2/`;
 `tools/package.sh` and `tools/deploy.sh` take them from there to the SD card.
 
 ## Files
@@ -55,7 +55,7 @@ and package versions pinned); the script builds the image on first use. The resu
 
 The Pocket saves the log area when you quit the core from its menu or switch it off, also
 after a CPU crash. Connect the Pocket by USB as a drive (or insert the SD card) and open
-`/Saves/screamer/Chainy.Screamer/debug.txt`, or run `tools/pocketlog.py` for a short table. The
+`/Saves/screamer2/Chainy.Screamer2/debug.txt`, or run `tools/pocketlog.py` for a short table. The
 old `debug.txt` is loaded into the area at start but the core ignores it: after the core has
 started, the content is from this run (a file of only zeros means the CPU never ran). When you
 only reload the firmware from the menu, that is a reset, and the previous run's log stays until

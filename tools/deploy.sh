@@ -2,7 +2,7 @@
 # Package the core and copy it onto the Pocket's SD card (Pocket in USB mode or card reader),
 # together with the player's own original game files the core reads (core/data.json, slots
 # 3-22 and 25), unchanged and in the game's own folders (DATA, GFX; GOG's image of the CD, SCREAM.gog
-# and its cue sheet SCREAM.DAT, at the top), into Assets/screamer/common/. A file already there
+# and its cue sheet SCREAM.DAT, at the top), into Assets/screamer2/common/. A file already there
 # with the same size is left as it is (the CD image has 383 MB).
 # Usage: tools/deploy.sh <SD card root> [game folder], e.g. tools/deploy.sh /i  (Git Bash for
 #        drive I:); the game folder defaults to $GAME_DIR or "C:/GOG Games/Screamer"
@@ -22,17 +22,17 @@ sh "$root/tools/package.sh" > /dev/null
 src="$root/build/sdcard"
 cp -r "$src/." "$card/"
 for f in $files; do
-    dst="$card/Assets/screamer/common/$f"
+    dst="$card/Assets/screamer2/common/$f"
     mkdir -p "$(dirname "$dst")"
     [ -f "$dst" ] && [ "$(stat -c %s "$game/$f")" = "$(stat -c %s "$dst")" ] || cp "$game/$f" "$dst"
-    case "$f" in */*) rm -f "$card/Assets/screamer/common/${f#*/}" ;; esac   # deployed flat for a while on 2026-10-28
+    case "$f" in */*) rm -f "$card/Assets/screamer2/common/${f#*/}" ;; esac   # deployed flat for a while on 2026-10-28
 done
-rm -f "$card/Assets/screamer/Chainy.Screamer/track1.bin"     # made on the PC until 2026-10, now built by the core
+rm -f "$card/Assets/screamer2/Chainy.Screamer2/track1.bin"     # made on the PC until 2026-10, now built by the core
 sync
 
-cmp -s "$src/Cores/Chainy.Screamer/bitstream.rbf_r" "$card/Cores/Chainy.Screamer/bitstream.rbf_r"
+cmp -s "$src/Cores/Chainy.Screamer2/bitstream.rbf_r" "$card/Cores/Chainy.Screamer2/bitstream.rbf_r"
 echo "Deployed to $card:"
 (cd "$src" && find . -type f | sed 's|^\./|  |' | sort)
 for f in $files; do
-    echo "  Assets/screamer/common/$f  (from $game)"
+    echo "  Assets/screamer2/common/$f  (from $game)"
 done

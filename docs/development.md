@@ -25,7 +25,7 @@ The firmware is built by GCC 14 and picolibc from Debian trixie in Docker
 
 A release holds the bitstream, the core's JSON files, the platform files and the firmware,
 never game data. `tools/deploy.sh <sd card> [game folder]` additionally copies your own game
-files (default folder `C:/GOG Games/Screamer`, or `$GAME_DIR`) to `Assets/screamer/common/`
+files (default folder `C:/GOG Games/Screamer`, or `$GAME_DIR`) to `Assets/screamer2/common/`
 and leaves everything else on the card alone.
 
 ## Game data
@@ -112,7 +112,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`. It also needs `DA
 | `tools/fmcheck.sh [song ...]`, `tools/fmsongs.py`, `tools/host/fmdump.c`, `tools/host/fmref.c` | the FM music on the PC: `fmsongs.py` reads the songs of `DATA/MUSIC.DAT` independently (tracks, messages, lengths); `fmdump.c` runs `firmware/fm.c` against a model of the hardware's write queue; `fmref.c` is openscreamer's driver with the chip replaced by a log; `fmcheck.sh` runs all of them (Docker) and compares the register writes tick by tick |
 | `tools/dis.sh [-h] [-f] <from> <to>` | disassembles part of `STARTL.EXE` (`-h`: `STARTH.EXE`) at the addresses of OpenScreamer's notes; `tools/unle.py` (from OpenScreamer) unpacks the program into `build/exe/` on first use |
 | `tools/dosram.py` | reads the memory of the original game running in DOSBox, to compare with the firmware |
-| `tools/release_zip.py` | after `tools/package.sh`: the release archive `build/release/Chainy.Screamer_<version>.zip` (version from `core/core.json`), refusing to include game data |
+| `tools/release_zip.py` | after `tools/package.sh`: the release archive `build/release/Chainy.Screamer2_<version>.zip` (version from `core/core.json`), refusing to include game data |
 | `tools/pocketlog.py [debug.txt]` | reads the Pocket's debug log (default: the SD card at I:) as a short table |
 | `tools/platform_image.py` | makes the platform image (`.bin`) from a PNG and back |
 | `tools/gen_pll_sdram.sh` | regenerates the SDRAM clock PLL (Intel `ip-generate` in the Quartus image) |

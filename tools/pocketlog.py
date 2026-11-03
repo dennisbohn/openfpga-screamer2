@@ -1,7 +1,7 @@
 """The Pocket's debug log (debug.txt, data slot 1) in a few lines: the header, loading, the
 checks, any failure, and a table of the race's samples (every 250 frames).
 
-Usage: python tools/pocketlog.py [debug.txt]     (default: I:/Saves/screamer/Chainy.Screamer/debug.txt)
+Usage: python tools/pocketlog.py [debug.txt]     (default: I:/Saves/screamer2/Chainy.Screamer2/debug.txt)
 """
 import re
 import sys
@@ -16,7 +16,7 @@ def field(line, pattern):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    path = sys.argv[1] if len(sys.argv) > 1 else "I:/Saves/screamer/Chainy.Screamer/debug.txt"
+    path = sys.argv[1] if len(sys.argv) > 1 else "I:/Saves/screamer2/Chainy.Screamer2/debug.txt"
     try:
         text = open(path, "rb").read().replace(b"\0", b"").decode("latin-1")
     except OSError as e:

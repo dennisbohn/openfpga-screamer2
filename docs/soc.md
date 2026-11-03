@@ -268,7 +268,7 @@ writes text into the 4 KB area from `0xF000_8000` (byte, halfword and word acces
 works too; little-endian as elsewhere, lines end with `\n`, the rest stays `\0`). The area is
 the nonvolatile data slot `debug.txt` (id 1, bridge address `0x0010_0000`): when the core is
 quit from the menu ("Quit") and at power-off the Pocket reads it through the bridge and
-saves it as `/Saves/screamer/Chainy.Screamer/debug.txt` (the core does not support sleep,
+saves it as `/Saves/screamer2/Chainy.Screamer2/debug.txt` (the core does not support sleep,
 `core.json`: `sleep_supported: false`). This works after a CPU crash too, because the
 read-out is pure hardware. `soc.v` swaps the byte order so the file is readable text, and
 after start enters the size 4096 for the slot in the core's slot table (which is otherwise

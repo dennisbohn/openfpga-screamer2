@@ -51,8 +51,8 @@ if [ -n "$fault" ]; then
     echo "fault test: build/$out/firmware.bin, $size bytes"
     exit 0
 fi
-assets="$root/build/assets/screamer/Chainy.Screamer"
+assets="$root/build/assets/screamer2/Chainy.Screamer2"
 mkdir -p "$assets"
 cp "$bin" "$assets/firmware.bin"
 cp "$prog" "$assets/program.bin"
-echo "boot RAM: $size of $limit bytes; program.bin: $prog_size bytes; both copied to build/assets/screamer/Chainy.Screamer/"
+echo "boot RAM: $size of $limit bytes; program.bin: $prog_size bytes; both copied to build/assets/screamer2/Chainy.Screamer2/"

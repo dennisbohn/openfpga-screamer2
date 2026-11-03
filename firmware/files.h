@@ -1,5 +1,5 @@
 /*
- * The game's files that the core reads from Assets/screamer/common/ on the SD card (data slots
+ * The game's files that the core reads from Assets/screamer2/common/ on the SD card (data slots
  * 3 to 22 and 25, core/data.json), and the screen that lists them with [OK] or [MISSING] when
  * the game cannot start. SCREAM.gog, SCREAM.DAT and MUSIC.DAT only bring the music; the game
  * runs without them.

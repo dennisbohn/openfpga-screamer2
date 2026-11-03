@@ -74,6 +74,6 @@ void files_draw(volatile uint8_t *fb, int failed)
         con_text(fb, 1, 24, "see debug.txt in the Saves folder", WHITE, BLACK);
     } else {
         con_text(fb, 1, 23, "Copy the game files to the SD card:", WHITE, BLACK);
-        con_text(fb, 1, 24, "Assets/screamer/common/ (see README)", WHITE, BLACK);
+        con_text(fb, 1, 24, "Assets/screamer2/common/ (see README)", WHITE, BLACK);
     }
 }

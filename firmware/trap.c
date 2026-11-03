@@ -18,7 +18,7 @@ static const char *const causes[] = {
     "ecall from U-mode", "ecall from S-mode", "?", "ecall from M-mode",
 };
 
-#define BOX_ROW 18                  /* the report covers text rows 18..24 */
+#define BOX_ROW 17                  /* the report covers text rows 17..24 */
 
 static void show(volatile uint8_t *fb, char text[][CON_COLS + 1], int lines)
 {
@@ -54,7 +54,7 @@ void trap_handler(uint32_t sp, uint32_t ra)
     dlog_char('\n');
     SYS_SIM = SIM_TRAP | (mcause & 0x3FFFFFFFu);
 
-    char text[7][CON_COLS + 1], *p;
+    char text[8][CON_COLS + 1], *p;
     fmt_str(text[0], " CPU-ABSTURZ (Trap)");
     p = fmt_hex(fmt_str(text[1], " mcause "), mcause, 8);
     fmt_str(fmt_str(p, " "), cause);
@@ -64,14 +64,15 @@ void trap_handler(uint32_t sp, uint32_t ra)
     fmt_hex(fmt_str(p, "  sp    "), sp, 8);
     fmt_str(text[4], "");
     fmt_str(text[5], " Protokoll: Core beenden, per USB:");
-    fmt_str(text[6], "Saves/screamer/Chainy.Screamer/debug.txt");
+    fmt_str(text[6], " Saves/screamer2/Chainy.Screamer2/");   /* 40 columns: the path takes two lines */
+    fmt_str(text[7], " debug.txt");
 
     /* Into both buffers, so the report shows whichever is on screen now or after a
        pending swap. Before the first frame no buffer has a palette yet: then the back
        buffer gets one and is swapped in. Later the last whole frame stays where it is. */
     uint32_t st = VID_STATUS;
-    show(FB(st & VID_FRONT), text, 7);
-    show(FB(!(st & VID_FRONT)), text, 7);
+    show(FB(st & VID_FRONT), text, 8);
+    show(FB(!(st & VID_FRONT)), text, 8);
     if (!frames_shown) {
         pal_write();
         VID_SWAP = 1;
