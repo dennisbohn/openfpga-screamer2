@@ -64,6 +64,8 @@ int main(int argc, char **argv)
     memcpy(&p->rec[1], &forever, 4);
     FILE *out = fopen(argv[3], "w");
     if (!out) { perror(argv[3]); return 1; }
+    FILE *pcs = 0;                                      /* PIECES=<file>: every piece of every frame (the pipeline model) */
+    if (getenv("PIECES") && !(pcs = fopen(getenv("PIECES"), "w"))) { perror(getenv("PIECES")); return 1; }
     fprintf(out, "label,step,px,py,pz,node,mph,place,lap,c1x,c1y,c2x,c2y,c3x,c3y,ts_pieces,ts_faces,ts_triangles,ts_vertices,ts_objects,ts_nearest");
     perf_header(out);
     fprintf(out, "\n");
@@ -92,7 +94,16 @@ int main(int argc, char **argv)
         fprintf(out, ",%u,%u,%u,%u,%u,%u", ts.pieces, ts.faces, ts.triangles, ts.vertices, ts.objects, ts.nearest);
         perf_row(out);
         fprintf(out, "\n");
+        if (pcs) {
+            fprintf(pcs, "F %d %d\n", k + 1, perf_npieces);
+            for (int i = 0; i < perf_npieces; i++) {
+                const struct perf_piece_rec *q = &perf_pieces[i];
+                fprintf(pcs, "%u %u %u %u %u %u %u %u %u\n", q->kind, q->faces_row, q->gu_miss, q->refl_verts, q->verts, q->px_span,
+                        q->tex_miss, q->walk_tris, q->rows);
+            }
+        }
     }
     fclose(out);
+    if (pcs) fclose(pcs);
     return 0;
 }

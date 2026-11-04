@@ -4,7 +4,7 @@
 # (tools/s2/framestats.sh build, perf_patch.py: a hash of the sorted list of pieces, and the pieces, faces, triangles
 # and vertices counted by the C models) draw the same frames: a race of each track on the PC (the game's driver drives
 # the player's car too, a frame every 15 steps) and the road sweeps with 0, 1 and 4 cars; every frame's hash and
-# counters must be equal.
+# counters must be equal. Then pictures of five poses a track from both trees, byte for byte.
 # Usage: tools/s2/check_cull_s2.sh <reference commit> [tracks]       (default tracks 1 2 3 4 5 6 7)
 # Needs: build/s2/track<n>.bin (python -I tools/s2/make_track_s2.py <Screamer 2 folder> n build/s2/track<n>.bin),
 # the game's folder for the physics (GAME_DIR, default C:/GOG Games/Screamer 2). About 2 minutes.
@@ -57,5 +57,17 @@ for kind in ("race", "sweep"):
 sys.exit(1 if fail else 0)
 PY
 done
+# and the pictures: the race robot's poses and two ride poses of every track, rendered by both trees (tools/s2/render_s2.sh),
+# must be equal in every byte
+mkdir -p build/pics/cc_old build/pics/cc_new
+for n in $tracks; do
+    img=build/s2/track$n.bin
+    RACE_ROBOT=1 sh "$old/tools/s2/render_s2.sh" "$img" build/pics/cc_old/t$n g300 g3000 g6500 v50000,4 v250000,4 > /dev/null 2>&1 || true
+    RACE_ROBOT=1 sh tools/s2/render_s2.sh "$img" build/pics/cc_new/t$n g300 g3000 g6500 v50000,4 v250000,4 > /dev/null 2>&1 || true
+    diff=0
+    for k in 0 1 2 3 4; do cmp -s build/pics/cc_old/t$n$k.rgb build/pics/cc_new/t$n$k.rgb || diff=$((diff + 1)); done
+    echo "track $n pictures: 5 poses, $diff differ"
+    [ $diff -eq 0 ] || bad=$((bad + 1))
+done
 if [ $bad -ne 0 ]; then echo "FAIL: the cull changed the pieces drawn on $bad track(s)"; exit 1; fi
-echo "ok: the same pieces in the same order in every frame"
+echo "ok: the same pieces in the same order in every frame, the same pictures"

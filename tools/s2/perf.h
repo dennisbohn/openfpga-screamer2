@@ -43,5 +43,13 @@ void perf_gu_rd(const void *p, uint32_t len);   /* the geometry unit reads len b
    bytes would have to be fetched): night (near 6000, far 35000), fog (0, 25000). z: camera depth
    in units, 8 fraction bits. */
 void perf_fade(int32_t f0, int32_t f1, int32_t f2);
+/* every piece handed on (track.c PF_PIECE, firmware/prof.h): its kind and the counters it added, for the pipeline model
+   of docs/screamer2/performance.md section 7 (perf_pieces is cleared by perf_reset) */
+struct perf_piece_rec { uint32_t kind, faces_row, gu_miss, refl_verts, verts, px_span, tex_miss, walk_tris, rows; };
+#define PERF_MAX_PIECES 4800
+extern struct perf_piece_rec perf_pieces[PERF_MAX_PIECES];
+extern int perf_npieces;
+void perf_piece(int kind);
+#define PF_PIECE(kind)  perf_piece(kind)
 void perf_header(FILE *f);                  /* ",groups,grp_skipped,..." */
 void perf_row(FILE *f);                     /* ",12,34,..." */

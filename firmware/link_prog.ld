@@ -13,14 +13,20 @@ MEMORY
     SDRAM (rwx) : ORIGIN = 0x13000000, LENGTH = 15M     /* above: the saves (save.h) */
 }
 
+CODE_PAD = DEFINED(CODE_PAD) ? CODE_PAD : 0;
+CODE_PAD2 = DEFINED(CODE_PAD2) ? CODE_PAD2 : 0;
+
 SECTIONS
 {
     .text : {
         __image_start = .;
         KEEP(*(.text.header))       /* start_prog.S: header, entry, trap entry */
         KEEP(*(.text.start))
+        . = . + CODE_PAD;           /* (0; tools/fw.sh CODE_PAD=n: the code moves n bytes, to see what the caches' alignment costs) */
         *(.text.unlikely .text.unlikely.*)
         *(.text.startup .text.startup.*)
+        *main.o(.text .text.*)
+        . = . + CODE_PAD2;          /* (0; tools/fw.sh CODE_PAD2=n: the code after main.c moves n bytes, hw_piece against the track's code) */
         *(.text .text.*)
     } > SDRAM
 

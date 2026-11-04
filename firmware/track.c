@@ -1277,6 +1277,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
                 if(track_mode == TRACK_HW) track_hw_piece(&g);
                 else gu_draw(fb, clip, &view, mlb, &g, &gst);
                 t_out += now() - t0;
+                PF_PIECE(1);
             }
             PF_ADD(PF_PC_OBJ, pb);
             continue;
@@ -1291,6 +1292,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
                 if(track_mode == TRACK_HW) track_hw_piece(&gs[b]);
                 else gu_draw(fb, clip, &view, mlb, &gs[b], &gst);
                 t_out += now() - t0;
+                PF_PIECE(2);
             }
             PF_ADD(PF_PC_MULTI, pb);
             continue;
@@ -1333,6 +1335,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         if(track_mode == TRACK_HW) track_hw_piece(&g);
         else gu_draw(fb, clip, &view, mlb, &g, &gst);
         t_out += now() - t0;
+        PF_PIECE(0);
         PF_ADD(PF_PC_STATIC, pb);
     }
     st->faces = gst.faces;

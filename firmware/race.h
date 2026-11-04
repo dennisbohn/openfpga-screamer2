@@ -49,6 +49,10 @@ void race_step(const struct s2car_input *in);
    rasterizer is the bound. The computers' cars are then drawn one step old. */
 void race_step_player(const struct s2car_input *in);
 void race_step_others(uint32_t count);
+/* The same in slices: begin(n), then slice() runs the next piece of work (one computer's step, or the cars touching and the
+   rest of a step) and tells whether more is left; the viewer runs one while the geometry unit's buffer is full. */
+void race_others_begin(uint32_t count);
+int race_others_slice(void);
 
 /* The hardest touch of the player's car with another since the last call (the speed the two close at, in the physics' units a
    second), 0 if none: the sound's knock (s2snd.h). */

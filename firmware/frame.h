@@ -15,8 +15,14 @@ extern uint32_t draw_buf, draw_wait;
 extern int back_wait;
 extern uint32_t back_clocks, back_cycles;
 
-/* A piece (track_hw_piece) into the geometry unit's buffer; a blitter list to the blitter */
+/* A piece (track_hw_piece) into the geometry unit's buffer; a blitter list to the blitter. If hw_idle is set and handing
+   the piece on had to wait HW_FULL_CYCLES or more for room in the buffer (it is full: the geometry unit has 100 pieces
+   to do, and the piece it has just finished took that long), hw_piece calls it once: other work of the CPU for the time
+   it would wait (the viewer's computer cars' steps). A piece handed on without waiting takes about 100 cycles; shorter
+   waits happen early in a frame, when the geometry unit is waiting for the CPU, and there the work would hold it up */
 void hw_piece(const struct gu_piece *g);
+extern void (*hw_idle)(void);
+#define HW_FULL_CYCLES  1200
 void hw_blit(const struct blit_list *l);
 /* The projection into the setup unit's registers */
 void su_view_regs(const struct su_view *v);

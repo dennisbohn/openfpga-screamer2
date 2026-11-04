@@ -605,28 +605,48 @@ void race_step_player(const struct s2car_input *in)
 }
 
 /* the second half of `count` steps: the three computer cars (each step's physics and driver), the cars touching, the cars
-   off the road. The viewer runs it while the rasterizer finishes the picture: the computers' cars are drawn as the step
-   before left them, a 20 ms lag nobody sees, and their physics costs the frame no time where the rasterizer is the bound. */
+   off the road. The viewer runs it while the pieces are handed to the hardware and the rasterizer finishes the picture: the
+   computers' cars are drawn from the step before or the one just taken, a 20 ms lag nobody sees, and their physics costs the
+   frame no time where the hardware is the bound. In slices (one car's step, or the rest of a step) so that the viewer can run
+   them while the geometry unit is behind (race_others_slice); the order of the steps is the same as in one go. */
+static struct { uint32_t left; int stage; } others;
+
+void race_others_begin(uint32_t count)
+{
+    others.left = count;
+    others.stage = 1;
+}
+
+int race_others_slice(void)
+{
+    if(!others.left) return 0;
+    if(others.stage < R.n) {
+        const int i = others.stage++;
+        struct s2car_state *c = &R.car[i];
+        if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }
+        PF_VAR(pf);
+        s2car_step_driven(c, driver, (void *)(intptr_t)i);
+        PF_ADD(PF_AI_STEP, pf);
+        return 1;
+    }
+    PF_VAR(pc);
+    collide();
+    PF_ADD(PF_COLLIDE, pc);
+    for(int i = 0; i < R.n; i++) {                      /* a car off the road for good goes back onto the line */
+        struct s2car_state *c = &R.car[i];
+        R.off[i] = c->off_track ? R.off[i] + 1 : 0;
+        R.still[i] = c->ai && R.running && !(I(c, 0x4c) & 1) && F(c, 0x500) < 3.0f ? R.still[i] + 1 : 0;
+        if(R.off[i] >= OFF_STEPS || R.still[i] >= STILL_STEPS || c->pos[2] < R.floor_z) put_on_line(i);
+    }
+    others.stage = 1;
+    return --others.left != 0;
+}
+
 void race_step_others(uint32_t count)
 {
-    for(uint32_t step = 0; step < count; step++) {
-        for(int i = 1; i < R.n; i++) {
-            struct s2car_state *c = &R.car[i];
-            if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }
-            PF_VAR(pf);
-            s2car_step_driven(c, driver, (void *)(intptr_t)i);
-            PF_ADD(PF_AI_STEP, pf);
-        }
-        PF_VAR(pc);
-        collide();
-        PF_ADD(PF_COLLIDE, pc);
-        for(int i = 0; i < R.n; i++) {                  /* a car off the road for good goes back onto the line */
-            struct s2car_state *c = &R.car[i];
-            R.off[i] = c->off_track ? R.off[i] + 1 : 0;
-            R.still[i] = c->ai && R.running && !(I(c, 0x4c) & 1) && F(c, 0x500) < 3.0f ? R.still[i] + 1 : 0;
-            if(R.off[i] >= OFF_STEPS || R.still[i] >= STILL_STEPS || c->pos[2] < R.floor_z) put_on_line(i);
-        }
-    }
+    race_others_begin(count);
+    while(race_others_slice())
+        ;
 }
 
 float race_knock_take(void)

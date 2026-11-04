@@ -37,6 +37,7 @@
 #include "intro.h"
 #include "frame.h"
 #include "viewer.h"
+#include "prof.h"
 
 uint32_t frames_shown;            /* read by the trap handler */
 
@@ -132,6 +133,7 @@ void log_head(const char *what, uint32_t n)
     dlog_head(buf);
 }
 
+void (*hw_idle)(void);                  /* frame.h */
 uint32_t draw_buf;                      /* the back buffer, for the hardware's draw commands (frame.h) */
 uint32_t draw_wait;                     /* cycles the DRAW writes waited for the rasterizer */
 int back_wait;                          /* the backdrop is with the blitter: the first piece waits */
@@ -222,7 +224,13 @@ void hw_piece(const struct gu_piece *g)
     GU_PUSH = ((uint32_t)g->row & 7) | (uint32_t)(g->mirror != 0) << 3 | ((uint32_t)g->row & 8) << 1 |
               (g->phase & 0x3FFF) << 16;
     GU_PUSH = g->refl;
-    draw_wait += rdcycle() - t0;
+    uint32_t waited = rdcycle() - t0;
+#ifdef S2_PROF
+    prof_push(waited);
+#endif
+    draw_wait += waited;
+    if (waited > HW_FULL_CYCLES && hw_idle)
+        hw_idle();
 }
 
 /* the palette entry nearest to an RGB colour, for text on the track's palette */
@@ -361,6 +369,10 @@ static void still_show(const struct blit_list *l)
 void pal_faded(const uint32_t *pal, int32_t f)
 {
     uint32_t k = f < 0 ? 0 : f > 0x8000 ? 0x8000 : (uint32_t)f;
+    if (k == 0x8000) {                                  /* not faded: the same colours (the race draws this every frame) */
+        for (int i = 0; i < 256; i++) VID_PAL[i] = pal[i] & 0xFFFFFFu;
+        return;
+    }
     for (int i = 0; i < 256; i++) {
         uint32_t c = pal[i];
         VID_PAL[i] = ((c >> 16 & 255) * k >> 15) << 16 | ((c >> 8 & 255) * k >> 15) << 8 | (c & 255) * k >> 15;

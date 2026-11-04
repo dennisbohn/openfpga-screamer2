@@ -8,7 +8,8 @@
 #       the frames along the road, see framestats.c
 #   tools/s2/framestats.sh race <track image> <label> <out.csv> <steps> <every> [track]
 #       a race on the PC (the game's driver drives all four cars), a frame every <every> steps, see racestats.c
-#       (needs the game's folder for the physics: GAME_DIR, default C:/GOG Games/Screamer 2)
+#       (needs the game's folder for the physics: GAME_DIR, default C:/GOG Games/Screamer 2;
+#       PIECES=<file>: also every piece of every frame with the counters it added, for the pipeline model)
 # The firmware is never changed; the counters live in the copies. Game data only under build/.
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -53,7 +54,7 @@ PY
 sweep)
     v=$1; image=$2; label=$3; out=$4; step=$5; cars=$6; grid=$7
     cp "$image" "$st/$(basename "$image")"
-    docker_sh ${FAR:+-e FAR=$FAR} ${REACH:+-e REACH=$REACH} ${MIRROR:+-e MIRROR=$MIRROR} ${ROAD_S:+-e ROAD_S=$ROAD_S} -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats && ./framestats_$v $(basename "$image") $label $(basename "$out") $step $cars $grid"
+    docker_sh ${YAW_OFF:+-e YAW_OFF=$YAW_OFF} ${FAR:+-e FAR=$FAR} ${REACH:+-e REACH=$REACH} ${MIRROR:+-e MIRROR=$MIRROR} ${ROAD_S:+-e ROAD_S=$ROAD_S} -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats && ./framestats_$v $(basename "$image") $label $(basename "$out") $step $cars $grid"
     mv "$st/$(basename "$out")" "$out"
     ;;
 race)
@@ -61,8 +62,9 @@ race)
     cp "$image" "$st/$(basename "$image")"
     game=${GAME_DIR:-C:/GOG Games/Screamer 2}
     if command -v cygpath >/dev/null 2>&1; then game_mount=$(cygpath -wa "$game"); else game_mount=$game; fi
-    docker_sh -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game --entrypoint sh $img -c "cd /b/stats && ./racestats_s2 $(basename "$image") $label $(basename "$out") $steps $every $tn"
+    docker_sh -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game ${PIECES:+-e PIECES=$(basename "$PIECES")} --entrypoint sh $img -c "cd /b/stats && ./racestats_s2 $(basename "$image") $label $(basename "$out") $steps $every $tn"
     mv "$st/$(basename "$out")" "$out"
+    [ -z "$PIECES" ] || mv "$st/$(basename "$PIECES")" "$PIECES"
     ;;
 *)
     echo "usage: framestats.sh build | race <image> <label> <out.csv> <steps> <every> [track] | sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]"

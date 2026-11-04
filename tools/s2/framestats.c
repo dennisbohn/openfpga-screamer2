@@ -124,7 +124,9 @@ static void frame(FILE *out, const char *label, int idx, float x, float y, float
     perf_reset();
     track_models(&nm);
     perf_lod_min = mirror;                      /* the mirror's pass takes level 1 at least (STARTL.EXE 0x7f0fc) */
-    struct track_cam cam = chase_cam(x, y, z, yaw);
+    static float yaw_off = -1e9f;
+    if (yaw_off < -1e8f) yaw_off = getenv("YAW_OFF") ? (float)atof(getenv("YAW_OFF")) : 0.0f;    /* YAW_OFF=rad: the camera turned about the car (a car that has spun) */
+    struct track_cam cam = chase_cam(x, y, z, yaw + yaw_off);
     /* the rear-view mirror (NOTES2 S2-5zh): the scene again from the car's place, 400 above the
        body, looking back, 35 rows of 320, without the car; the others are behind it */
     if (mirror) cam = (struct track_cam){ x, y, z + 400.0f, yaw + 3.14159265f, 0.0f, 0.0f };

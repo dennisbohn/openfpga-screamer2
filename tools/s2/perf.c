@@ -36,8 +36,27 @@ static int32_t tex_tag32[2 * TEX_LINES], tex_tag2[TEX_LINES][2];
 static uint8_t seen[MAX_LINES / 8];
 static int fade_last[2] = { -1, -1 };
 
+struct perf_piece_rec perf_pieces[PERF_MAX_PIECES];
+int perf_npieces;
+static struct perf_piece_rec perf_last;
+
+void perf_piece(int kind)
+{
+    struct perf_piece_rec now = { (uint32_t)kind, perf_c.faces_row, perf_c.gu_miss, perf_c.refl_verts, perf_c.verts, perf_c.px_span,
+                                  perf_c.tex_miss, perf_c.walk_tris, perf_c.rows };
+    if (perf_npieces < PERF_MAX_PIECES) {
+        struct perf_piece_rec d = { (uint32_t)kind, now.faces_row - perf_last.faces_row, now.gu_miss - perf_last.gu_miss,
+                                    now.refl_verts - perf_last.refl_verts, now.verts - perf_last.verts, now.px_span - perf_last.px_span,
+                                    now.tex_miss - perf_last.tex_miss, now.walk_tris - perf_last.walk_tris, now.rows - perf_last.rows };
+        perf_pieces[perf_npieces++] = d;
+    }
+    perf_last = now;
+}
+
 void perf_reset(void)
 {
+    perf_npieces = 0;
+    memset(&perf_last, 0, sizeof perf_last);
     memset(&perf_c, 0, sizeof perf_c);
     for (int i = 0; i < TEX_LINES; i++) tex_tag[i] = -1;
     for (int i = 0; i < 2 * TEX_LINES; i++) tex_tag32[i] = -1;

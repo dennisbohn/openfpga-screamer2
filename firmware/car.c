@@ -1064,7 +1064,6 @@ static int draw_model(const struct cmodel *m, const struct car_look *lk, float d
         const struct cblock *q = &m->cb[b];
         struct track_block *t = &tb[b];
         float mid[3], mw[3];
-        place_block(q, &ps, t);
         t->file = m->mesh;
         t->blk = q->blk;
         t->phase = lk->phase;
@@ -1081,6 +1080,7 @@ static int draw_model(const struct cmodel *m, const struct car_look *lk, float d
             if(!off) continue;
             t->blk = m->mesh + off;
         }
+        place_block(q, &ps, t);                 /* (only for a block that is drawn: a car far off is its body alone) */
         int i = nl;
         while(i > 0 && key[ord[i - 1]] > key[b]) { ord[i] = ord[i - 1]; i--; }
         ord[i] = b;

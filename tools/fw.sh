@@ -30,7 +30,7 @@ fi
 fault=""
 prof=""
 for arg in "$@"; do
-    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; PROF=*) prof=-prof ;; esac
+    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; PROF=*) prof=-prof ;; CODE_PAD=*) prof=$prof-pad${arg#CODE_PAD=} ;; CODE_PAD2=*) prof=$prof-padb${arg#CODE_PAD2=} ;; esac
 done
 out=firmware${fault:+-$fault}$prof
 

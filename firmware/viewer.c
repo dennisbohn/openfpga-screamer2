@@ -21,6 +21,7 @@
 #include "s2sound.h"
 #include "s2menu.h"
 #include "prof.h"
+#include <string.h>
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
    ZIP's entries read whole), the build's scratch up to the program */
@@ -59,7 +60,9 @@
    for 3 s, or this far below the lowest road point of the track, goes back onto the line (race.c) */
 #define DRIVE_MAX_STEPS 4
 #ifndef RACE_OVERLAP
-#define RACE_OVERLAP    1               /* the computers' cars step while the rasterizer finishes the picture (race.h); 0: before the scene */
+#define RACE_OVERLAP    2               /* the computers' cars' steps: 2 while the pieces are handed on, whenever the geometry unit's buffer is full, the
+                                           rest after the last piece and while the rasterizer finishes the picture (race.h); 1 only after the last
+                                           piece; 0 before the scene (one step with the player's) */
 #endif
 #define FALL_UNITS      3000.0f
 #define OFFER_FRAMES    50              /* the finished race offers "A: race again, B: menu" a second after the line */
@@ -77,28 +80,6 @@ static struct blit_list back;
 static uint32_t sim_frames;             /* in the simulation: the frames to draw before it ends */
 static uint32_t results;
 static int sim;
-
-#ifdef S2_PROF
-uint32_t prof_t[PF_N], prof_n[PF_N];
-/* the simulation's cycle counters (prof.h): per frame, the mean cycles of each stretch and its runs */
-void prof_log(uint32_t frames)
-{
-    static const char *const name[PF_N] = {
-        "player step", "driver", "tyres", "look", "wall", "ground", "gstep", "wpic", "engine", "steer", "outputs",
-        "ai step", "collide", "line", "places", "scene", "sound", "cull setup", "cull walk", "cull objs", "cull sort",
-        "pieces static", "pieces obj", "pieces multi", "push" };
-    dlog_str("prof (cycles, runs a frame):\n");
-    for (int i = 0; i < PF_N; i++) {
-        dlog_str("  ");
-        dlog_str(name[i]);
-        dlog_char(' ');
-        dlog_dec((int32_t)(prof_t[i] / frames));
-        dlog_char(' ');
-        dlog_dec((int32_t)(prof_n[i] * 10 / frames));
-        dlog_char('\n');
-    }
-}
-#endif
 
 /* "10.4" for cycles, to one decimal of a millisecond */
 static char *fmt_ms(char *p, uint32_t cycles)
@@ -253,7 +234,9 @@ struct stats {
     uint64_t sum;                       /* cycles of all the frames' work */
     uint32_t n, max, over;              /* frames, the longest, the ones over 20 ms */
     uint32_t faces, pieces;             /* sums over the frames */
-    float worst_s;                      /* where the longest frame was: units along the road */
+    float worst_s;                      /* where the longest frame was: units along the road (the race: the player's node of the line) */
+    uint32_t w_pre, w_cull, w_scene, w_others, w_wait, w_faces, w_pieces;   /* and what it was made of: cycles before the scene, in the cull,
+                                                                               in the pieces' loop, in the computers' steps, waiting for the rasterizer */
     uint32_t video;                     /* video frames (1/50 s) since the first frame */
     uint64_t phys, others;              /* the driving mode: cycles before the scene (the player's step) and of the computers' steps after it, summed */
     uint32_t phys_max, others_max;      /* and the longest of each */
@@ -270,6 +253,16 @@ static void stats_text(char *p, int n, int cars, const struct stats *s, int full
     q = fmt_ms(q, s->n ? (uint32_t)(s->sum / s->n) : 0);
     q = fmt_ms(fmt_str(q, " max"), s->max);
     if (full && cars >= 0) q = fmt_str(fmt_udec(fmt_str(q, "@"), (uint32_t)(s->worst_s / 1000.0f)), "k");
+    if (s->n) {                                         /* the longest frame: its parts in ms, its faces and pieces, where the player was */
+        q = fmt_ms(fmt_str(q, " | a"), s->w_pre);
+        q = fmt_ms(fmt_str(q, " c"), s->w_cull);
+        q = fmt_ms(fmt_str(q, " s"), s->w_scene);
+        q = fmt_ms(fmt_str(q, " o"), s->w_others);
+        q = fmt_ms(fmt_str(q, " w"), s->w_wait);
+        q = fmt_udec(fmt_str(q, " f"), s->w_faces);
+        q = fmt_udec(fmt_str(q, " p"), s->w_pieces);
+        if (cars < 0) q = fmt_udec(fmt_str(q, " n"), (uint32_t)s->worst_s);
+    }
     q = fmt_udec(fmt_str(q, " late"), s->over);
     q = fmt_udec(fmt_str(q, full ? " " : " fps"), fps10 / 10);
     *q++ = '.';
@@ -291,7 +284,7 @@ static void stats_text(char *p, int n, int cars, const struct stats *s, int full
    frames over 20 ms, pictures a second, faces and pieces a frame */
 static void log_stats(int n, int cars, const struct stats *s)
 {
-    char buf[100];
+    char buf[160];
     stats_text(buf, n, cars, s, 1);
     dlog_str(buf);
     dlog_char('\n');
@@ -356,6 +349,16 @@ static char *fmt_time(char *p, float seconds)
     }
     *p = 0;
     return p;
+}
+
+/* the computers' steps in the gaps of the scene's loop (frame.h hw_idle): one slice of work each time the geometry unit's buffer is full */
+static uint32_t others_in_scene;
+
+static void others_slice(void)
+{
+    uint32_t t = rdcycle();
+    race_others_slice();
+    others_in_scene += rdcycle() - t;
 }
 
 /* the race's text over the picture: the start lights, laps, place and times; when the player has finished, the result and,
@@ -511,6 +514,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         static struct track_object objs[ROAD_CARS];
         int nobj;
         uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
+        others_in_scene = 0;
         if (*drive) {
             /* the physics at 50 steps a second, one per video frame since the last picture (in the simulation, one a
                frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
@@ -523,6 +527,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 if (!RACE_OVERLAP) race_step_others(1);
             }
             race_pending = RACE_OVERLAP ? steps : 0;
+            if (race_pending && RACE_OVERLAP > 1) race_others_begin(race_pending);
             struct s2car_state *rc[RACE_CARS];
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
             PF_VAR(pf);
@@ -569,14 +574,20 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         RS_CLIP1 = RS_XY(clip.x1, clip.y1);
         su_view_regs(&view);
         tl_scene = 1;
+        const uint32_t t_scene = rdcycle();
+        if (race_pending && RACE_OVERLAP > 1) hw_idle = others_slice;
         track_draw_cam(0, &clip, &cam, objs, nobj, &ts);
+        hw_idle = 0;
         tl_scene = 0;
         tl_mark(TL_SCENE);
-        if (*drive) {                                   /* the computers' cars' steps while the rasterizer finishes the picture */
+        if (*drive) {                                   /* the computers' cars' steps (what is left of them) while the rasterizer finishes the picture */
             uint32_t t_o = rdcycle();
-            race_step_others(race_pending);
-            others_cycles = rdcycle() - t_o;
+            if (RACE_OVERLAP > 1) while (race_others_slice())
+                ;
+            else race_step_others(race_pending);
+            others_cycles = rdcycle() - t_o + others_in_scene;
         }
+        const uint32_t t_wait = rdcycle();
         while (RS_DRAW & RS_BUSY)
             ;
         tl_mark(TL_WAIT);
@@ -619,6 +630,18 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         if (work > st_all.max) {
             st_all.max = work;
             st_all.worst_s = s;
+            if (*drive) {
+                float node;
+                memcpy(&node, &race_car(0)->rec[0x4b8 / 4], 4);       /* where the player is on the line (node, a float) */
+                st_all.worst_s = node > 0.0f ? node : 0.0f;
+            }
+            st_all.w_pre = t_scene - t_frame;
+            st_all.w_cull = ts.cyc_cull;
+            st_all.w_scene = t_wait - t_scene - others_cycles - ts.cyc_cull;
+            st_all.w_others = others_cycles;
+            st_all.w_wait = work - (t_wait - t_frame);
+            st_all.w_faces = faces;
+            st_all.w_pieces = ts.pieces;
         }
         win_n++;
         win_sum += work > 0x20000000u ? 0x20000000u : work;
@@ -632,9 +655,10 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             window_vf = vf;
         }
         if (drawn % 25 == 0) {
-            char head[96];
+            char head[128];
             stats_text(head, n, mode, &st_all, 0);
             dlog_head(head);                            /* debug.txt's first line, live */
+#ifndef S2_PROF                                         /* (the profile's log needs the room) */
             if (sim && *drive) {                        /* the driving mode's progress in the simulation */
                 dlog_str("d");
                 dlog_dec((int32_t)drawn);
@@ -650,6 +674,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 dlog_dec((int32_t)race_car(0)->pos[1]);
                 dlog_char('\n');
             }
+#endif
         }
         /* the timeline of the frame before, once: it is a kilobyte */
         if (!timeline_done && (sim ? drawn + 1 == sim_frames : VIEWER_TIMELINE && st_all.video >= 5 * VID_HZ)) {

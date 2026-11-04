@@ -64,6 +64,8 @@ typedef struct s2car_state car_t;
 #define PUSH(i)   (0x544 + 0xc * (i))       /* the wheel's push (speed of the corner) */
 #define KINDS     64
 
+#include "trigmemo.h"
+
 /* ----------------------------------------------------------------------------------------- the tables */
 
 static struct {
@@ -782,7 +784,7 @@ static void tyres(car_t *c, int *squeal)
     float grip;                                         /* 0x1b36f: the roughness counts half as much for a computer's car */
     if(c->ai) grip = 0.0f >= rough ? rough * 0.05f + base : base - rough * 0.1f;
     else grip = 0.0f >= rough ? rough * 0.1f + base : base - rough * 0.2f;
-    memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);
+    for(int i = 0; i < 0x25c / 4; i++) W(0x734 + 4 * i).u = W(0x4d8 + 4 * i).u;    /* (the last step's state, 604 bytes: copied by words, the library's copy goes by bytes) */
     int against = 0.0f > RF(0x4d4) * RF(0x660) || !(fabsf(RF(0x4d4)) >= 0.01f);
     if((against && fabsf(RF(0x660)) > RF(0x6c) * 0.1f) || RF(0x510) < 1.0f) RI(0xc0) = 0;
     else {
@@ -797,16 +799,21 @@ static void tyres(car_t *c, int *squeal)
     }
     float turned = RF(0x4e8) + RF(0xbc);
     float sum = 0.0f;
+    PF_VAR(pf);
     sum = tyre(c, 2, turned) + sum;
     sum = tyre(c, 0, RF(0x4e8) + RF(0xbc)) + sum;
     sum = tyre(c, 3, RF(0x4e8)) + sum;
     sum = tyre(c, 1, RF(0x4e8)) + sum;
+    PF_ADD(PF_TYRE, pf); PF_SET(pf);
     RF(0xc34) = 1.0f - (sum * 0.25f) / (RF(0x5c) * 111.0f);
     *squeal = 0;
     if(!(RF(0x510) <= 0.0f) && !(RF(0xc34) >= 0.93f)) *squeal = 1;
     angles_from_corners(c);
+    PF_ADD(PF_ANGLES, pf); PF_SET(pf);
     corners(c);
+    PF_ADD(PF_CORNERS, pf); PF_SET(pf);
     find_road(cut(RF(0x4d8)), cut(RF(0x4e0)));
+    PF_ADD(PF_FIND_ROAD, pf);
     RF(0x4c4) = G.road_heading;
 }
 
@@ -819,9 +826,13 @@ static void ground_step(car_t *c)
         else if(!(0.0f <= (float)RI(0x58) * RF(0x660))) RI(0x58) = 0;
         else ease_angle(&RF(0x4e8), (float)RI(0x58) * 0.1f + RF(0x54), 0x57);
     }
+    PF_VAR(pf);
     corners(c);
+    PF_ADD(PF_CORNERS, pf); PF_SET(pf);
     springs(c);
+    PF_ADD(PF_SPRINGS, pf); PF_SET(pf);
     speed_and_way(c);
+    PF_ADD(PF_SPEED, pf);
     if(RI(0x150) != 0) push_sideways(c, RF(0x160));
     if(RI(0x58) != 0) {
         float m[3];
@@ -835,7 +846,9 @@ static void ground_step(car_t *c)
         RF(0x1f0) = DT + RF(0x1f0);
         if(RF(0x1f0) > 1.0f) RF(0x1f0) = 1.0f;
     }
+    PF_SET(pf);
     body_lean(c);
+    PF_ADD(PF_LEAN, pf);
 }
 
 /* 0x1f697: one gear up or down, not while the last change settles (+0x140) */
