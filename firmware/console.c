@@ -92,3 +92,19 @@ char *fmt_hex(char *p, uint32_t v, int digits)
     *p = 0;
     return p;
 }
+
+void con_big(volatile uint8_t *fb, int x, int y, int scale, const char *s, uint8_t fg)
+{
+    for (; *s; s++, x += 8 * scale) {
+        const uint8_t *glyph = (const uint8_t *)font8x8_basic[(uint8_t)*s & 0x7F];
+        for (int row = 0; row < 8; row++)
+            for (int bit = 0; bit < 8; ) {
+                if (!(glyph[row] >> bit & 1)) { bit++; continue; }
+                int run = 0;
+                while (bit + run < 8 && (glyph[row] >> (bit + run) & 1))
+                    run++;
+                fb_fill(fb, x + bit * scale, y + row * scale, run * scale, scale, fg);
+                bit += run;
+            }
+    }
+}

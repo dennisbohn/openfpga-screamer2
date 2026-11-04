@@ -55,6 +55,10 @@ struct s2car_state {
     int stick;                          /* 1: input.steer is an analog axis (the game's control type 0: its curve, and a
                                            car that steers 1.3 times as far); 0, the default: the d-pad's keys, the whole
                                            lock to the side held (type 1). Either may change from step to step. */
+    int ai;                             /* 1: a computer's car (the game's car without a controls record, +0xb4 = 0): its own
+                                           grip, wall rule, set-up and pace handicap; set it with s2car_init_grid() */
+    int hold;                           /* 1: the car waits on the grid, the gearbox in neutral (the game's race flag
+                                           0x11f0a8 & 0x20 not yet set); the caller clears it when the race is let go */
     /* ---- private ---- */
     uint32_t rec[0xcc0 / 4];            /* the game's car record, word for word where the port keeps its layout */
     float camst[5];                     /* the chase camera's eased distance, pitch, yaw, roll and height */
@@ -66,6 +70,32 @@ struct s2car_state {
    the race clock running (the 3 s of the grid hold are the caller's business). img may be NULL.
    1 if it worked, 0 if the track has no start or the params are missing. */
 int s2car_init(struct s2car_state *s, int team, int car, int track, const struct track_image *img);
+
+/* The same on a place of the grid (the game's 0x2f519): grid place 0 is the front row; place g is 1000 units to one
+   side of the first node of the line and 2000 x g behind it, the sides in turn. A race of n cars gives car number i
+   the place n - 1 - i (the player, car 0, the last). ai = 1 makes it a computer's car (s2car_state.ai). The car is
+   held on the grid (s2car_state.hold = 1) until the caller clears it. */
+int s2car_init_grid(struct s2car_state *s, int team, int car, int track, int grid, int ai);
+
+/* The car put on the line itself at (x, z), heading along the road there, standing, held (hold = 1): a car that left the
+   road is put back (the caller keeps what it knows of the car, the record is made new). 1 if it worked. */
+int s2car_init_at(struct s2car_state *s, int team, int car, int track, float x, float z, int ai);
+
+/* One step of a car that a driver drives (the game's driver 0x17726 for the computer's cars, and for the player's
+   after the finish): the physics up to the controls as s2car_step(), then driver(s, ctx) sets the controls in the
+   record (throttle word 0x1ec, brake 0x1e4 / 0x1e8, the front wheels' angle 0x660), then the steering as the game
+   works it out from them. The gearbox is the car's own (automatic). */
+void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx);
+
+/* The grip of the ground under the four wheels for these tyres, as the driver counts it (1 - ... in 0x17726): the mean of
+   the road kinds' tyre grip */
+float s2car_ground_grip(const struct s2car_state *s);
+
+/* The DATA/MAPn.DAT container of the last s2car_init (the first node of the car's line is read from it; race.c reads
+   the whole line from it): NULL if none */
+const uint8_t *s2car_map_dat(uint32_t *size);
+/* and DATA/GAME.DAT (CARS.DTR, MISC.DTR) */
+const uint8_t *s2car_game_dat(uint32_t *size);
 
 /* The game's containers the car's numbers come from: DATA/GAME.DAT (CARS.DTR) and DATA/MAPn.DAT of the track
    (MAPnDAT.DTR, MAPnOPP.SPL). On the Pocket s2car_init() reads them from the ZIP itself (files_zip(), a few
