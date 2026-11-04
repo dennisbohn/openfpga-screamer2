@@ -3,8 +3,8 @@
 Usage: python -I tools/s2/dosbox_arcade.py [extra tracks 0..4] [--check]      (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2"; --check: the
 screenshots of the last run again, without DOSBox)
 
-Starts STARTL.EXE in the game folder's own DOSBox on a private copy of the game folder (build/dosgame: the data folders are junctions, removed again
-when the script ends; CONFIG is a copy whose CHOICE.DAT has the number of extra tracks open: the owner's own is never touched), types its way with scan codes through TEAM SELECTION, the
+Starts STARTL.EXE in the game folder's own DOSBox on a private copy of the game folder (build/dosgame: the data folders are copied, about 0.2 GB, never linked;
+CONFIG is a copy whose CHOICE.DAT has the number of extra tracks open: the owner's own is never touched), types its way with scan codes through TEAM SELECTION, the
 name and the OPTIONS ROOM to ARCADE, and takes Ctrl+F5 screenshots (320 x 200 palette indices, the raw frame) on the title, the TRACK page, the CAR page and
 the TRANSMISSION page. Each is then compared with the frames of tools/ui_arcade_ref.py's model (the page drawn by an independent reading of the
 program): the TRACK page whole, the others in the parts the model draws (the original also has the 3D cars: the title's band with the prompt, the CAR
@@ -119,7 +119,7 @@ def make_private(extra):
             shutil.copytree(s, d)
             choice_with_extra_tracks(os.path.join(s, "CHOICE.DAT"), os.path.join(d, "CHOICE.DAT"), extra)
         elif os.path.isdir(s):
-            subprocess.run(["cmd", "/c", "mklink", "/J", d, s], check=True, capture_output=True)
+            shutil.copytree(s, d)                   # (a copy, never a junction: a recursive delete of build/ must not be able to reach the game's own folders)
         else:
             shutil.copy2(s, d)
 
