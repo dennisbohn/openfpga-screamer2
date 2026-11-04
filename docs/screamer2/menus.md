@@ -1,7 +1,7 @@
 # Screamer 2's menus: the original's screens, what they are made of, what the core can do
 
-Study and plan (2026-11-04); built so far: the start menu (`firmware/s2menu.c`, docs/development.md "Start menu") and row 1 of section 7, the 2D
-toolkit with the LOADING screen and the pause menu (section 6). Sources:
+Study and plan (2026-11-04); built so far: the start menu (`firmware/s2menu.c`, docs/development.md "Start menu"), row 1 of section 7, the 2D
+toolkit with the LOADING screen and the pause menu, and row 4, the arcade pages (section 6). Sources:
 OpenScreamer's `docs/NOTES2.md` (S2-5zg, S2-5zk to S2-5zq, S2-5r, S2-5s: the menu read from the decompiled program and
 compared with DOSBox), `docs/screamer2/comparison.md` (the menu rows), the game's files (sizes below measured with `tools/dat_sizes.py -v`,
 formats checked on the real files), the program `STARTL.EXE` (`tools/dis.sh -f`, `GAME_DIR` = the Screamer 2 folder), and Screamer 1's
@@ -79,12 +79,12 @@ a scene built like a track (the track's engine). Sizes are stored in the ZIP / u
 | TEAM SELECTION | `LOGO1.DAT` (166 KB / 595 KB): `A1LOG-00 .. A4LOG-00.3DX` (4 badges, 6 to 15 KB), `LOGO.MLB` 560 KB, `LOGO.COL`; `logoL.BKK` (the S2 watermark) | 3D-o | four meshes turning (left/right turns the chosen one to the front) |
 | ENTER YOUR NAME | `ALETTER.3DX` (2.6 KB, one letter tyre; the page loads 64 objects of it, a frame of `LOGO.MLB` each), `MENUL.FNT` | 3D-o | S1's `letters_step` / `letter_blocks` do the same with cubes; a plain letter row is the cheap stand-in |
 | OPTIONS ROOM | `MENU<t>1.DAT` (806 to 925 KB / 2.75 to 3.3 MB): `MAP1.MLB` 2.4 to 3 MB, `MAP1.UNR` 0.3 MB, `MAP1.MMP` 10 KB (at most 150 piece records), `MAP1.BCK` 60 KB (backdrop), `MAP1.COL`, `ASHADOW.3DX`; `P_t.MCM` (252 B, five camera stations, also in `DATA/GEN`) | 3D-r | the entries are a track's (`MAPn.*`), the game loads it "as a track"; materials are routines 16 and 208 (shadows, the see-through table the race already has); one room per team, 4 |
-| ARCADE page | `ARCADE_L.BKK` (S2 ARCADE title over a blue grid, 6 KB), `ANIMS/SCENEnn1.DAT` (4.2 MB / 8.1 MB: four scenes `MAP1..4.*` of 1.6 MB materials each, `SPLINES.PTH`), `ANIMS/SCCAR<t>1.DAT` (209 KB / 730 KB: the team's five cars), `DATA/GEN` `SCENE0..3.PTH` (the four cars' paths), `ENVM<t>1.DAT` (4 KB) | 2D + 3D-r | a scene with four cars driving at the camera; one scene at a time is about 2 MB. The cheap stand-in: the picture alone |
-| TRACK page (arcade) | `TKG_1..6L.BKK` (the track pictures, 34 to 40 KB each), `BKG_1L.BKK` (bg), `MENUL.SPR` sprites around 0x27 to 0x2e (the track names, NOTES2: sprite 0x27 + track; 125 to 185 x 27 to 110), arrows | 2D | the chosen picture is lit and framed. Track 7 (THE TUNNEL) is the last to open in the original (after league 4 with all four teams); it has a LOAD and a BKG picture but no `TKG_7`, so the page needs a stand-in for it |
-| CAR page (arcade) | `CARS<t>01.DAT` (the team's cars `AUTO1..5` .MLB + .3DX), `ENVM<t>1.DAT` (windows), `PLATES1.DAT` (138 KB / 452 KB: `A1..A7PLATE.3DX` 5 KB each, `PLATES.MLB` 416 KB), `BKG_2L.BKK` (blue grid), `CARS.DTR` (max speed, grip) | 3D-o | the five cars round a carousel (S1's `car_blocks`, 4000 apart, camera glides), the plate with the name (the 8 names of `STRINGS.TXT`: RADIANCE, HORIZON, NEBULA, SPARK, BLACK CLAW, AFRODYTE, HORNET, THUNDER; which plate and name belongs to which of the 20 cars is not read), MAX SPEED / bars as `MENUL.SPR` bars |
-| TRANSMISSION page | `BKG_6L.BKK`, text AUTOMATIC / MANUAL, `MENUL.FNT` | 2D | probably page `0x41fcf` (NOTES2 names it with `bkg_6`; the program loads `bkg_6` at 0x421aa and 0x3bfb9) |
+| ARCADE page (0x3b6e8) | `ARCADE_L.BKK` (S2 ARCADE title over a blue grid, 6 KB), the prompt `ACCELERATE TO CONTINUE` (`STRINGS.TXT` line 15) blinking at y 184, `ANIMS/SCENEnn1.DAT` (4.2 MB / 8.1 MB: four scenes `MAP1..4.*` of 1.6 MB materials each, `SPLINES.PTH`), `ANIMS/SCCAR<t>1.DAT` (209 KB / 730 KB: the team's five cars), `DATA/GEN` `SCENE0..3.PTH` (the four cars' paths), `ENVM<t>1.DAT` (4 KB) | 2D + 3D-r | built (the picture and the prompt, `firmware/s2arcade.c`); a scene with four cars driving at the camera, not built (row 11); one scene at a time is about 2 MB |
+| TRACK page (0x41a69) | `BKG_1L.BKK` and `MENUL.SPR` only: sprite 105 `TRACK selection`, 0 the lit frame (104 x 126), 1 / 2 the arrows, 5 .. 11 the seven tracks' pictures with their name banners lit and 12 .. 18 dim (92 x 116; in the original's order England, Egypt, California, Finland, Switzerland, Columbia, The Tunnel). **Not `TKG_nL.BKK`**: those (`tkg_%c%c`, 0x3ee6b) are the background of the 3D map pages of time attack and league (page 0x3ee28), see below | 2D | built, section 6. The seventh place (THE TUNNEL) opens when all four extra tracks are won, as the save has it (`s2save_track_open`) |
+| CAR page (0x40c31, state 0) | `CARS<t>01.DAT` (the team's cars `AUTO1..5` .MLB + .3DX), `ENVM<t>1.DAT` (windows), `PLATES1.DAT` (138 KB / 452 KB: `A1..A7PLATE.3DX` 5 KB each, `PLATES.MLB` 416 KB), `BKG_2L.BKK` (blue grid), `CARS.DTR` (max speed, grip), `MENUL.SPR`: 34 `CAR selection`, 35 .. 38 the team's badge, the car's name plate 26 .. 29 (RADIANCE, HORIZON, NEBULA, SPARK: cars 1 to 4 of every team) or 30 .. 33 (BLACK CLAW, AFRODYTE, HORNET, THUNDER: the team's fifth), 106 .. 110 MAXSPEED, the drive and MPH | 3D-o | the five cars round a carousel (S1's `car_blocks`, 4000 apart, camera glides), the plate with the name, MAX SPEED as `MENUL.SPR` pieces and text; built as a 2D stand-in (team name, car number, the plate), the 3D page is row 5 |
+| TRANSMISSION page (0x40c31, state 1) | the same page as the CAR page (one routine with a state: ENTER on the car goes to state 1, ESC back), `BKG_2L.BKK` and `MENUL.SPR` 39 `select TRANSMISSION`, 40 / 41 AUTOMATIC dim / lit, 42 / 43 MANUAL dim / lit (141 x 27), the badge | 2D | built, section 6. (`bkg_6` at 0x421aa is the CD-check message page, at 0x3bf7a a page of the main menu's side: not this one) |
 | LOADING | `LOAD_1..7L.BKK` (28 to 41 KB), the track's banner (`MENUL.SPR` 0x13 + n - 1, 144 x 50), `LOADING...`, BEST TIME, BEST LAP (`STRINGS.TXT` lines 30 to 32), the track's record `--:--:-- MIL` | 2D | built, `firmware/s2load.c` (section 6); read from the page's code `STARTL.EXE` 0x34ede: banner centred at y 4, BEST TIME label (font 2) y 72 and its record (font 1) y 84, BEST LAP y 112 and 124, LOADING... (font 1) y 170, all centred, colour 1, spacing 2; the two records only for the kinds of game that have them (arcade, time attack, league); shown while the track builds (3 to 5 s) |
-| TRACK SELECTION (time attack, league) | `MAPS1.DAT` (523 KB / 865 KB): `AMAP1..7-VS.3DX` (29 to 109 KB; the largest has four blocks, 377 vertices at most, 1,886 faces, GU_MAX_VERT is 512), `MAPS.MLB` 406 KB; `LEAG_0L.BKK`, TERRAIN / DIFFICULTY lines (`STRINGS.TXT`) | 3D-o | a turning 3D map of the track, see-through look from the material table; S1's `map_blocks` did this with six maps |
+| TRACK SELECTION (time attack, league) | `MAPS1.DAT` (523 KB / 865 KB): `AMAP1..7-VS.3DX` (29 to 109 KB; the largest has four blocks, 377 vertices at most, 1,886 faces, GU_MAX_VERT is 512), `MAPS.MLB` 406 KB; `TKG_1..6L.BKK` (the page 0x3ee28's background: a landscape with the names' plates), `LEAG_0L.BKK`, TERRAIN / DIFFICULTY lines (`STRINGS.TXT`) | 3D-o | a turning 3D map of the track, see-through look from the material table; S1's `map_blocks` did this with six maps |
 | LEAGUE SELECTION, WELCOME, LEAGUE REPORT | `LEAG_1..4L.BKK` (cups, 33 to 36 KB), `BKG_3L` (two black boxes in orange frames, loaded at 0x433b8 inside the league pages), `STRINGS.TXT` lines, big font, the four badges (3D in the original) | 2D (+3D-o) | the report lists place, badge, name (MIL / CPU), points; the badges can be the race screen's small team marks (what the PC port did) |
 | CUSTOMIZE | the car (3D-o), `STRINGS.TXT` (HANDLING, BRAKES, TIRE TYPE, TIRE PRESSURE, FRONT / REAR SUSPENSIONS, SAVE, EXIT), the six numbers a set-up holds | 3D-o + 2D | the numbers go into the car's start record (`0x14e20`); whether `s2car.c`'s record takes them was not checked |
 | GAME SETTINGS | `BKG_*`, `STRINGS.TXT` (9 rows, 22 characters, values `:AUTO :MANUAL :LOW :MEDIUM :HIGH :1 :3 :5 :10 :ROOKIE :NORMAL :PRO :OFF :ON ...`) | 2D | the start menu's rows are a subset of this page |
@@ -104,8 +104,8 @@ Not feasible here: MULTIPLAYER (network, serial link, combat mode, split screen)
   needs `x4` (or `x255/63`) into `VID_PAL`; the pixels are the framebuffer, so a blitter copy (BLIT_COPY | BLIT_OPAQUE) draws it. The `H` set is the
   same at 640 x 400 (256,792 bytes): not used.
   Where the program loads them (flat addresses in `STARTL.EXE`, checked): `load_%c%c` 0x34f19 (the loading screen), `leag_%c%c` 0x3959c and
-  0x43fe0, `bkg_4` 0x39989, `bkg_5` 0x3a915, `arcade_%c` 0x3b712, `bkg_6` 0x3bfb9 and 0x421aa, `tkg_%c%c` 0x3ee6b, `leag_0` 0x3f7d6,
-  `logo%c` 0x3ffea (TEAM SELECTION), `bkg_2` 0x40c69 (the car page), `bkg_1` 0x41bcd (the track page), `bkg_7` 0x422bb, `hiscore%c` 0x4275f, `bkg_3` 0x433b8.
+  0x43fe0, `bkg_4` 0x39989, `bkg_5` 0x3a915, `arcade_%c` 0x3b712, `bkg_6` 0x3bfb9 (a page of the main menu's side, 0x3bf7a) and 0x421aa (the CD message), `tkg_%c%c` 0x3ee6b (the 3D map page 0x3ee28), `leag_0` 0x3f7d6,
+  `logo%c` 0x3ffea (TEAM SELECTION), `bkg_2` 0x40c69 (the car and the transmission page, one routine), `bkg_1` 0x41bcd (the track page), `bkg_7` 0x422bb, `hiscore%c` 0x4275f, `bkg_3` 0x433b8.
   Looked at (contact sheet): `LOGOL` and `BKG_1/4/6/7L` are the S2 watermark in other tints, `BKG_2/5L` blue grids, `ARCADE_L` the title,
   `TKG_nL` a track's picture with a column of name plates, `LOAD_nL` a landscape per track, `LEAG_nL` cups and trophies, `HISCOREL` the table frame.
 - **`.SPR`, `.FNT`**: `MENUL.SPR` is Screamer 1's format (`firmware/tb_hud.c` header): 111 sprites (count, size, count x x y w h offset, the pixels; 446 KB
@@ -151,9 +151,32 @@ Not feasible here: MULTIPLAYER (network, serial link, combat mode, split screen)
 
 ## 6. What exists
 
-**The start menu.** `s2menu.c` is the arcade flow in one list: track, team, car, laps, level, gearbox, race / watch, with the original's texts and the choices kept.
-What it leaves out of the original's arcade: the pictures and 3D of the TRACK and CAR pages, the end screen, the game's own names for the 20 cars,
-the options room, every other kind of game. Its choices are kept in the save (section 7.1): the laps, level and gearbox rows are the GAME SETTINGS rows of the same name.
+**The start menu.** `s2menu.c` is a list in the console's style that stands in for the original's options room: ARCADE (the arcade pages below), NUMBER OF LAPS and
+ARCADE ENEMIES SKILL (GAME SETTINGS rows until that page exists), START RACE (the race at once with the choices as they are; left / right and L / R change the track,
+T1 .. T7 in the files' numbering, for testing) and WATCH (the ride). Its choices are kept in the save (section 7.1): the track, team and car of the arcade pages, the
+gearbox of the TRANSMISSION page and the laps and level rows are the GAME SETTINGS rows of the same name. What it leaves out of the original: the end screen, the
+team and name pages, the 3D of the CAR page, the options room, every other kind of game.
+
+**The arcade pages (row 4, built 2026-11-04).** `firmware/s2arcade.c`, test `tools/menu_screens.sh`. ARCADE on the start menu runs the original's chain, ENTER (B or
+Start) forward, ESC (A or Select) back, each page as `STARTL.EXE` has it (the routine's addresses and every number are in the file's header comment; read with
+`tools/dis.sh -f`): **title** (0x3b6e8: `ARCADE_L.BKK`, the prompt ACCELERATE TO CONTINUE blinking, one second and a quarter), **TRACK** (0x41a69: `BKG_1L.BKK` and sprites,
+three of the open tracks' pictures with their name banners at a time, the chosen one lit and framed, the window scrolling and the frame gliding with the original's easing,
+arrows where there are more; LEFT / RIGHT move without wrapping, L / R three on or back round, which is ours, so that any track is two presses away), **CAR**
+(0x40c31, state 0: the picture of the blue grid, the title sprite, the team's badge and the car's name plate; the original's 3D carousel is row 5, so here the team's name,
+`n / 5` and a hint stand in, UP / DOWN choose the team, which the original does on an earlier page, LEFT / RIGHT the car) and **TRANSMISSION** (state 1 of the same routine: AUTOMATIC and
+MANUAL as two sprites, the chosen one blinking lit). ENTER fades the picture out over 25 frames (0.5 s) and the next page is cut in; ESC and the car page's ENTER are cuts.
+The sounds are each page's own, read from its code (`MENU.DTR` ids 0 to 14): title ENTER 1, TRACK moves 0 and ENTER 2, CAR moves 4, TRANSMISSION moves 0 and ENTER 3. ESC on the TRACK
+page goes to the options room, as the original's does (here the start menu), not back to the title; ESC on the CAR page goes to TRACK and on the TRANSMISSION page to CAR. After
+the TRANSMISSION page the race loads (the LOADING screen). **Checked against the running original** (STARTL.EXE in its DOSBox, `tools/s2/dosbox_arcade.py`, Ctrl+F5 raw frames, 47 screenshots with
+all seven tracks open, and a first run by hand on a fresh save with three): the title's prompt band (on and off), the TRACK page whole at every one of the seven places (the frame
+hidden, and shown at the first place and in the glides; the dim and lit pictures, the arrows, the scroll), the CAR page's title, badge and name plate, and the TRANSMISSION page's title, badge and buttons (both choices, lit and dim) are
+**pixel for pixel equal** to the model of `tools/ui_arcade_ref.py`, and so to the firmware (`tools/menu_screens.sh` compares 105 frames of the firmware's code with the model
+pixel for pixel); the 8 screenshots taken in the middle of a move are frames the original was half way through drawing (it draws on the screen it shows: the top rows are one tick of
+the easing, the lower the next, every row equals a row of the model's frames), and the glide's steps are the 0.75 of the distance a frame the code says (a frame at 88 and the
+top rows at 82 of a glide to 107: 0.75^6 and 0.75^5 of the 105 pixels). This also showed that the original centres a text by a width without the gap after the last character
+(0xc6c88), which `s2gfx_text_centred` now does too (the LOADING and pause texts moved one pixel right).
+The track page's three states of the original's other kinds of game (the 3D map of time attack
+and league) are row 5.
 
 **The 2D toolkit (row 1, built 2026-11-04).** Four small modules over the blitter, all in `firmware/`, tested on the PC (`tools/menu_screens.sh`):
 
@@ -172,8 +195,8 @@ glyphs one byte a pixel (121 KB); the tables of 937 images are 11 KB of `.bss`. 
 *Sounds.* The menu's click sounds are not in `GAME.DTR`'s 33: `MENU.DTR` is a second table of `DATA/SOUND.DAT` (the container the race's sound is read from, already
 in memory at `0x11C0_0000`), 15 samples `MENU1.RAW` .. `MENU15.RAW` with ids 0 to 14 (11,025 Hz, two at 22,050; the original loads them with its menu pages, 0xafc70).
 `s2snd_parse_menu()` reads the table with the race's rules, `s2sound_menu(id)` plays one on voice 10. Which sample a page plays is the page's own business; read from the
-code: the TRANSMISSION page 0 (MENU1) for a cursor move and 2 (MENU3) for ENTER, the GAME SETTINGS page 12 (MENU13) for a row move and 13 (MENU14) on the way out
-(`S2PAGE_SND_*`). The original's pause is silent (no `MENU.DTR` in a race); ours clicks (`PAUSE_CLICKS` in `s2pause.c`).
+code: the TRACK page 0 (MENU1) for a cursor move and 2 (MENU3) for ENTER (the first study put these on the TRANSMISSION page, which plays 0 and 3), the GAME SETTINGS page 12 (MENU13)
+for a row move and 13 (MENU14) on the way out (`S2PAGE_SND_*`; the arcade pages' ids are in `s2arcade.c`). The original's pause is silent (no `MENU.DTR` in a race); ours clicks (`PAUSE_CLICKS` in `s2pause.c`).
 
 **The LOADING screen.** `viewer_run()` puts it up before `load_track()` (the track image build, the cars, 3 to 5 s) and keeps it through the race's set-up (`race_init`, the music's first
 fill); `visit()` then fades it out in 0.4 s. The display is driven by the hardware from the front framebuffer and its palette, so nothing has to be done while the CPU is busy: the
@@ -186,7 +209,7 @@ loaded) and EXIT (the start menu), over the darkened race. Up / down choose, B o
 race loop stops; the first frame after it takes one 20 ms step), the effects ease out over a second and come back whole, the music plays on. Select + B back to the menu stays only
 where the toolkit is not up. Start no longer switches to the ride; the ride is the start menu's WATCH.
 
-What the start menu still leaves out of the original: see the list above; the race's end screen and the other pages follow in rows 3 to 6.
+What the start menu still leaves out of the original: see the list above; the race's end screen, GAME SETTINGS and the best times follow in row 3, the 3D pages in row 5.
 
 ## 7. Build order and rough costs (days of work, one developer; the PC-side tests of each step as for the start menu)
 
@@ -195,7 +218,7 @@ What the start menu still leaves out of the original: see the list above; the ra
 | 1 | **done 2026-11-04** (section 6). **2D toolkit**: `.BKK` loader (header, palette x4, copy), `MENUL.SPR` / `.FNT` loader into the blitter's image tables (Screamer 1's `menu_init` and `tb_hud.c` as templates), a page runner (keys with repeat, fade in/out, the menu click sounds from `SOUND.DAT`'s `MENU.DTR`); the **LOADING screen** (`LOAD_nL` + LOADING + BEST TIME / BEST LAP) and the **pause menu** (RESUME, RESTART, EXIT over the darkened race, replacing Select + B) | zip range reads of `GRAF1.DAT`; the existing blitter | 2 |
 | 2 | **The save** (done, 7.1): a Screamer 2 layout for `CHOICE.DAT` (settings, volumes, unlocks, set-ups, best times; the start menu's fields moved into it, the old layout is migrated once), `data.json` size 36,864 | `core/data.json` | 1 |
 | 3 | **End of race**: the 4 s CONGRATULATIONS / place / time screen, then RACE AGAIN / EXIT (REPLAY later) and the track's best times (a table of 15 in the new save); GAME SETTINGS and HI SCORES pages on the same toolkit | 2 | 2 |
-| 4 | **Arcade pages**: TRACK page (`TKG`, banners, lit frame), TRANSMISSION page, the arcade title, the page chain with ESC going back; the start menu becomes the stand-in for the pages that do not exist yet | 1 | 1.5 |
+| 4 | **done 2026-11-04** (section 6). **Arcade pages**: the title, the TRACK page (sprites: pictures with banners, lit frame, arrows), the TRANSMISSION page, a 2D stand-in for the CAR page, the page chain with ESC going back; the start menu is the stand-in for the options room | 1 | 1.5 |
 | 5 | **3D-o pages**: the CAR page (carousel of the team's cars with the plate: the 20 cars' names to read), TEAM SELECTION (four badges), ENTER YOUR NAME (letter tyres), the track maps for time attack and league | geometry unit pieces with a page MLB; `s2teams.c`; `LOGO1`, `PLATES1`, `MAPS1` read by range | 4 |
 | 6 | **Championship**: leagues, points (10 / 6 / 3 / 0), unlocks, LEAGUE SELECTION / WELCOME / REPORT, the level per league, weather per race (our core has day only: skip), LEAVING LEAGUE | 2, 4, 5 | 3 |
 | 7 | **Time attack**: the ghost (recorded controls, second car re-simulated), FREE RUN with the five splits, best times | 2, 3; `race.c` second player-car | 3 to 4 |
@@ -288,12 +311,18 @@ into 19,348 bytes), and the migration with the owner's real file.
 
 ## 8. Open
 
-- Which BKK page backs which screen (the table in section 4 gives the program's addresses; `BKG_3L`, `BKG_5L`, `BKG_7L` are not placed).
-- The 20 cars' names: `STRINGS.TXT` has eight (RADIANCE .. THUNDER) and the files have 4 teams x 5 cars; the mapping and the plates' use (7 plates) are not read.
+- Which BKK page backs which screen (the table in section 4 gives the program's addresses; `BKG_3L`, `BKG_5L`, `BKG_7L` are not placed; `BKG_1L` the TRACK page, `BKG_2L` the CAR and
+  TRANSMISSION pages, `ARCADE_L` the title, `TKG_nL` the 3D map pages of time attack and league).
+- The 20 cars' names (read from the CAR page's name plate, 0x41653 .. 0x416ab): the four cars of every team are RADIANCE, HORIZON, NEBULA, SPARK, and the fifth is BLACK CLAW (CONDOR), AFRODYTE
+  (ANGELS), HORNET (WASP) or THUNDER (ZEUS), the name sprites 26 .. 33 of `MENUL.SPR`; the 3D plates (`PLATES1.DAT`) and the 3D page are row 5.
+- The arcade pages were compared with the running original (section 6); what was not: the page's fade out (0.5 s) and the sounds (read from the code), the 3D parts, and the TRACK page on
+  a save with fewer extra tracks than 0 or 4 (the code's rule for the window is the same for any number). The original's keys have no repeat
+  (a held button gives one press, 0x389ae); the toolkit's runner repeats the d-pad after 0.5 s, which the start menu always did. The LOADING and pause pages were not compared with the original running
+  (only their texts' centring was corrected by the ARCADE page's comparison).
 - Which of the four scenes of `SCENEnn1.DAT` a team's arcade page uses (`STARTL.EXE` loads `anims\scene%02d%c.dat` and `sccar%c%c.dat` at 0x1169a, 0x117b4, 0x11544;
   the selector is a variable of the page).
 - The room's face count and the frame cost of a room, a scene and the heaviest map (measure when step 5 or 8 starts; the budget is the race's 20 ms).
-- The menu sounds: the 15 samples are read (section 6); which one each page plays is known for two pages only (the code of the others calls
+- The menu sounds: the 15 samples are read (section 6); which one each page plays is known for the arcade title, TRACK, CAR, TRANSMISSION and GAME SETTINGS pages (the code of the others calls
   the sound manager with ids 0 to 14 at 60 places, `STARTL.EXE` 0x307e3 .. 0x436fd). The menu's music (CD track 2 while in the menu) is not played.
 - The loading screen's and the pause screen's pixels were not compared with the original running (their positions, fonts and spacing are read from its code); the
   race screen's own text is still the console's, not `GAMEL.FNT`'s.

@@ -26,10 +26,10 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   6,000; far plane from TRACK_DATA). A timing overlay (B) and `debug.txt` give the frame times to hold against the
   forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
   gaps: the cars' windows show the original's environment picture but it does not slide, no shadows, smoke, props, fade, night, mirror, the original's menus (a plain start menu below, docs/screamer2/menus.md has the plan for the rest); the ride is silent (the race has sound, next bullet).
-- **Start menu:** after the files screen a list in the console's text style (`firmware/s2menu.c`): track 1 to 7 (the names from the
-  game's `STRINGS.TXT`), your team (CONDOR, ANGELS, WASP, ZEUS) and car 1 to 5, laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL,
-  PRO), the gearbox, START RACE and WATCH (the ride). Everything is open from the start. d-pad up/down row, left/right value, L / R three
-  tracks on or back, A or Start go; Start in the race opens the pause menu (RESUME, RESTART, EXIT), and after a finished race A races again, B goes to the menu. The choices
+- **Start menu:** after the files screen a list in the console's text style (`firmware/s2menu.c`): ARCADE (the original's arcade pages: title, TRACK with the
+  tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL, PRO), START RACE
+  (the race at once; left / right the track 1 to 7) and WATCH (the ride). Everything is open from the start. d-pad up/down row, left/right value, L / R three
+  tracks on or back; Start in the race opens the pause menu (RESUME, RESTART, EXIT), and after a finished race A races again, B goes to the menu. The choices
   are kept across power-ups. Docs: docs/development.md, "Start menu".
 - **Driving mode (a race):** the race of the start menu (or Start in the ride) puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,

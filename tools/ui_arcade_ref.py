@@ -52,6 +52,7 @@ class Ref:
 
     def centred(self, c, font, colour, space, y, txt):
         w = c.text_width(self.fnt[font], space, txt)
+        w -= space if w else 0                      # the original's measure (0xc6c88) has no gap after the last character
         c.text(self.fnt[font], colour, space, (320 - w) >> 1, y, txt)
 
     # --- the pages: an object with key(tick, buttons that went down) -> result and draw(tick, canvas)
@@ -80,6 +81,7 @@ class Ref:
                 state["track"] = ORDER[m.pos]
                 m.scroll = m.frame = 0.0
                 m.t0 = 0
+                m.force = None                  # (frame shown, arrows shown) instead of the blinking: for comparing with a capture of unknown phase
 
             def move(m, tick, pos):
                 m.pos, m.t0 = pos, tick
@@ -100,9 +102,10 @@ class Ref:
                     m.move(tick, (m.pos + (3 if ">" in keys else -3)) % m.n)
                 return 0
 
-            @staticmethod
-            def ease(v, to, or_equal):
-                v = f32(f32(f32(v - to) * 0.75) + to)
+            rate = 1                            # frames' lengths in 20 ms steps: the original eases by 0.75 ^ (50 x the frame's time), 0.75 at 50 pictures a second
+
+            def ease(m, v, to, or_equal):
+                v = f32(f32(f32(v - to) * f32(0.75 ** m.rate)) + to)
                 d = abs(to - v)
                 return to if (d <= 0.5 if or_equal else d < 0.5) else v
 
@@ -119,14 +122,14 @@ class Ref:
                     if x >= 320 or x + 92 <= 0:
                         continue
                     c.sprite(s, (5 if i == pos else 12) + ORDER[i] - 1, x, 64)
-                if (clock & 0x7F) < 0x40:
+                if (clock & 0x7F) < 0x40 if m.force is None else m.force[1]:
                     if first > 0:
                         c.sprite(s, 1, 10, 170)
                     if first + 2 < last:
                         c.sprite(s, 2, 298, 170)
                 to = float(105 * slot + 2)
                 m.frame = to if m.frame == 0.0 else m.ease(m.frame, to, False)
-                if (clock & 0x3F) < 0x20:
+                if (clock & 0x3F) < 0x20 if m.force is None else m.force[0]:
                     c.sprite(s, 0, int(m.frame), 60)
         return M()
 

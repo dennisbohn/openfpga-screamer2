@@ -6,6 +6,7 @@
  * 25 frames (0.04 a frame: 2.0 x the frame time 0.02; the keys are ignored meanwhile) and ESC (0x20) leaves at once. The blinking is
  * the timer's hundredths (0x4cfd6, 100 a second, two a frame at 50 pictures a second), here tick * 2 from the start of the page (the
  * original's clock runs on from the program's start; it is set back to 0 where a choice changes, as here).
+ * Checked against the running original, pixel for pixel: tools/s2/dosbox_arcade.py (the sounds, the fade and the 3D parts are not).
  *
  *   ARCADE title (0x3b6e8): ARCADE_L.BKK, "ACCELERATE TO CONTINUE" (STRINGS line 15) centred at y 184 in font 2, colour 1, spacing 2,
  *                           shown while (clock & 0x7f) < 0x40. ENTER: sound 1, fade, on to the TRACK page. ESC: the options room.

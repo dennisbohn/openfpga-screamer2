@@ -294,7 +294,9 @@ int s2gfx_text(struct blit_list *l, int font_no, int colour, int space, int x, i
 
 void s2gfx_text_centred(struct blit_list *l, int font_no, int colour, int space, int y, const char *s)
 {
-    s2gfx_text(l, font_no, colour, space, (320 - s2gfx_text(0, font_no, colour, space, 0, 0, s)) >> 1, y, s);
+    int w = s2gfx_text(0, font_no, colour, space, 0, 0, s);
+    if (w > 0) w -= space;                                  /* (the original's measure, 0xc6c88, leaves the gap after the last character out) */
+    s2gfx_text(l, font_no, colour, space, (320 - w) >> 1, y, s);
 }
 
 /* ------------------------------------------------------------------------------------------------ the darkening */

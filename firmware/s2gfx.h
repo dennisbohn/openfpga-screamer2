@@ -63,7 +63,8 @@ void s2gfx_sprite_centred(struct blit_list *l, int n, int y);
    cell's left; a control byte 1 sets fixed pitch (every character the font's widest + space, centred in its cell), 2 proportional.
    Draws at (x, y) and returns the width in pixels; with l = 0 it only measures. */
 int s2gfx_text(struct blit_list *l, int font, int colour, int space, int x, int y, const char *s);
-/* The same centred on the screen (0x3327c: x = (320 - width) / 2) */
+/* The same centred on the screen (0x3327c: x = (320 - width) / 2, the width as the original measures it, 0xc6c88: the characters and the gaps
+   between them, none after the last; checked against the running original on the ARCADE page) */
 void s2gfx_text_centred(struct blit_list *l, int font, int colour, int space, int y, const char *s);
 
 /* The darkening of the original (it builds a table for the palette every picture is darkened with): for each colour the palette entry

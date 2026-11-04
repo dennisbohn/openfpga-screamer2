@@ -181,6 +181,7 @@ def main():
         elif kind == "ctext":
             f, col, sp, y, txt = s.split(" ", 5)[1:]
             tw = c.text_width(fnt[int(f)], int(sp), txt)
+            tw -= int(sp) if tw else 0                  # the original's measure (0xc6c88) has no gap after the last character
             c.text(fnt[int(f)], int(col), int(sp), (320 - tw) >> 1, int(y), txt)
         elif kind == "spr":
             n, x, y = [int(v) for v in s.split()[1:]]
@@ -220,4 +221,5 @@ def main():
     print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames, {n_runs} arcade page runs with {n_frames} frames -> {out}")
 
 
-main()
+if __name__ == "__main__":
+    main()
