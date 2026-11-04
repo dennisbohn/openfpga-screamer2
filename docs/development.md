@@ -75,7 +75,7 @@ the road at 150 km/h in a loop, with the player's car and three more ahead (`fir
 hardware path (geometry unit, setup unit, rasterizer, blitter) with the original's level of detail at
 DETAIL HIGH (`track_lod_level()`: placed meshes switch at 6,000 and 9,000 units, cars at 2,000 and 6,000;
 far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). The ride is silent (the race has sound and music,
-"Sound" below). Start switches between this ride and the driving mode ("Driving mode" below).
+"Sound" below). Start starts the driving mode ("Driving mode" below); the way back to the ride is the start menu's WATCH.
 
 ### Start menu
 
