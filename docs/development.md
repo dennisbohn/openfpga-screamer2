@@ -96,7 +96,7 @@ docs/screamer2/menus.md). Everything is open from the start: all seven tracks, a
 | d-pad up / down | row (wraps) |
 | d-pad left / right | the row's value (wraps); on START RACE the track; a docked controller's stick works as the d-pad |
 | L / R | the track three back / on, from any row: every track is at most two moves from every other, so with B or Start at most three presses (track 4 from track 1: R, then B or Start on START RACE) |
-| A, B or Start | the row's action: the arcade pages on ARCADE, WATCH on its row, the race on the others; X: WATCH |
+| A, B or Start | the row's action: the arcade pages on ARCADE, WATCH on its row, the GAME SETTINGS and HI SCORES pages on theirs, the race on the others; X: WATCH |
 
 **The arcade pages** (`firmware/s2arcade.c`, details in docs/screamer2/menus.md section 6): title (ARCADE_L, ACCELERATE TO CONTINUE blinking) -> TRACK (the tracks' pictures with their banners,
 the lit frame) -> CAR (a 2D stand-in for the 3D page: team, car and its name plate) -> TRANSMISSION (AUTOMATIC / MANUAL) -> the race. B or Start go on (the picture fades out over half a
@@ -187,6 +187,12 @@ the start menu's last two rows open them. GAME SETTINGS: up / down choose a row,
 ARCADE ENEMIES SKILL, DAMAGES (off by default as in the game: no damage marks or damage from a knock until it is on) and MUSIC act in the race, DETAIL LEVEL, MULTIPLAYER ENEMIES and TIME ATTACK GHOST CAR only keep their value.
 HI SCORES TABLE: up / down choose a row of the list of 15, left / right the box above (TOTAL TIME / LAP TIME, the kind of game, the laps, the track, VIEW REPLAY), B or Start step the value in that box, A or
 Select leave; VIEW REPLAY stays dark (no replays yet). Both are tested on the PC against references made from the game's files (`tools/menu_screens.sh`).
+**Cost** (simulation of 2026-11-05; the simulation has no menus, so a build with `tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_END=1 TAG=simend` draws the end screen over frames 2 to 9 of the simulated race and the log says
+`end screen frame N: <us>`; `tools/s2/sim_race.sh <dir> <track 4 image> 4 14 <name>`): the first frame 70 ms (the darkening table of the race's palette, once at the finish: about 4 frames of the race
+stand still while the car has stopped), then 3.3 ms a frame (23,000 pixels darkened, the banner, the choices and a list of six rows with their cars through the blitter), so a frame of the finished race is about 14 ms, under the 20 ms of 50 a second.
+Before the finish nothing changed in a frame, but the code of the viewer, the car and the toolkit moved, and the I-cache is 8 KB and direct mapped: the race on track 4 (220 frames from the grid, the commands of "Simulation" above,
+`tools/s2/sim_race.sh`) took 10.9 ms mean and 11.8 ms worst (no frame late, 50.0 a second) against 10.7 / 11.5 of the build before (the same simulation, rebuilt from `6c2945e`); the two edits alone gave 10.8 / 11.6 (the car's
+DAMAGES gate with the new toolkit objects) and 10.8 / 11.9 (the viewer's end screen call), a padding of 40, 200 or 600 bytes behind `main.c`'s code 10.8 / 11.8, 10.9 / 11.9 and 10.9 / 11.8: layout, not work.
 
 A car (any of the four) with no drivable ground under it for 3 s (`off_track` of the state), or more than 3,000 units below the
 lowest road point of the track, or a computer's car that has not moved for 6 s, is put back onto the line by itself (the nearest point

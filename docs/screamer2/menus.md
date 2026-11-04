@@ -375,4 +375,5 @@ into 19,348 bytes), and the migration with the owner's real file.
 - The loading screen's, the pause screen's, the end screen's and the two pages' pixels were not compared with the original running (their positions, fonts, spacing and colours are read from its code, and the
   tests compare the firmware with an independent drawing of the same reading: `tools/menu_screens.sh`); the race screen's own text is still the console's, not `GAMEL.FNT`'s.
 - The pages' fade in (a cut, as read: nothing in the pages' code fades them in; VIEW HIGH SCORES fades out in 0.5 s, ESC is a cut), the end screen's sound fade of the effects (0xaee60 in its code) and the CD / menu music are not done.
-- The end screen's cost on the Pocket is not measured (the simulation has no menus: the darkening of 23,000 pixels, one list and the 74 ms of the darkening table at the finish).
+- The end screen's cost on the Pocket is not measured; in the simulation (docs/development.md "End of the race and the two pages") the first frame takes 70 ms (the darkening table) and then 3.3 ms a frame, and
+  the race on track 4 before the finish took 10.9 ms mean and 11.8 ms worst against 10.7 / 11.5 before row 3 (cache layout).
