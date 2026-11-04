@@ -1,0 +1,6 @@
+# f: track 4: full throttle, a flick left (0.24 s) at 2 s: the car leaves the ground at ~5.4 s at 129 and flies ~0.9 s
+@steps 450
+@tracks 4
+0 A
+100 AL
+112 A

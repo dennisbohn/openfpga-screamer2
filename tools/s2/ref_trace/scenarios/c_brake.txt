@@ -1,0 +1,5 @@
+# c: full throttle for 3 s, then hard braking held to the end (stop, and what the brake does at standstill)
+@steps 600
+@tracks 1 3 4 7
+0 A
+150 B

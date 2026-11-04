@@ -1,0 +1,169 @@
+diff --git a/port/src/main.c b/port/src/main.c
+index 811b1c0..acb0634 100644
+--- a/port/src/main.c
++++ b/port/src/main.c
+@@ -11825,7 +11825,8 @@ static int session(int argc, char **argv)
+     if (g_scene && os_game() == 2 && getenv("OS_S2PHYS")) {
+         /* a test of the game's own car routines: a car on the grid, the accelerator down
+            (OS_S2KEYS: letters A B L R), OS_S2PHYS frames of s2_step() (OS_S2STEP=<seconds> another); a line every 25 */
+-        static const int team[4] = { 0, 1, 2, 3 };
++        int team[4] = { 0, 1, 2, 3 };
++        if (getenv("OS_S2TEAM")) team[0] = atoi(getenv("OS_S2TEAM")) & 3;      /* reference traces: the player's team */
+         int model[4] = { 1, 2, 3, 0 };
+         if (getenv("OS_CAR")) { model[0] = (atoi(getenv("OS_CAR")) % 5 + 5) % 5; for (int t = 1; t < 4; t++) model[t] = (model[0] + t) % 4; }
+         const char *keys = getenv("OS_S2KEYS") ? getenv("OS_S2KEYS") : "A";
+@@ -11874,6 +11875,12 @@ static int session(int argc, char **argv)
+             return 0;
+         }
+         if (!getenv("OS_S2HOLD")) s2_go();
++        if (getenv("OS_S2REF")) {                    /* reference traces (s2_ref.h) */
++            if (getenv("OS_S2RAW")) s2_frame_times((float)atof(getenv("OS_S2RAW")));
++            if (getenv("OS_S2REFPUT")) { int x = 0, y = 0; float h = 0; sscanf(getenv("OS_S2REFPUT"), "%d,%d,%f", &x, &y, &h); s2_put(0, x, y, h); }
++            s2_ref_run(getenv("OS_S2REF"), getenv("OS_S2REFOUT") ? getenv("OS_S2REFOUT") : "ref.csv", frames, getenv("OS_S2STEP") ? (float)atof(getenv("OS_S2STEP")) : s2_step());
++            return 0;
++        }
+         if (getenv("OS_S2DUMP")) s2_dump(getenv("OS_S2DUMP"));                 /* (OS_S2HOLD: the game's own three seconds on the grid) */
+         if (getenv("OS_S2PEEK")) { unsigned from = 0; int n = 8; sscanf(getenv("OS_S2PEEK"), "%x,%d", &from, &n); s2_peek(0, from, n); }
+         /* a test: OS_S2SCRIPT=<file>, a line a frame "step raw accelerate brake left right" (as read
+diff --git a/port/src/s2_hooks.c b/port/src/s2_hooks.c
+index 55ab3ae..98d8e30 100644
+--- a/port/src/s2_hooks.c
++++ b/port/src/s2_hooks.c
+@@ -2218,3 +2218,5 @@ void s2_feel_read(s2_feel *f)
+ /* the engine's constant in its code (0xb04a8; 0.008 in the program): 0x1f1ef writes 0.002, or 0.03
+    in a tunnel, for the car the camera follows */
+ float s2_env_rate(void) { return F32(0xb04a8); }
++
++#include "s2_ref.h"                   /* (reference traces: a patch, not the port's) */
+diff --git a/port/src/s2_port.h b/port/src/s2_port.h
+index c6edf97..5f954e0 100644
+--- a/port/src/s2_port.h
++++ b/port/src/s2_port.h
+@@ -91,6 +91,7 @@ typedef struct {
+ } s2_hud_state;
+ void s2_hud(s2_hud_state *h);
+ void s2_put(int i, int x, int y, float heading);
++void s2_ref_run(const char *scenario, const char *out, int steps, float step);   /* reference traces (s2_ref.h) */
+ void s2_throw(int i, int height, float speed, float step);
+ void s2_dump(const char *path);
+ void s2_robot(int on);
+diff --git a/port/src/s2_ref.h b/port/src/s2_ref.h
+new file mode 100644
+index 0000000..1dfd5b2
+--- /dev/null
++++ b/port/src/s2_ref.h
+@@ -0,0 +1,114 @@
++/*
++ * REFERENCE TRACES (a patch for the Pocket port's study, not part of the game's port): the player's
++ * car driven from a scenario file, one CSV line per physics step.  Included at the end of s2_hooks.c.
++ *
++ *   OS_S2PHYS=<steps> OS_S2REF=<scenario> OS_S2REFOUT=<csv> [OS_S2STEP=<seconds>] [OS_S2RAW=<seconds>]
++ *
++ * The scenario: lines "<step> <keys>" -- from that step on, until the next line, the keys held:
++ * A accelerate, B brake, L left, R right, U gear up, D gear down, - none.  Lines starting with # or @
++ * are comments / directives for the script.  Row k of the CSV is the state after the k-th step, with
++ * the keys held in that step; row 0 is the state before any step.
++ */
++#ifndef OS_S2_REF_H
++#define OS_S2_REF_H
++
++typedef struct { int step; char keys[12]; } s2_ref_key;
++
++static const char *s2_ref_keys_at(const s2_ref_key *k, int n, int step)
++{
++    const char *now = "-";
++    for (int i = 0; i < n && k[i].step <= step; i++) now = k[i].keys;
++    return now;
++}
++
++static void s2_ref_columns(FILE *o)
++{
++    fputs("step,t,clock,in_acc,in_brk,in_left,in_right,in_gup,in_gdn,throttle,brake_f,brake_r,steer_target,steer,steer_shown,"
++          "x,height,y,pitch,heading,roll,vx,vh,vy,speed,kmh,way,way_pitch,slip_angle,yaw_rate,"
++          "rpm,gear,engine_wheel_speed,shift_timer,grip,slide,body_pitch,body_roll,lift,ground,ground_pitch,ground_roll,wheels_down,"
++          "road_dist,road_side,road_heading", o);
++    for (int w = 0; w < 4; w++)
++        fprintf(o, ",w%d_spin,w%d_spring,w%d_bump,w%d_y,w%d_ground_y,w%d_vup,w%d_contact,w%d_over,w%d_kind,w%d_skid,"
++                   "w%d_push_x,w%d_push_h,w%d_push_y,w%d_cx,w%d_ch,w%d_cy", w, w, w, w, w, w, w, w, w, w, w, w, w, w, w, w);
++    fputs(",wall,wall_corners,knock,knock_push,spin,damage,knock_front,knock_left,knock_right,knock_back,car_flags,touched\n", o);
++}
++
++void s2_ref_run(const char *scenario, const char *out, int steps, float step)
++{
++    s2_ref_key key[512];
++    int nkey = 0;
++    FILE *sf = fopen(scenario, "r");
++    if (!sf) { fprintf(stderr, "ref: no scenario %s\n", scenario); return; }
++    for (char line[256]; fgets(line, sizeof line, sf) && nkey < 512; ) {
++        int n = 0; char k[12];
++        if (line[0] == '#' || line[0] == '@') continue;
++        if (sscanf(line, "%d %11s", &n, k) == 2) { key[nkey].step = n; snprintf(key[nkey].keys, sizeof key[nkey].keys, "%s", k); nkey++; }
++    }
++    fclose(sf);
++    FILE *o = fopen(out, "wb");
++    if (!o) { fprintf(stderr, "ref: cannot write %s\n", out); return; }
++    char metaname[600];
++    snprintf(metaname, sizeof metaname, "%s.meta", out);
++    FILE *m = fopen(metaname, "wb");
++    const uint32_t car = CAR(s2_me), keys = KEYS(s2_me);
++    const double dt = (double)step;
++    if (m) {   /* what a reader needs to know about this run: the car's figures (CARS.DTR CAR_PARAMS, 0x58 bytes at car +0x5c), the road kinds */
++        fprintf(m, "step %.9g steps %d\n", dt, steps);
++        fprintf(m, "team %d model %d player_car %d ncars %d\n", I32(ENTRY(s2_me)), I32(ENTRY(s2_me) + 4), s2_me, I32(0x130c48));
++        fprintf(m, "car_params (word: hex / float):");
++        for (uint32_t k = 0; k < 22; k++) fprintf(m, " [%u] %08x/%.9g", k, U32(car + 0x5c + 4 * k), (double)F32(car + 0x5c + 4 * k));
++        fprintf(m, "\nroad_kinds (id, then the record's words: hex / float):\n");
++        for (uint32_t k = 0; k < 6; k++) {
++            if (I32(0x124130 + k * 0x24) == -1) continue;
++            fprintf(m, "  kind %d:", I32(0x124130 + k * 0x24));
++            for (uint32_t j = 0; j < 9; j++) fprintf(m, " %08x/%.6g", U32(0x124130 + k * 0x24 + 4 * j), (double)F32(0x124130 + k * 0x24 + 4 * j));
++            fprintf(m, "\n");
++        }
++        fprintf(m, "engine ratios 0x112e24:");
++        for (uint32_t k = 0; k < 6; k++) fprintf(m, " %.9g", (double)F32(0x112e24 + 4 * k));
++        fprintf(m, "\n");
++    }
++    s2_ref_columns(o);
++    if (getenv("OS_S2REFROBOT")) s2_robot(1);      /* (a test of the tooling: the game's own driver has the car) */
++    double px = I32(car + 0x4d8), ph = I32(car + 0x4dc), py = I32(car + 0x4e0);
++    for (int n = 0; n <= steps; n++) {
++        const char *kk = n == 0 ? "-" : s2_ref_keys_at(key, nkey, n);
++        if (n > 0) {
++            s2_controls(strchr(kk, 'A') != NULL, strchr(kk, 'B') != NULL, strchr(kk, 'L') != NULL, strchr(kk, 'R') != NULL,
++                        strchr(kk, 'U') != NULL, strchr(kk, 'D') != NULL);
++            s2_frame(step);
++        }
++        const double x = I32(car + 0x4d8), h = I32(car + 0x4dc), y = I32(car + 0x4e0);
++        fprintf(o, "%d,%.6f,%.6f,%d,%d,%d,%d,%d,%d,", n, (double)n * dt, (double)F32(0x13335c),
++                I32(keys + 0xa8), I32(keys + 0xac), I32(keys + 0xb0), I32(keys + 0xb4), I32(keys + 0xb8), I32(keys + 0xbc));
++        fprintf(o, "%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,", (double)F32(car + 0x1ec), (double)F32(car + 0x1e4), (double)F32(car + 0x1e8),
++                (double)F32(car + 0x660), (double)F32(car + 0xbc), (double)F32(car + 0x13c));
++        fprintf(o, "%d,%d,%d,%.9g,%.9g,%.9g,", I32(car + 0x4d8), I32(car + 0x4dc), I32(car + 0x4e0),
++                (double)F32(car + 0x4e4), (double)F32(car + 0x4e8), (double)F32(car + 0x4ec));
++        fprintf(o, "%.4f,%.4f,%.4f,", n ? (x - px) / dt : 0.0, n ? (h - ph) / dt : 0.0, n ? (y - py) / dt : 0.0);
++        fprintf(o, "%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,", (double)F32(car + 0x500), (double)F32(car + 0x500) * 1.513,
++                (double)F32(car + 0x508), (double)F32(car + 0x50c), (double)F32(car + 0x4d4), (double)F32(car + 0x44));
++        fprintf(o, "%.9g,%d,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%.9g,%.9g,%.9g,",
++                (double)F32(car + 0xc78), I32(car + 0xc7c), (double)F32(car + 0x4fc), (double)F32(car + 0x140), (double)F32(car + 0xc34),
++                (double)F32(car + 0xc0), (double)F32(car + 0xc18), (double)F32(car + 0xc20), I32(car + 0x4f4), I32(car + 0x4f8),
++                (double)F32(car + 0xc0c), (double)F32(car + 0xc14), (double)F32(car + 0x510));
++        fprintf(o, "%.9g,%.9g,%.9g", (double)F32(car + 0x4bc), (double)F32(car + 0x4c0), (double)F32(car + 0x4c4));
++        for (uint32_t w = 0; w < 4; w++) {
++            const uint32_t wr = car + 0x574 + 0x70 * w, push = car + 0x544 + 0xc * w, cor = car + 0x514 + 0xc * w;
++            fprintf(o, ",%.9g,%.9g,%d,%d,%d,%.9g,%d,%d,%d,%d,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
++                    (double)F32(wr + 0x10), (double)F32(wr + 0x14), I32(wr + 0x48), I32(wr + 0x30), I32(wr + 0x44), (double)F32(wr),
++                    I32(wr + 4), I32(wr + 8), I32(wr + 0x5c), I32(wr + 0x60),
++                    (double)F32(push), (double)F32(push + 4), (double)F32(push + 8), (double)F32(cor), (double)F32(cor + 4), (double)F32(cor + 8));
++        }
++        fprintf(o, ",%d,%d%d%d%d,%.9g,%.9g,%d,%.9g,%.9g,%.9g,%.9g,%.9g,0x%02x,%d\n", I32(car + 0x150),
++                I32(car + 0x170) != 0, I32(car + 0x190) != 0, I32(car + 0x1b0) != 0, I32(car + 0x1d0) != 0,
++                (double)F32(car + 0x30), (double)F32(car + 0x34), I32(car + 0x58), (double)F32(car + 8),
++                (double)F32(car + 0xc), (double)F32(car + 0x10), (double)F32(car + 0x14), (double)F32(car + 0x18), U8(car + 0x4c), I32(0x11cdb4));
++        px = x; ph = h; py = y;
++        (void)m;
++    }
++    fclose(o);
++    if (m) fclose(m);
++}
++
++#endif

@@ -1,0 +1,7 @@
+# c on level ground (kind 36), the car put at (-300000, 300000) facing 0.785 (towards the map's origin: the game cuts a car's place to whole numbers towards (0,0), so heading away from it eats the speed)
+@steps 600
+@flat 36
+@put -300000,300000,0.785398
+@tracks 1
+0 A
+150 B
