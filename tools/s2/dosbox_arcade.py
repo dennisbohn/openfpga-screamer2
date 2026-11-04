@@ -3,8 +3,8 @@
 Usage: python -I tools/s2/dosbox_arcade.py [extra tracks 0..4] [--check]      (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2"; --check: the
 screenshots of the last run again, without DOSBox)
 
-Starts STARTL.EXE in the game folder's own DOSBox on a private copy of the game folder (build/dosgame: the data folders are junctions, CONFIG is a copy
-whose CHOICE.DAT has the number of extra tracks open: the owner's own is never touched), types its way with scan codes through TEAM SELECTION, the
+Starts STARTL.EXE in the game folder's own DOSBox on a private copy of the game folder (build/dosgame: the data folders are junctions, removed again
+when the script ends; CONFIG is a copy whose CHOICE.DAT has the number of extra tracks open: the owner's own is never touched), types its way with scan codes through TEAM SELECTION, the
 name and the OPTIONS ROOM to ARCADE, and takes Ctrl+F5 screenshots (320 x 200 palette indices, the raw frame) on the title, the TRACK page, the CAR page and
 the TRANSMISSION page. Each is then compared with the frames of tools/ui_arcade_ref.py's model (the page drawn by an independent reading of the
 program): the TRACK page whole, the others in the parts the model draws (the original also has the 3D cars: the title's band with the prompt, the CAR
@@ -12,6 +12,7 @@ page's title, badge and the left half of the plate, the TRANSMISSION page's titl
 (about 2 minutes; the keys go to the window in front).
 Output: build/check/dosbox/*.png (never committed) and one line per screenshot; exit code 0 if every one equals a frame of the model.
 """
+import atexit
 import ctypes
 import ctypes.wintypes as wt
 import glob
@@ -93,11 +94,21 @@ def choice_with_extra_tracks(src, dst, extra):
     open(dst, "wb").write(struct.pack("<%dI" % len(out), *out) + d[len(out) * 4:])
 
 
-def make_private(extra):
-    if os.path.isdir(private):                  # (the junctions are removed as links first: nothing of the game's own folders is ever deleted)
+def drop_junctions():
+    """Removes the private folder's junctions as links (rmdir on a junction removes the link only). Called before the folder is touched
+    and again when the script ends, so that no junction to the game's own folders is ever left in the repository's build folder: a
+    recursive delete there (rm -rf, git worktree remove --force, Remove-Item -Recurse) follows a junction and empties the game's folder"""
+    if os.path.isdir(private):
         for name in os.listdir(private):
-            if os.path.isjunction(os.path.join(private, name)):
-                os.rmdir(os.path.join(private, name))
+            p = os.path.join(private, name)
+            if os.path.isjunction(p) or os.path.islink(p):
+                os.rmdir(p)
+        left = [n for n in os.listdir(private) if os.path.isjunction(os.path.join(private, n))]
+        assert not left, "a junction could not be removed: " + str(left)
+
+
+def make_private(extra):
+    drop_junctions()
     shutil.rmtree(private, ignore_errors=True)
     os.makedirs(private)
     for name in os.listdir(game):
@@ -279,6 +290,7 @@ def main():
         bad = check(list(zip(files, labels)), extra, model())
         print(f"{len(files)} screenshots, {bad} not equal to the model")
         sys.exit(1 if bad else 0)
+    atexit.register(drop_junctions)             # (also when the run fails or is stopped: the junctions never outlive the script)
     make_private(extra)
     boot = "w12 k1c w6 k1c w6 k1c w6 k1c w9 Ltitle r3,1.1 k1c w4 Ltrack r3,0.9 "
     moves = "".join("Ke4d R3,0 w2.5 r2,0.9 " for _ in range(extra + 2))
