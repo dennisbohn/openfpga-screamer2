@@ -37,6 +37,9 @@
 #define TRACK_SLOT  28
 
 #define TRACKS      7
+#ifndef VIEWER_TIMELINE
+#define VIEWER_TIMELINE 0      /* 1: the debug log also gets the frame timeline at 5 s (a kilobyte of the log's 4) */
+#endif
 #define SPEED       9265.0f             /* 150 km/h in units a second (drive_kmh: speed x 340 / 21000) */
 #define STEP_S      0.02f               /* a video frame */
 #define MS_CYCLES   (CPU_HZ / 1000)
@@ -498,7 +501,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             }
         }
         /* the timeline of the frame before, once: it is a kilobyte */
-        if (!timeline_done && (sim ? drawn + 1 == sim_frames : st_all.video >= 5 * VID_HZ)) {
+        if (!timeline_done && (sim ? drawn + 1 == sim_frames : VIEWER_TIMELINE && st_all.video >= 5 * VID_HZ)) {
             timeline_done = 1;
             tl_log();
         }
