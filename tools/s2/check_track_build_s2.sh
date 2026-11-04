@@ -1,12 +1,15 @@
 #!/bin/sh
 # Host test of the Screamer 2 track build on the Pocket (firmware/track_build.c, track_build_s2()): the
-# image built natively in Docker from the three containers a track needs (GFX/MAPnH01.DAT,
-# GFX/CARS101.DAT, DATA/MAPn.DAT) must be byte-identical with the one tools/s2/make_track_s2.py builds from
-# the same files (the reference), for each of the seven tracks. The S1 pattern is tools/check_track_build.sh.
+# image built natively in Docker from the four containers a track needs (GFX/MAPnH01.DAT,
+# GFX/CARS101.DAT, DATA/MAPn.DAT, GFX/ENVPn01.DAT) must be byte-identical with the one tools/s2/make_track_s2.py
+# builds from the same files (the reference), for each of the seven tracks. The S1 pattern is
+# tools/check_track_build.sh.
 # Usage: tools/s2/check_track_build_s2.sh [game folder] [tracks, default "1 2 3 4 5 6 7"]
 #   game folder   the original game (its GFX and DATA folders, as unzipped), default $GAME_DIR or
 #                 "C:/GOG Games/Screamer 2"
 # Everything it writes stays in build/s2/ (game data, never committed): the references as ref<n>.bin.
+# Before the build check, tools/s2/check_env_s2.py checks the references' windows (routine 160) against the
+# original's reflection picture.
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
 game=${1:-${GAME_DIR:-C:/GOG Games/Screamer 2}}
@@ -20,6 +23,7 @@ py=python3
 "$py" -c "" 2>/dev/null || py=python     # Windows: python3 may be the Store's stub
 for n in $tracks; do
     "$py" -I "$root/tools/s2/make_track_s2.py" "$game" "$n" "$out/ref$n.bin" > /dev/null
+    "$py" -I "$root/tools/s2/check_env_s2.py" "$game" "$out/ref$n.bin" "$n"      # the windows' reflection
 done
 
 # Git Bash on Windows: hand Docker Windows paths and stop MSYS rewriting /work.

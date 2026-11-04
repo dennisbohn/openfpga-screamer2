@@ -1,7 +1,8 @@
 /*
  * Host test of the Screamer 2 track build (firmware/track_build.c, track_build_s2()), run by
  * tools/s2/check_track_build_s2.sh: the image built as the firmware builds it from the three containers a
- * track needs, compared byte for byte with the image tools/s2/make_track_s2.py made from the same files.
+ * track needs (the map, the team's cars, the track's data and the windows' reflection picture), compared byte for byte
+ * with the image tools/s2/make_track_s2.py made from the same files.
  * The output buffer starts out filled with junk, as the SDRAM is.
  *
  * Usage: check_track_build_s2 <game folder> <reference image> <n>
@@ -35,13 +36,15 @@ int main(int argc, char **argv)
 {
     if(argc != 4) { fprintf(stderr, "usage: %s <game folder> <reference image> <n>\n", argv[0]); return 2; }
     int track = atoi(argv[3]);
-    char gfx[32], data[32];
+    char gfx[32], data[32], env[32];
     snprintf(gfx, sizeof gfx, "GFX/MAP%dH01.DAT", track);
     snprintf(data, sizeof data, "DATA/MAP%d.DAT", track);
+    snprintf(env, sizeof env, "GFX/ENVP%d01.DAT", track);
     struct s2_files f;
     f.gfx = slurp(argv[1], gfx, &f.gfx_size);
     f.cars = slurp(argv[1], "GFX/CARS101.DAT", &f.cars_size);
     f.data = slurp(argv[1], data, &f.data_size);
+    f.env = slurp(argv[1], env, &f.env_size);
     uint32_t ref_size;
     uint8_t *ref = slurp(".", argv[2], &ref_size);
 

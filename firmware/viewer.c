@@ -27,6 +27,8 @@
 #define CARS_MAX    0x100000u
 #define DATA_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D00000))                  /* DATA/MAPn.DAT */
 #define DATA_MAX    0x40000u
+#define ENV_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D40000))                  /* GFX/ENVPn01.DAT (up to 20 KB) */
+#define ENV_MAX     0x20000u
 #define SCRATCH_MEM ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))
 #define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000u))
 
@@ -147,7 +149,7 @@ static int load_track(struct zip *z, int n, const char **what)
 {
     static uint32_t cars_size;
     static struct s2_files f;
-    static char gfx_name[24], data_name[24];
+    static char gfx_name[24], data_name[24], env_name[24];
     struct track_build_info info = { "", 0, 0 };
     uint32_t t0 = rdcycle(), read_cycles = 0, read_bytes = 0, road_cycles = 0, image = 0;
     if (sim && slot_size(IMAGE_SLOT)) {
@@ -156,6 +158,7 @@ static int load_track(struct zip *z, int n, const char **what)
         uint32_t size = 0;
         fmt_str(fmt_udec(fmt_str(gfx_name, "GFX/MAP"), (uint32_t)n), "H01.DAT");
         fmt_str(fmt_udec(fmt_str(data_name, "DATA/MAP"), (uint32_t)n), ".DAT");
+        fmt_str(fmt_udec(fmt_str(env_name, "GFX/ENVP"), (uint32_t)n), "01.DAT");
         if (!cars_size) {
             if (!read_entry(z, "GFX/CARS101.DAT", CARS_MEM, CARS_MAX, &cars_size, &read_cycles)) return *what = "GFX/CARS101.DAT", 0;
             read_bytes += cars_size;
@@ -167,6 +170,9 @@ static int load_track(struct zip *z, int n, const char **what)
         if (!read_entry(z, gfx_name, GFX_MEM, GFX_MAX, &f.gfx_size, &read_cycles)) return *what = "the track's GFX file", 0;
         if (!read_entry(z, data_name, DATA_MEM, DATA_MAX, &f.data_size, &read_cycles)) return *what = "the track's DATA file", 0;
         read_bytes += f.gfx_size + f.data_size;
+        f.env = ENV_MEM;                            /* the windows' reflection: without it the glass keeps the cars' placeholder */
+        if (!read_entry(z, env_name, ENV_MEM, ENV_MAX, &f.env_size, &read_cycles)) f.env = 0;
+        else read_bytes += f.env_size;
         size = track_build_s2(&f, n, (uint8_t *)(uintptr_t)TEX_FILE, TEX_MAX, SCRATCH_MEM, SCRATCH_MAX, &info);
         while (!(MEM_STATUS & MEM_WRITES_IDLE))     /* all of it in the SDRAM for the 3D units */
             ;

@@ -16,11 +16,20 @@ What Screamer 2's files need beyond the names (each marked ADAPTER below):
     of the track's MLB (the geometry unit reads a face's material at a signed 16-bit offset from the MLB's
     start, so they have to lie within 32 KB of it, below), and the cars' faces point there
     (docs/screamer2/comparison.md, "Cars' libraries")
+  - the cars' windows (routine 160): the game draws them with the first material of GFX/ENVP{n}{look}1.DAT's
+    ENV.MLB (a 128 x 128 picture, 1 to 3 frames; its texel address is masked with 0x7f7f), not with the
+    car's own placeholder. The hardware wraps routine 160's u, v at 256, so each frame is stored 2 x 2
+    tiled as 256 x 256 (env_picture() below) after the cars' libraries, inside the MLB section, with a texture
+    record of its own, and the records of the cars' routine-160 materials point to that record. The image
+    stays version 7: no new section, the MLB section only grows by 64 KB a frame
 
 Image layout, version 7 (the version 6 of tools/make_track.py with the car materials in front):
-  0x100  car materials (the records of AUTO1..5.MLB, texture records' offsets moved to the appended libraries)
-         then the track's MAPn.MLB, padded to 256 bytes, then AUTO1.MLB .. AUTO5.MLB each padded to 256;
-         the header's MLB offset (0x08) is the MLB, its size (0x0C) all of it
+  0x100  car materials (the records of AUTO1..5.MLB, texture records' offsets moved to the appended libraries;
+         the routine-160 records' texture record is the reflection's, below)
+         then the track's MAPn.MLB, padded to 256 bytes, then AUTO1.MLB .. AUTO5.MLB each padded to 256,
+         then the reflection picture: a texture record (frames, the ENV record's word +4, the frames' offsets)
+         padded to 256 bytes and the frames, 64 KB each (256 x 256, rows of 256); the header's MLB offset
+         (0x08) is the MLB, its size (0x0C) all of it
   then   UNR, palette, placements (and after them the cells' visibility table, visibility() below), camera path
          (empty), ground index, markers (empty), cars (one row),
          car models (5 .3DX, faces moved onto the car materials), road points, walls, race screen
@@ -126,17 +135,18 @@ def mlb_records(mlb):
     return k
 
 
-def car_library(mlb, at):
+def car_library(mlb, at, env_at):
     """A car's .MLB placed at offset `at` from the merged MLB's start: (number of material records, the
     records with their texture records' offsets moved, the file with the texture records' pixel offsets
-    moved). A texture record is n, one word, then n offsets (one if n < 1); two materials may share one"""
+    moved). A texture record is n, one word, then n offsets (one if n < 1); two materials may share one.
+    A routine-160 material (a window) gets the reflection's texture record, at env_at"""
     nrec = mlb_records(mlb)
     out, recs, seen = bytearray(mlb), bytearray(), set()
     for k in range(nrec):
         rec = bytearray(mlb[16 * k:16 * k + 16])
         ro = i32(mlb, 16 * k + 4)
         if ro > 0 and ro + 12 <= len(mlb):
-            struct.pack_into("<I", rec, 4, (ro + at) & 0xFFFFFFFF)
+            struct.pack_into("<I", rec, 4, (env_at if i32(mlb, 16 * k) == 160 else ro + at) & 0xFFFFFFFF)
             if ro not in seen:
                 seen.add(ro)
                 n = i32(mlb, ro)
@@ -147,6 +157,33 @@ def car_library(mlb, at):
                     struct.pack_into("<I", out, p, (i32(mlb, p) + at) & 0xFFFFFFFF)
         recs += rec
     return nrec, bytes(recs), bytes(out)
+
+
+ENV_HEAD = 256                              # the reflection's texture record, padded to this
+ENV_FRAME = 256 * 256
+
+
+def env_picture(mlb, at):
+    """ADAPTER: the reflection's block from ENV.MLB of GFX/ENVP{n}{look}1.DAT, to lie at offset `at` of the
+    merged MLB. The first material is routine 160, 128 x 128; its texture record is n (1 to 3 frames), a word
+    (kept), the frames' offsets; a frame is 128 rows of 256 bytes, the picture in the first 128 columns. The
+    game masks a texel's address with 0x7f7f (STARTL.EXE 0xcd771, `and ebx,0x7f7f`) where the hardware masks
+    u and v with 0xff, and a window's u, v are whole texels (0xcd118: the reflection's value << 3, one texel
+    each, as in firmware/geom.c): a frame tiled 2 x 2 into 256 x 256 reads alike. The block is the texture
+    record (n, the word, the frames' offsets) padded to ENV_HEAD, then the tiled frames"""
+    assert i32(mlb, 0) == 160 and (i32(mlb, 8), i32(mlb, 12)) == (128, 128), "ENV.MLB: first material"
+    ro = i32(mlb, 4)
+    n = i32(mlb, ro)
+    n = n & 0xFFFF if n > 0 else 1
+    assert 1 <= n <= 8, f"ENV.MLB: {n} frames"
+    head, body = struct.pack("<2i", n, i32(mlb, ro + 4)), b""
+    for fr in range(n):
+        o = i32(mlb, ro + 8 + 4 * fr)
+        assert 0 <= o and o + 127 * 256 + 128 <= len(mlb), "ENV.MLB: frame"
+        rows = b"".join(mlb[o + 256 * r:o + 256 * r + 128] * 2 for r in range(128))
+        head += struct.pack("<I", at + ENV_HEAD + ENV_FRAME * fr)
+        body += rows * 2
+    return head + bytes(ENV_HEAD - len(head)) + body
 
 
 def car_faces_onto(x3d, delta):
@@ -225,11 +262,14 @@ def main():
     for m in car_mlb:
         lib_at.append(at)
         at += pad256(len(m))
+    env_at = at                                                         # the windows' picture, after the libraries
     cmat, mlbsec = b"", mlb + bytes(pad256(len(mlb)) - len(mlb))
     for k in range(CARS):
-        _, recs, lib = car_library(car_mlb[k], lib_at[k])
+        _, recs, lib = car_library(car_mlb[k], lib_at[k], env_at)
         cmat += recs
         mlbsec += lib + bytes(pad256(len(lib)) - len(lib))
+    env = datfile.extract(datfile.read(os.path.join(root, "GFX", f"ENVP{n}{look}1.DAT")), "ENV.MLB")   # ADAPTER
+    mlbsec += env_picture(env, env_at)
     models, files, at = b"", b"", 24 * CARS
     for k in range(CARS):
         delta = FIRST + 16 * sum(nrec[:k]) - mlb_off
@@ -276,7 +316,7 @@ def main():
     with open(out, "wb") as fh:
         fh.write(blob)
     print(f"{out}: {len(blob)} bytes ({len(crcs)} blocks of 256 KB; limit 28): MLB {len(mlb)} + {CARS} car libraries "
-          f"({sum(nrec)} materials), UNR {len(unr)}, {len(pl)} placements ({nground} drivable), {len(dirs)} road points, "
+          f"({sum(nrec)} materials) + windows' picture {len(mlbsec) - env_at}, UNR {len(unr)}, {len(pl)} placements ({nground} drivable), {len(dirs)} road points, "
           f"{len(walls)} walls, {CARS} car models {[tuple(round(v) for v in struct.unpack_from('<4f', models, 24 * k)) for k in range(CARS)]}, "
           f"start {sx_},{sy_} yaw {sa:.3f}, far plane {far}, background colour {colour}")
 

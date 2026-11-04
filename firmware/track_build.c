@@ -246,8 +246,16 @@ uint32_t track_build(const struct track_files *f, int n, uint8_t *out, uint32_t 
  *     cars' faces point there (a negative offset); their texture records and pixels stay in the cars' own
  *     .MLB files, appended after the track's MLB, with the offsets inside them (the records' texture
  *     record, a texture record's frames) moved by where the file lies
+ *   - the cars' windows (routine 160) are drawn by the game with the first material of ENV.MLB (GFX/ENVPn01.DAT),
+ *     a 128 x 128 picture of 1 to 3 frames whose texel address is masked with 0x7f7f; the hardware wraps routine
+ *     160's u, v at 256, so every frame is tiled 2 x 2 into 256 x 256 after the cars' libraries (still inside the
+ *     MLB section) under a texture record of its own, and the cars' routine-160 material records point to it.
+ *     The image stays version 7 (no new section)
  */
 #define S2_CARS     5                   /* AUTO1..5 */
+#define S2_ENV_HEAD  256u               /* the reflection's texture record, padded to this */
+#define S2_ENV_FRAME 65536u             /* a tiled frame: 256 rows of 256 */
+#define S2_ENV_MAX   8u
 
 static uint32_t ld16(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8; }
 static uint32_t ld32(const uint8_t *p) { return ld16(p) | ld16(p + 2) << 16; }
@@ -268,13 +276,53 @@ static uint32_t mlb_records(const uint8_t *m, uint32_t size)
 
 static int valid_record(int32_t ro, uint32_t size) { return ro > 0 && (uint32_t)ro + 12 <= size; }
 
-/* a car's material records (nrec) into recs, each one's texture record moved to where the file lies (at) */
-static void lib_records(const uint8_t *m, uint32_t size, uint32_t nrec, uint32_t at, uint8_t *recs)
+/* a car's material records (nrec) into recs, each one's texture record moved to where the file lies (at); a
+   routine-160 material (a window) gets the reflection's texture record, at env_at (0: no reflection) */
+static void lib_records(const uint8_t *m, uint32_t size, uint32_t nrec, uint32_t at, uint32_t env_at, uint8_t *recs)
 {
     for(uint32_t k = 0; k < nrec; k++) {
         memcpy(recs + 16 * k, m + 16 * k, 16);
         int32_t ro = (int32_t)ld32(m + 16 * k + 4);
-        if(valid_record(ro, size)) wr32(recs + 16 * k + 4, (uint32_t)ro + at);
+        if(valid_record(ro, size)) wr32(recs + 16 * k + 4, env_at && ld32(m + 16 * k) == 160 ? env_at : (uint32_t)ro + at);
+    }
+}
+
+/* ENV.MLB (size bytes): its first material is routine 160, 128 x 128; its texture record is n (1 to 3 frames), a
+   word, the frames' offsets; a frame is 128 rows of 256 bytes with the picture in the first 128 columns. Returns
+   n, 0 if it is not that */
+static uint32_t env_frames(const uint8_t *m, uint32_t size)
+{
+    if(size < 16 || ld32(m) != 160 || ld32(m + 8) != 128 || ld32(m + 12) != 128) return 0;
+    int32_t ro = (int32_t)ld32(m + 4);
+    if(!valid_record(ro, size)) return 0;
+    int32_t cnt = (int32_t)ld32(m + ro);
+    uint32_t n = cnt > 0 ? (uint32_t)cnt & 0xFFFF : 1;
+    if(n < 1 || n > S2_ENV_MAX || (uint64_t)ro + 8 + 4 * (uint64_t)n > size) return 0;
+    for(uint32_t fr = 0; fr < n; fr++) {
+        uint32_t o = ld32(m + ro + 8 + 4 * fr);
+        if((uint64_t)o + 127 * 256 + 128 > size) return 0;
+    }
+    return n;
+}
+
+/* the reflection's block of ENV.MLB (n frames, checked) at dst, to lie at offset at of the merged MLB: the texture
+   record (n, the ENV record's word +4, the frames' offsets) padded to S2_ENV_HEAD, then each frame tiled 2 x 2
+   into 256 x 256 (the game masks a texel address with 0x7f7f, the hardware u, v with 0xff, and a window's u, v are
+   whole texels: STARTL.EXE 0xcd771, 0xcd118) */
+static void env_write(uint8_t *dst, const uint8_t *m, uint32_t n, uint32_t at)
+{
+    int32_t ro = (int32_t)ld32(m + 4);
+    memset(dst, 0, S2_ENV_HEAD);
+    wr32(dst, n);
+    wr32(dst + 4, ld32(m + ro + 4));
+    for(uint32_t fr = 0; fr < n; fr++) {
+        wr32(dst + 8 + 4 * fr, at + S2_ENV_HEAD + S2_ENV_FRAME * fr);
+        const uint8_t *src = m + ld32(m + ro + 8 + 4 * fr);
+        uint8_t *to = dst + S2_ENV_HEAD + S2_ENV_FRAME * fr;
+        for(uint32_t r = 0; r < 256; r++, to += 256) {
+            memcpy(to, src + 256 * (r & 127), 128);
+            memcpy(to + 128, src + 256 * (r & 127), 128);
+        }
     }
 }
 
@@ -428,13 +476,22 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
         end += pad256(lib[k].size);
         nmat += lib[k].nrec;
     }
+    /* the windows' reflection (ENV.MLB) goes after the libraries, a texture record and tiled frames */
+    const uint8_t *env_mlb = 0;
+    uint32_t env_n = 0, env_at = 0, env_size = 0;
+    if(f->env) {
+        if(!(env_mlb = unpack(&b, f->env, f->env_size, "ENV.MLB", &env_size))) return 0;
+        if(!(env_n = env_frames(env_mlb, env_size))) return (uint32_t)fail(&b, "ENV.MLB");
+        env_at = end;
+        end += S2_ENV_HEAD + S2_ENV_FRAME * env_n;
+    }
     uint32_t mlb_off = FIRST + pad256(16 * nmat);
     if(!nmat || mlb_off - FIRST > 32768) return (uint32_t)fail(&b, "car materials");
 
-    /* section 0: the car materials; 1: the MLB, the cars' libraries after it */
+    /* section 0: the car materials; 1: the MLB, the cars' libraries and the reflection after it */
     if(16 * nmat > room(&b)) return (uint32_t)fail(&b, "car materials");
     for(int k = 0, o = 0; k < S2_CARS; o += (int)lib[k].nrec, k++)
-        lib_records(lib[k].mlb, lib[k].size, lib[k].nrec, lib[k].at, at(&b) + 16 * (uint32_t)o);
+        lib_records(lib[k].mlb, lib[k].size, lib[k].nrec, lib[k].at, env_at, at(&b) + 16 * (uint32_t)o);
     if(!section(&b, 16 * nmat, nmat, "car materials")) return 0;
     if(end > room(&b)) return (uint32_t)fail(&b, "MLB");
     uint8_t *m = at(&b);
@@ -445,6 +502,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
         memset(m + lib[k].at + lib[k].size, 0, pad256(lib[k].size) - lib[k].size);
         lib_relocate(m + lib[k].at, lib[k].size, lib[k].nrec, lib[k].at);
     }
+    if(env_n) env_write(m + env_at, env_mlb, env_n, env_at);
     if(!section(&b, end, end, "MLB")) return 0;
 
     if(!dat_find(f->gfx, f->gfx_size, name(&b, ".UNR", buf), &e)) return (uint32_t)fail(&b, buf);
