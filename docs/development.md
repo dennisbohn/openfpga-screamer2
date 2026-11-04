@@ -152,11 +152,17 @@ Both are the original's pages on the 2D toolkit (`firmware/s2gfx.c`, `s2page.c`,
 the SDRAM map). **LOADING:** the track's `LOAD_nL` picture with the track's banner, BEST TIME and BEST LAP (empty until the save exists: `--:--:-- MIL`) and
 LOADING... is put up before `load_track()` and stays through the track's build and the race's set-up: the display is driven by the hardware from the front
 buffer and its palette, so the CPU can be busy for the 3 to 5 s of `T1 load` and the picture does not change. It then fades out in 0.4 s. The log has
-`ui: loading screen up after N ms` (the picture's read, unpacking and drawing, expected about 0.1 s), and once at the start `ui: 111 sprites, 6 fonts ... ms`
-(the toolkit's assets, expected a few tenths of a second before the start menu). **Pause:** Start in the race stops it over the darkened picture; the race loop is not
+`ui: loading screen up after N ms` (the picture's read, unpacking and drawing: 35 ms in the simulation, where a data slot is 3 times faster than the Pocket's, so
+about 60 ms there), and once at the start `ui: 111 sprites, 6 fonts ... ms` (the toolkit's assets, before the start menu: 169 ms in the simulation, about 0.3 s on the Pocket).
+The Pocket's log of 2026-11-04 (the build before this one) has the time the picture covers: track 4 `T4 load 4487 ms` (read 2,413 KB 2,117 ms, build 1,742 ms, road 424 ms)
+and `race init 160 ms`, 4.65 s in all. **Pause:** Start in the race stops it over the darkened picture; the race loop is not
 run, so the clock, the cars and the frame statistics stand still (the first frame after it takes one 20 ms step); the effects (engines, tyres) ease out over a
 second and come back whole, the music plays on. RESTART is the race again from the grid (the track stays loaded), EXIT the start menu. The pause adds nothing to a
-frame of the race but the test of one button bit; the log has `pause: still and palette N ms` once (the darkening table and the copy of the screen, estimated 20 to 40 ms).
+frame of the race but the test of one button bit: the race in the simulation (220 frames from the grid, track 4 and track 1, the code shifted by the new objects) took 10.7 ms
+mean and 11.5 worst, and 10.2 and 11.1, against 10.8 / 11.5 and 10.3 / 11.1 of the build before. Opening the menu takes 74 ms in the simulation (`pause: still and
+palette N ms` in the log, once: the darkening table and the copy of the screen, then the screen stands); a frame of the menu itself is one blitter list (the still and
+a few letters, about 1.5 ms of the CPU's time). The screens drawn by the hardware in the simulation equal the PC's drawing pixel for pixel (LOADING, track 4: 0 of 64,000
+pixels differ; the pause's picture was looked at: darkened race, box, dim items).
 
 A car (any of the four) with no drivable ground under it for 3 s (`off_track` of the state), or more than 3,000 units below the
 lowest road point of the track, or a computer's car that has not moved for 6 s, is put back onto the line by itself (the nearest point

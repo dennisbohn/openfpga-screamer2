@@ -177,7 +177,7 @@ code: the TRANSMISSION page 0 (MENU1) for a cursor move and 2 (MENU3) for ENTER,
 **The LOADING screen.** `viewer_run()` puts it up before `load_track()` (the track image build, the cars, 3 to 5 s) and keeps it through the race's set-up (`race_init`, the music's first
 fill); `visit()` then fades it out in 0.4 s. The display is driven by the hardware from the front framebuffer and its palette, so nothing has to be done while the CPU is busy: the
 picture is blitted into the back buffer, the palette written and the buffers swapped once, and it stays (nothing in the build writes the framebuffers). It covers the whole load: the
-picture itself takes about 0.1 s to put up (the log has `ui: loading screen up after N ms`), the load line of the log (`T1 load N ms`) says how long it then stays. Without the
+picture itself takes about 60 ms to put up (35 ms in the simulation; the log has `ui: loading screen up after N ms`), the load line of the log (`T1 load N ms`, 4.5 s for track 4 on the Pocket, plus `race init` 0.16 s) says how long it then stays. Without the
 picture (no `GRAF1.DAT`, damaged) the old text screen is shown. The simulation has none.
 
 **The pause menu.** Start in the race opens it (not before the first frame, not once the player has finished): RESUME, RESTART (the race again from the grid, the track stays
