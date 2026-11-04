@@ -36,6 +36,9 @@
 
 #ifdef __riscv
 #include "files.h"
+#else
+#include <stdio.h>
+#include <stdlib.h>
 #endif
 
 /* every product and sum is rounded to a float on its own, as the reference's stores are: no fused multiply-add */
@@ -324,14 +327,26 @@ static void angles_from_corners(car_t *c)
     RF(0xc0c) = atanf((float)(RI(0x698) - RI(0x708)) / (float)RI(0x4d0));
 }
 
+/* what is under the four corners: one look at each serves the walls' question (is there ground at all) and the
+   wheels' (its height, slope and kind) -- the game asks both at the same places */
+struct corner_ground { int found, held, h, n[3], kind; };
+static void look_under_corners(car_t *c, struct corner_ground q[4])
+{
+    for(int i = 0; i < 4; i++) {
+        q[i].h = 0; q[i].n[0] = q[i].n[1] = q[i].n[2] = 0; q[i].kind = 0;
+        q[i].found = track_ground_s2(cut(RF(CORNER(i))), cut(RF(CORNER(i) + 8)), &q[i].held, &q[i].h, q[i].n, &q[i].kind);
+    }
+}
+
 /* 0x28f96: the ground under the four wheels */
-static void ground_under_wheels(car_t *c)
+static void ground_under_wheels(car_t *c, const struct corner_ground q[4])
 {
     float sum = 0.0f;
     int found = 0;
     for(int i = 0; i < 4; i++) {
-        int w = WH(i), h = 0, n[3] = { 0, 0, 0 }, kind = 0;
-        if(!track_ground_s2(cut(RF(CORNER(i))), cut(RF(CORNER(i) + 8)), 0, &h, n, &kind)) { RI(w + 8) = 0; continue; }
+        int w = WH(i), h = q[i].h, kind = q[i].kind;
+        const int *n = q[i].n;
+        if(!q[i].found) { RI(w + 8) = 0; continue; }
         RF(w + 0x64) = (float)n[0]; RF(w + 0x68) = (float)n[1]; RF(w + 0x6c) = (float)n[2];
         RI(w + 0x44) = h;
         sum = (float)RI(w + 0x44) + sum;
@@ -415,14 +430,13 @@ static int lines_meet(const float p[3], const float d[3], const float q[3], cons
 /* 0x29571: the car against a wall. A corner off the drivable ground is off (+0x170 + 0x20 i); the nearest
    wall gives the way out (the corner turned into the wall's frame, put 2 units out of it, and turned back);
    the biggest move is taken; the car is moved, spins towards the wall's way and is knocked. */
-static void against_wall(car_t *c)
+static void against_wall(car_t *c, const struct corner_ground q[4])
 {
     float hard = 0.0f;
     int hit = 0;
     RI(0x150) = 0;
     for(int i = 0; i < 4; i++) {
-        int h, n[3], k;
-        RI(0x170 + 0x20 * i) = !track_ground_s2(cut(RF(CORNER(i))), cut(RF(CORNER(i) + 8)), 1, &h, n, &k);
+        RI(0x170 + 0x20 * i) = !q[i].held;
         if(RI(0x170 + 0x20 * i)) RI(0x150) = 1;
     }
     if(RI(0x150) == 0) return;
@@ -956,8 +970,10 @@ static void frame(car_t *c, const struct s2car_input *in, int *squeal)
 {
     RI(0x4c) &= ~8;
     tyres(c, squeal);
-    against_wall(c);                                    /* 0x16824 */
-    ground_under_wheels(c);
+    struct corner_ground under[4];
+    look_under_corners(c, under);
+    against_wall(c, under);                             /* 0x16824 */
+    ground_under_wheels(c, under);
     ground_step(c);                                     /* 0x1b92b */
     wheel_pictures(c);                                  /* 0x16878 */
     RF(0x30) = RF(0x30) - DT;                           /* 0x1f3ce: the knock's clocks run down */
@@ -1039,8 +1055,12 @@ static void outputs(car_t *c, int squeal)
     if(squeal) c->skid_flags |= 16;
     c->hit_wall = RI(0x150) != 0;
     c->braking = RF(0x1e4) + RF(0x1e8) > 0.0f;
-    int h, n[3], k;
-    c->off_track = !track_ground_s2(cut(RF(0x4d8)), cut(RF(0x4e0)), 1, &h, n, &k);
+    c->off_track = 0;
+    if(RI(0x150)) {                                     /* some corner is off the road: and the middle? */
+        int held, h, n[3], k;
+        track_ground_s2(cut(RF(0x4d8)), cut(RF(0x4e0)), &held, &h, n, &k);
+        c->off_track = !held;
+    }
     chase_camera(c);
     c->cam[3] = c->camst[2];
     c->cam[4] = c->camst[1];
@@ -1078,8 +1098,25 @@ static int read_start(void)
     return 1;
 }
 
+#ifndef __riscv
+static uint8_t *host_file(const char *path, uint32_t *size)
+{
+    FILE *f = fopen(path, "rb");
+    if(!f) return 0;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *p = malloc((size_t)n + 8);
+    if(!p || fread(p, 1, (size_t)n, f) != (size_t)n) { fclose(f); free(p); return 0; }
+    fclose(f);
+    *size = (uint32_t)n;
+    return p;
+}
+#endif
+
 static int load_data(int track)
 {
+    if(G.loaded_track == track && G.cars_ok && G.game_dat && G.map_dat) return 1;      /* a reset on the same track */
 #ifdef __riscv
     struct zip *z = files_zip();
     if(!z) return 0;
@@ -1099,6 +1136,19 @@ static int load_data(int track)
         G.map_size = e->size;
     }
 #else
+    /* on the host (tools/s2/render_s2.sh, the tests): the unzipped game folder S2_GAME, or what s2car_set_data() handed over */
+    if(!G.game_dat || !G.map_dat || G.loaded_track != track) {
+        const char *dir = getenv("S2_GAME");
+        if(dir && (!G.game_dat || !G.map_dat || G.loaded_track != track)) {
+            char path[512];
+            uint32_t gs, ms;
+            snprintf(path, sizeof path, "%s/DATA/GAME.DAT", dir);
+            uint8_t *g = host_file(path, &gs);
+            snprintf(path, sizeof path, "%s/DATA/MAP%d.DAT", dir, track);
+            uint8_t *m = host_file(path, &ms);
+            if(g && m) s2car_set_data(g, gs, m, ms);
+        }
+    }
     if(!G.game_dat || !G.map_dat) return 0;
 #endif
     G.track = track;
@@ -1230,8 +1280,10 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
     RF(0x4e0) = placed(gz);
     memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);
     corners(c);
-    against_wall(c);
-    ground_under_wheels(c);
+    struct corner_ground under[4];
+    look_under_corners(c, under);
+    against_wall(c, under);
+    ground_under_wheels(c, under);
     for(int i = 0; i < 4; i++) {
         int w = WH(i);
         RI(w) = 0;
@@ -1242,8 +1294,9 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
     for(int i = 0; i < 4; i++) RI(WH(i)) = 0;
     memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);
     speed_and_way(c);
-    against_wall(c);
-    ground_under_wheels(c);
+    look_under_corners(c, under);
+    against_wall(c, under);
+    ground_under_wheels(c, under);
     make_car(c, track);
     outputs(c, 0);
     return 1;

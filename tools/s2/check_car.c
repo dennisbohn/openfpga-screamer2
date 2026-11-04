@@ -20,15 +20,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* what a step costs, counted (ld --wrap): the trigonometry and the ground queries */
+static long n_sin, n_cos, n_atan, n_ground, n_ground_found;
+float __real_sinf(float x);
+float __real_cosf(float x);
+float __real_atanf(float x);
+float __wrap_sinf(float x) { n_sin++; return __real_sinf(x); }
+float __wrap_cosf(float x) { n_cos++; return __real_cosf(x); }
+float __wrap_atanf(float x) { n_atan++; return __real_atanf(x); }
+
 /* the ground and the road replaced by a level world (ld --wrap) */
 static int g_flat = -1;
-int __real_track_ground_s2(int x, int y, int only_whether, int *height, int normal[3], int *kind);
+int __real_track_ground_s2(int x, int y, int *held, int *height, int normal[3], int *kind);
 const struct track_dir *__real_track_dirs(int *n);
 const struct track_wall *__real_track_walls(int *n);
-int __wrap_track_ground_s2(int x, int y, int only_whether, int *height, int normal[3], int *kind)
+int __wrap_track_ground_s2(int x, int y, int *held, int *height, int normal[3], int *kind)
 {
-    if(g_flat < 0) return __real_track_ground_s2(x, y, only_whether, height, normal, kind);
-    *height = 0; normal[0] = 0; normal[1] = 16384; normal[2] = 0; *kind = g_flat;
+    n_ground++;
+    if(g_flat < 0) return __real_track_ground_s2(x, y, held, height, normal, kind);
+    *held = 1; *height = 0; normal[0] = 0; normal[1] = 16384; normal[2] = 0; *kind = g_flat;
     return 1;
 }
 const struct track_dir *__wrap_track_dirs(int *n)
@@ -204,6 +214,8 @@ int main(int argc, char **argv)
         record(&s, k, &in);
     }
     if(sanity) {
+        printf("per step: sinf %.1f cosf %.1f atanf %.1f, ground queries %.1f%s", (double)n_sin / (rows - 1), (double)n_cos / (rows - 1),
+               (double)n_atan / (rows - 1), (double)n_ground / (rows - 1), "\n");
         printf("step     x        y   height  speed  gear   rpm  wheels  heading\n");
         for(int k = 0; k < rows; k += 50)
             printf("%4d %8.0f %8.0f %6.0f %6.1f %4.0f %6.0f %5.2f %8.4f\n", k, ours[k][C_X], ours[k][C_Y], ours[k][C_H], ours[k][C_SPEED],

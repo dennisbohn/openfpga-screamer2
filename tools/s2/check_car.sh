@@ -88,6 +88,6 @@ for n in 1 2 3 4 5 6 7; do
 done
 
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -v "$ref_mount:/ref:ro" --entrypoint sh verilator/verilator:v5.050 -c "
-    cd /b/s2/carsrc && gcc -O2 -w -DS2_WHOLE_PLACES=1 -o ../check_car_whole check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls &&
-    gcc -O2 -w -o ../check_car_float check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls &&
+    cd /b/s2/carsrc && gcc -O2 -w -DS2_WHOLE_PLACES=1 -o ../check_car_whole check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls,--wrap=sinf,--wrap=cosf,--wrap=atanf &&
+    gcc -O2 -w -o ../check_car_float check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls,--wrap=sinf,--wrap=cosf,--wrap=atanf &&
     cd /b/s2 && sh car_runs.sh" 2>&1 | tee "$out/car_check.txt"

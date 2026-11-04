@@ -39,9 +39,10 @@ int track_under(float x, float y, float *h, int *grass);
 /* Screamer 2's ground query (the car model, s2car.c): the drivable surface under the whole-number place
    (x, y), as the game's 0x28ce6 finds it (the rules are in track.c): 1 and the height (units, up), the plane's
    normal as whole numbers (not made to point up) and the placement's road kind (a ROAD KINDS id of the track's
-   MAPnDAT.DTR; 0 if the image has no kinds); only_whether: just whether a face holds the point (the walls' test).
-   0 over nothing. */
-int track_ground_s2(int x, int y, int only_whether, int *height, int normal[3], int *kind);
+   MAPnDAT.DTR; 0 if the image has no kinds). *held is set if some face holds the point even without a plane
+   (the game's second question, whether there is ground at all, which the walls ask), so held is 1 whenever
+   the answer is 1. 0 over nothing. */
+int track_ground_s2(int x, int y, int *held, int *height, int normal[3], int *kind);
 /* after track_under found a height: the tilt that lays a thing heading yaw on that face, as the
    game stands an opponent (0x1cb9c), given its forward (fx, fy) = (sin yaw, -cos yaw); pitch +
    nose up, roll + right side up */

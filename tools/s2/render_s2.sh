@@ -33,9 +33,12 @@ outdir=$(dirname "$2")
 shift 2
 # the car physics behind firmware/s2car.h: the real s2car*.c when there is s2car.c, else the stand-in (firmware/Makefile)
 car=s2car_stub.c
-if [ -f "$root/firmware/s2car.c" ]; then car=$(cd "$root/firmware" && ls s2car*.c | grep -v '^s2car_stub.c$' | tr '\n' ' '); fi
+if [ -f "$root/firmware/s2car.c" ]; then car=$(cd "$root/firmware" && ls s2car*.c | grep -v '^s2car_stub.c$' | tr '\n' ' '); car="$car s2params.c"; fi
 LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c $car"
-MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" --entrypoint sh verilator/verilator:v5.050 -c "
+# the real car physics reads its numbers from the unzipped game (DATA/GAME.DAT, DATA/MAPn.DAT): $GAME_DIR, default as elsewhere
+game=${GAME_DIR:-C:/GOG Games/Screamer 2}
+if command -v cygpath >/dev/null 2>&1; then game_mount=$(cygpath -wa "$game"); else game_mount=$game; fi
+MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2host/src && gcc -O2 -w ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../render_s2 render_s2.c $LIST -lm &&
     cd /b/s2host && ./render_s2 $img $prefix $*"
 mv "$root/build/s2host/$prefix"*.rgb "$outdir/"

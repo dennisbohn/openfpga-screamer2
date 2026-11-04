@@ -724,8 +724,9 @@ int track_under(float x, float y, float *h, int *grass)
    box of its corners and on the inner side (>= 0) of every edge of a TRIANGLE of it -- corners 0 1 2, or for a
    quad else 0 2 3 -- one winding only. The plane is that triangle's (n = A x B with A = corner 0 less the second,
    B = corner 0 less the third; a triangle on edge, n.height 0, is passed over); the height is the second
-   corner's less ((point - it) . n) / n.height, the division cut off. only_whether: any face that holds the
-   point will do (no plane, a triangle on edge counts too). *normal is the plane's n turned back into the
+   corner's less ((point - it) . n) / n.height, the division cut off. *held: set when any face holds the
+   point, a triangle on edge too (the walls' test: the game asks the same question without the plane); the answer
+   is found only with a plane. *normal is the plane's n turned back into the
    world, as it is (not made to point up); *kind the placement's road kind. 1 if found. Integer products wrap
    as the game's 32 bit ones. */
 static inline int32_t imul(int32_t a, int32_t b) { return (int32_t)((uint32_t)a * (uint32_t)b); }
@@ -735,8 +736,9 @@ static inline int s2_edge(const struct cface *q, int a, int b, int px, int pz)
     return imul((int)q->x[a] - q->x[b], pz - q->z[a]) + imul((int)q->z[b] - q->z[a], px - q->x[a]);
 }
 
-int track_ground_s2(int x, int y, int only_whether, int *height, int normal[3], int *kind)
+int track_ground_s2(int x, int y, int *held, int *height, int normal[3], int *kind)
 {
+    *held = 0;
     static const int8_t cell[9][2] = { {0,0}, {1,0}, {-1,0}, {0,1}, {0,-1}, {1,1}, {-1,-1}, {1,-1}, {-1,1} };
     int cx = (x + 0x100000) >> 13, cy = (y + 0x100000) >> 13;
     for(int ci = 0; ci < 9; ci++) {
@@ -771,7 +773,7 @@ int track_ground_s2(int x, int y, int only_whether, int *height, int normal[3], 
                     else if(q->nc == 4 && s2_edge(q, 0, 2, lx, lz) >= 0 && s2_edge(q, 2, 3, lx, lz) >= 0 &&
                             s2_edge(q, 3, 0, lx, lz) >= 0) which = 2;
                     if(!which) continue;
-                    if(only_whether) { *kind = gp->kind; return 1; }
+                    if(!*held) { *held = 1; *kind = gp->kind; }         /* the first face that holds the point answers the walls' test */
                     int a = which, b = which + 1;
                     int ax = q->x[0] - q->x[a], ay = q->y[0] - q->y[a], az = q->z[0] - q->z[a];
                     int qx = q->x[0] - q->x[b], qy = q->y[0] - q->y[b], qz = q->z[0] - q->z[b];
