@@ -15,7 +15,17 @@
  * (the car's place each frame, the wheels' heights) that stays; the cut-off comes back as speed, so the
  * car's slow creep sideways on the grid is the game's (S2-5l) but not bit for bit. The easing tables are those
  * of a 50 frames a second step: (0.5 + 0.005 i). Nothing needs double.
+ *
+ * THE CAR'S PLACE. The game keeps x and z of the car's middle as whole numbers, the fraction cut off towards the
+ * map's origin every frame (0x1c7f8, 0x1e529; the height too). The game ran at 10 to 20 frames a second, where that
+ * loses little; at 50 a second it eats up to a unit a frame, which is enough to stop a car that heads away from the
+ * origin (docs/screamer2/driving.md). Here the place is a float (words 0x4d8 and 0x4e0 hold floats, and so do their
+ * copies at 0x734), kept to the fraction. -DS2_WHOLE_PLACES=1 cuts it as the game does: that is how the host test
+ * (tools/s2/check_car.sh) follows the reference traces step for step. The heights stay whole numbers.
  */
+#ifndef S2_WHOLE_PLACES
+#define S2_WHOLE_PLACES 0
+#endif
 #include "s2car.h"
 #include "s2params.h"
 #include "track.h"
@@ -169,6 +179,9 @@ static int32_t cut(float f)
     return (int32_t)f;
 }
 
+/* the place after the game's cut (or not, see above) */
+static float placed(float f) { return S2_WHOLE_PLACES ? (float)cut(f) : f; }
+
 static float easing(int i) { return 0.5f + (float)(i < 0 ? 0 : i > 99 ? 99 : i) * 0.005f; }
 
 /* 0x111d6: a float eased towards a target by the row of the easing table; 0x11212 the same for a whole number */
@@ -255,8 +268,8 @@ static void corners(car_t *c)
         int o = at[i];
         /* the game adds the middle (about 1e5) and the two offsets (about 4e2) in 64 bits and rounds once; the
            offsets first, then the big one, rounds once as well (the float has a 128th of a unit left at 1e5) */
-        RF(o) = (float)RI(0x4d8) + ((float)sa[i] * ahead[0] + (float)ss[i] * side[0]);
-        RF(o + 8) = (float)RI(0x4e0) + ((float)sa[i] * ahead[2] + (float)ss[i] * side[2]);
+        RF(o) = RF(0x4d8) + ((float)sa[i] * ahead[0] + (float)ss[i] * side[0]);
+        RF(o + 8) = RF(0x4e0) + ((float)sa[i] * ahead[2] + (float)ss[i] * side[2]);
         RF(o + 4) = (float)RI(0x4dc) + ((float)sa[i] * ahead[1] + (float)ss[i] * side[1]);
     }
     for(int i = 0; i < 4; i++) {
@@ -297,10 +310,15 @@ static void angles_from_corners(car_t *c)
     hold_angle(c, 0x4e4);
     hold_angle(c, 0x4ec);
     float m[3];
-    for(int k = 0; k < 3; k++)
-        m[k] = (((RF(CORNER(2) + 4 * k) + RF(CORNER(0) + 4 * k)) + RF(CORNER(3) + 4 * k)) + RF(CORNER(1) + 4 * k)) * 0.25f;
-    RI(0x4d8) = cut(m[0]);
-    RI(0x4e0) = cut(m[2]);
+    for(int k = 0; k < 3; k++) {
+        if(S2_WHOLE_PLACES)                             /* the game's order of sums */
+            m[k] = (((RF(CORNER(2) + 4 * k) + RF(CORNER(0) + 4 * k)) + RF(CORNER(3) + 4 * k)) + RF(CORNER(1) + 4 * k)) * 0.25f;
+        else                                            /* the corners' offsets from one of them first: one rounding of the big number */
+            m[k] = RF(CORNER(0) + 4 * k) + (((RF(CORNER(2) + 4 * k) - RF(CORNER(0) + 4 * k)) + (RF(CORNER(3) + 4 * k) - RF(CORNER(0) + 4 * k)))
+                                            + (RF(CORNER(1) + 4 * k) - RF(CORNER(0) + 4 * k))) * 0.25f;
+    }
+    RF(0x4d8) = placed(m[0]);
+    RF(0x4e0) = placed(m[2]);
     for(int i = 0; i < 4; i++) RF(0x518 + 0xc * i) = (float)RI(0x5a4 + 0x70 * i);
     RF(0xc14) = atanf((float)(RI(0x5b8) - RI(0x698)) / (float)RI(0x4c8));
     RF(0xc0c) = atanf((float)(RI(0x698) - RI(0x708)) / (float)RI(0x4d0));
@@ -446,11 +464,11 @@ static void against_wall(car_t *c)
         if(!(fabsf(ang_diff(move, to_wall)) >= 1.5707963705f)) { RI(0x150) = 0; return; }
         break;
     }
-    RI(0x4d8) += RI(0x154);
-    RI(0x4e0) += RI(0x15c);
+    RF(0x4d8) += (float)RI(0x154);
+    RF(0x4e0) += (float)RI(0x15c);
     if(fabsf(ang_diff(RF(0x160), RF(0x4e8))) > 1.5707963705f) RF(0x160) = ang_diff(RF(0x160), PI_F);
     int push = PUSH(hit);
-    float P[3] = { (float)RI(0x4d8), 0.0f, (float)RI(0x4e0) };
+    float P[3] = { RF(0x4d8), 0.0f, RF(0x4e0) };
     float D[3] = { sinf(RF(0x4e8)), 0.0f, -cosf(RF(0x4e8)) };
     float Q[3] = { (float)G.wall->x, (float)RI(0x4dc), (float)G.wall->y };
     float E[3] = { sinf(RF(0x160)), 0.0f, -cosf(RF(0x160)) };
@@ -566,7 +584,7 @@ static void springs(car_t *c)
 /* 0x1e529: the car's speed and way from where its middle went; the wheels' pushes; after a knock their cap */
 static void speed_and_way(car_t *c)
 {
-    float dx = (float)(RI(0x4d8) - RI(0x734)), dz = (float)(RI(0x4e0) - RI(0x73c)), dy = (float)(RI(0x4dc) - RI(0x738));
+    float dx = RF(0x4d8) - RF(0x734), dz = RF(0x4e0) - RF(0x73c), dy = (float)(RI(0x4dc) - RI(0x738));
     if(dx == 0.0f && dz == 0.0f) RF(0x508) = RF(0x4e8);
     else RF(0x508) = ground_angle(dx, dz);
     const float dt = DT;
@@ -594,8 +612,8 @@ static void speed_and_way(car_t *c)
         }
     }
     RI(0x34) = 0;
-    RI(0x4d8) = cut((float)RI(0x4d8) + best[0]);
-    RI(0x4e0) = cut((float)RI(0x4e0) + best[2]);
+    RF(0x4d8) = placed(RF(0x4d8) + best[0]);
+    RF(0x4e0) = placed(RF(0x4e0) + best[2]);
     float h = -sqrtf(dz * dz + dx * dx);
     if(h == 0.0f) RI(0x50c) = 0;
     else RF(0x50c) = ground_angle(dy, h);
@@ -763,7 +781,7 @@ static void tyres(car_t *c, int *squeal)
     if(!(RF(0x510) <= 0.0f) && !(RF(0xc34) >= 0.93f)) *squeal = 1;
     angles_from_corners(c);
     corners(c);
-    find_road(RI(0x4d8), RI(0x4e0));
+    find_road(cut(RF(0x4d8)), cut(RF(0x4e0)));
     RF(0x4c4) = G.road_heading;
 }
 
@@ -992,8 +1010,8 @@ static void chase_camera(car_t *c)
 
 static void outputs(car_t *c, int squeal)
 {
-    c->pos[0] = (float)RI(0x4d8);
-    c->pos[1] = (float)RI(0x4e0);
+    c->pos[0] = RF(0x4d8);
+    c->pos[1] = RF(0x4e0);
     c->pos[2] = (float)RI(0x4dc);
     c->yaw = RF(0x4e8);
     c->pitch = RF(0x4e4);
@@ -1006,7 +1024,7 @@ static void outputs(car_t *c, int squeal)
     float r[3] = { -cy * cr + sy * sp * sr, -sy * cr - cy * sp * sr, cp * sr };
     float u[3] = { r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0] };
     for(int k = 0; k < 3; k++) { c->rot[3 * k] = r[k]; c->rot[3 * k + 1] = u[k]; c->rot[3 * k + 2] = f[k]; }
-    float dx = (float)(RI(0x4d8) - RI(0x734)), dy = (float)(RI(0x4dc) - RI(0x738)), dz = (float)(RI(0x4e0) - RI(0x73c));
+    float dx = RF(0x4d8) - RF(0x734), dy = (float)(RI(0x4dc) - RI(0x738)), dz = RF(0x4e0) - RF(0x73c);
     c->vel[0] = dx / DT; c->vel[1] = dz / DT; c->vel[2] = dy / DT;
     c->speed_kmh = RF(0x500) * 1.513f;                  /* the dial: the port's factor (docs/screamer2/driving.md) */
     c->speed_mph = c->speed_kmh * 0.6214f;
@@ -1022,13 +1040,13 @@ static void outputs(car_t *c, int squeal)
     c->hit_wall = RI(0x150) != 0;
     c->braking = RF(0x1e4) + RF(0x1e8) > 0.0f;
     int h, n[3], k;
-    c->off_track = !track_ground_s2(RI(0x4d8), RI(0x4e0), 1, &h, n, &k);
+    c->off_track = !track_ground_s2(cut(RF(0x4d8)), cut(RF(0x4e0)), 1, &h, n, &k);
     chase_camera(c);
     c->cam[3] = c->camst[2];
     c->cam[4] = c->camst[1];
     c->cam[5] = c->camst[3];
-    c->cam[0] = (float)cut((float)RI(0x4d8) - sinf(c->cam[3]) * c->camst[0] * cosf(c->cam[4]));
-    c->cam[1] = (float)cut(cosf(c->cam[3]) * c->camst[0] * cosf(c->cam[4]) + (float)RI(0x4e0));
+    c->cam[0] = RF(0x4d8) - sinf(c->cam[3]) * c->camst[0] * cosf(c->cam[4]);
+    c->cam[1] = cosf(c->cam[3]) * c->camst[0] * cosf(c->cam[4]) + RF(0x4e0);
     c->cam[2] = c->camst[4];
 }
 
@@ -1191,15 +1209,15 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
     RI(0x4c8) = RI(0x5ac) - RI(0x68c) < 0 ? RI(0x68c) - RI(0x5ac) : RI(0x5ac) - RI(0x68c);
     RF(0xc34) = 1.0f;
     float x0 = (float)G.start_x, z0 = (float)G.start_z;
-    RI(0x4d8) = cut(x0);
-    RI(0x4e0) = cut(z0);
+    RF(0x4d8) = placed(x0);
+    RF(0x4e0) = placed(z0);
     RI(0x4dc) = -100000;
     for(int i = 0; i < 4; i++) {
         int w = WH(i);
         RI(w + 0x30) = -100000;
         RI(w + 8) = 1;
     }
-    find_road(RI(0x4d8), RI(0x4e0));
+    find_road(cut(RF(0x4d8)), cut(RF(0x4e0)));
     RF(0x4c4) = G.road_heading;
     RF(0x4e8) = RF(0x4c4);
     RF(0x508) = RF(0x4e8);
@@ -1208,8 +1226,8 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
     float a = RF(0x4e8);
     float gx = (float)k * sinf(a + HALF_PI_F) * 1000.0f + (float)grid * sinf(a + PI_F) * 2000.0f + x0;
     float gz = z0 - ((float)k * cosf(a + HALF_PI_F) * 1000.0f + (float)grid * cosf(a + PI_F) * 2000.0f);
-    RI(0x4d8) = cut(gx);
-    RI(0x4e0) = cut(gz);
+    RF(0x4d8) = placed(gx);
+    RF(0x4e0) = placed(gz);
     memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);
     corners(c);
     against_wall(c);
@@ -1234,7 +1252,7 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
 void s2car_put(struct s2car_state *s, int x, int y, float heading)
 {
     car_t *c = s;
-    RI(0x4d8) = x; RI(0x4e0) = y; RI(0x4dc) = 0;
+    RF(0x4d8) = (float)x; RF(0x4e0) = (float)y; RI(0x4dc) = 0;
     RF(0x4e8) = heading;
     corners(c);
     memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);

@@ -11,22 +11,26 @@
 #   reference folder  default $REF_DIR or ../ref next to the repository: scn/<name>.txt and traces/<name>.t<track>
 #                     [.flat<kind>].team<T>.model<M>.dt20.csv (the traces hold the game's numbers: never committed)
 #   scenario          names as in scn/ (a_full_throttle, b_steer_lr, c_brake, d_offroad, e_wall, f_jump, a_flat,
-#                     b_flat, c_flat, g_manual, d_surface); default: all that have a trace
+#                     b_flat, c_flat, g_manual, d_surface) and tools/s2/car_scenarios/ (a_origin, b_origin, c_origin: level
+#                     ground heading towards the map's origin, where the game's whole-number places do the least harm; their
+#                     traces are made with the reference runner into $ref/traces_benign); default: all that have a trace
 # Everything it writes stays in build/s2/ (images, our traces as car_<name>.csv, the log car_check.txt).
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
 game=${1:-${GAME_DIR:-C:/GOG Games/Screamer 2}}
 ref=${2:-${REF_DIR:-$root/../ref}}
-[ $# -gt 2 ] && { shift 2; names="$*"; } || names="a_full_throttle b_steer_lr c_brake d_offroad e_wall f_jump a_flat b_flat c_flat g_manual d_surface"
+[ $# -gt 2 ] && { shift 2; names="$*"; } || names="a_full_throttle b_steer_lr c_brake d_offroad e_wall f_jump a_flat b_flat c_flat g_manual d_surface a_origin b_origin c_origin"
 out="$root/build/s2"
 src="$out/carsrc"
-mkdir -p "$out"
+mkdir -p "$out/scn"
+cp "$root"/tools/s2/car_scenarios/*.txt "$out/scn/"
+cp "$ref"/scn/*.txt "$out/scn/" 2>/dev/null || true
 ls "$ref"/traces*/*.dt20.csv > /dev/null 2>&1 || { echo "no reference traces in $ref/traces"; exit 1; }
 py=python3
 "$py" -c "" 2>/dev/null || py=python     # Windows: python3 may be the Store's stub
 
 # the images (the car models, the ground, the walls and road points): one per track used
-for n in 1 3 4 7; do
+for n in 1 2 3 4 5 6 7; do
     [ -f "$out/ref$n.bin" ] || "$py" -I "$root/tools/s2/make_track_s2.py" "$game" "$n" "$out/ref$n.bin" > /dev/null
 done
 
@@ -56,7 +60,8 @@ else
 fi
 LIST="track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c s2params.c s2car.c"
 
-# the runs: one line each into a script for the container
+# the runs: one line each into a script for the container, each with the car's place cut to whole numbers as the
+# game does (the first run: it follows the reference step for step) and with the place kept as a float (the firmware)
 script="$out/car_runs.sh"
 : > "$script"
 seen=""
@@ -72,10 +77,17 @@ for name in $names; do
         model=$(echo "$base" | sed 's/.*\.model\([0-9]\)$/\1/')
         flat=$(echo "$base" | sed -n 's/.*\.flat\([0-9]*\)\..*/\1/p'); [ -n "$flat" ] || flat=-1
         img=1; case $track in 3|4|7) img=$track;; esac
-        echo "echo '== $base'; ./check_car /game ref$img.bin /ref/scn/$name.txt /ref/$rel $track $team $model $flat car_$base.csv || echo FAILED" >> "$script"
+        for mode in whole float; do
+            echo "echo '== $base ($mode places)'; ./check_car_$mode /game ref$img.bin /b/s2/scn/$name.txt /ref/$rel $track $team $model $flat car_${mode}_$base.csv || echo FAILED" >> "$script"
+        done
     done
+done
+# and the car alone on every track from its grid place, 10 s of full throttle: where it goes (no reference)
+for n in 1 2 3 4 5 6 7; do
+    echo "echo '== grid place of track $n, full throttle (float places)'; ./check_car_float /game ref$n.bin scn/car_drive.txt - $n 0 1 -1" >> "$script"
 done
 
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -v "$ref_mount:/ref:ro" --entrypoint sh verilator/verilator:v5.050 -c "
-    cd /b/s2/carsrc && gcc -O2 -w -o ../check_car check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls &&
+    cd /b/s2/carsrc && gcc -O2 -w -DS2_WHOLE_PLACES=1 -o ../check_car_whole check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls &&
+    gcc -O2 -w -o ../check_car_float check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls &&
     cd /b/s2 && sh car_runs.sh" 2>&1 | tee "$out/car_check.txt"

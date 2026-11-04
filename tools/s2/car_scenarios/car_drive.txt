@@ -1,0 +1,3 @@
+# the car alone on a real track from its grid place: full throttle for 10 s (no reference: tools/s2/check_car.sh prints its course)
+@steps 500
+0 A

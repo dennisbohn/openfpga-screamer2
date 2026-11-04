@@ -109,8 +109,8 @@ static void record(struct s2car_state *s, int row, const struct s2car_input *in)
     union { uint32_t u; float f; int32_t i; } *w = (void *)s->rec;
 #define RF(o) w[(o) >> 2].f
 #define RI(o) w[(o) >> 2].i
-    ours[row][C_X] = RI(0x4d8);
-    ours[row][C_Y] = RI(0x4e0);
+    ours[row][C_X] = RF(0x4d8);
+    ours[row][C_Y] = RF(0x4e0);
     ours[row][C_H] = RI(0x4dc);
     ours[row][C_HEADING] = RF(0x4e8);
     ours[row][C_PITCH] = RF(0x4e4);
@@ -177,7 +177,8 @@ int main(int argc, char **argv)
         }
     }
     fclose(sf);
-    int rows = read_trace(argv[4]);
+    int sanity = !strcmp(argv[4], "-");                   /* no trace: just run the scenario and print its course */
+    int rows = sanity ? steps + 1 : read_trace(argv[4]);
     if(steps + 1 < rows) rows = steps + 1;
 
     g_flat = flat;
@@ -201,6 +202,13 @@ int main(int argc, char **argv)
         }
         s2car_step(&s, &in);
         record(&s, k, &in);
+    }
+    if(sanity) {
+        printf("step     x        y   height  speed  gear   rpm  wheels  heading\n");
+        for(int k = 0; k < rows; k += 50)
+            printf("%4d %8.0f %8.0f %6.0f %6.1f %4.0f %6.0f %5.2f %8.4f\n", k, ours[k][C_X], ours[k][C_Y], ours[k][C_H], ours[k][C_SPEED],
+                   ours[k][C_GEAR], ours[k][C_RPM], ours[k][C_WHEELS], ours[k][C_HEADING]);
+        return 0;
     }
     printf("%-12s %12s %8s %12s   (%d steps: scenario %s)\n", "quantity", "max |diff|", "at step", "mean |diff|", rows - 1, argv[3]);
     for(int c = 0; c < C_N; c++) {
