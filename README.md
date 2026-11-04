@@ -28,6 +28,8 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   gaps: white car windows, no shadows, smoke, props, fade, night, mirror, menus, sound, music.
 - **Driving mode:** Start in the viewer puts the player's car on the start line and lets you drive it with
   Screamer 1's buttons (B gas, Y brake, d-pad steering, L / R gears), from the physics' chase camera, with speed
-  and gear on the screen. The car physics sits behind `firmware/s2car.h`; until the real physics
-  (`firmware/s2car.c`) is merged a kinematic stand-in (`firmware/s2car_stub.c`) drives the car: it is not
-  the game's car. Docs: docs/development.md, "Driving mode".
+  and gear on the screen. The car is the game's own model in single precision (`firmware/s2car.c`, ported from
+  OpenScreamer's routines; the car's numbers read from the game's files, `firmware/s2params.c`), checked against traces of
+  the original's routines (docs/screamer2/driving.md): equal on level ground, in the first wall hit and in a jump, the
+  car's place kept as a float (the original's whole-number places hold a car back at 50 steps a second). The stand-in
+  `firmware/s2car_stub.c` is only built when `s2car.c` is missing. Docs: docs/development.md, "Driving mode".

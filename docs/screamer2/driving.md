@@ -107,7 +107,39 @@ level-ground top speed 104 against 125, which is the cut-off again).
 | `tools/s2/check_track_build_s2.sh` | the image with the road kinds, byte for byte against `make_track_s2.py`, seven tracks |
 | `tools/s2/check_car.sh` | the car against the reference traces of the same routines in OpenScreamer, run natively in float32 on the image of each track, with the place cut as the game does and kept as a float |
 
-RESULTS
+### Against the reference (`tools/s2/check_car.sh`, 20 ms steps, the car of the arcade default: team 1, car 2)
+
+The reference traces are OpenScreamer's routines (x87) driven by the same scripted keys, one row per step (82 files: 20
+cars on level ground, steering, braking, a wall, the grass, a jump, 20 road kinds, the manual gearbox, tracks 1, 3, 4 and
+7). Our car runs the same script natively in float32 on the real image of the track. Two builds: the place cut as the
+game does (`S2_WHOLE_PLACES=1`, which has to agree with the reference) and the place as a float (the firmware).
+
+With the game's whole-number places (the check of the port itself):
+
+| Scenario | Result |
+|---|---|
+| level ground from track 1's grid, full throttle 20 s (cars 1 and 2: gears 1 to 4, 104 at the top) | position equal to 1 unit and speed equal to 0.00 km/h over all 1000 steps; cars 3 and 4: 5 and 25 units after 340 and 225 steps; car 5 of team 1 (rear drive, 1.1 x power) leaves the reference at step 27 (on the real track the reference itself runs away to 1e9 km/h at step 978) |
+| steering left and right (b), braking (c), the manual gearbox (g), 20 road kinds (d) | equal to 0 to 1 units over 400 to 1000 steps; the gearbox 3; 17 of the 20 kinds equal, three (track 2: 26 and 33, track 6: 28) leave the reference after 111 to 172 steps by 23 to 1643 units |
+| the real track | track 1 equal to 2 units for 252 steps and the wall at step 247 hit on the same step with the same response (heading to 1e-4); track 7 follows through its wall at step 226 for 321 steps; track 4 for 178 (a wall at 186); braking to a stop on tracks 1 and 7 equal to 0 units; track 3, whose grid is on a slope, leaves the reference after 49 steps (a place's cut-off falls the other way by a unit; speeds within 4 % until a wall, step 378) |
+| a jump (track 4, f) | the car is off the ground from step 269 to 316 in both, the same 48 steps |
+| after a wall or a long run | the same kind of run, not the same run: the first contact moves the car by whole units and a last bit decides the rest; 5 s later two runs are 50 to 100 km/h apart |
+
+With the place kept as a float (what the Pocket runs), on level ground:
+
+| Scenario | Float places | Reference |
+|---|---|---|
+| from track 1's grid, full throttle | 126.6 at the top | 104.0 (the cut-off holds it back) |
+| towards the origin (benign for the reference), full throttle | 126.6 | 127.0 |
+| the same with steering left 50 to 200, right 200 to 350 | 126.5 | 127.8 |
+| braking from the top towards the origin | stops (0) | cannot get below 22.9 |
+
+So the top speed is the model's own (127) within 0.3 %, the acceleration (17.6 at 0.5 s, 39.6 at 1 s, 85.1 at 2 s) is the
+reference's to its last digit while the place's cut-off does not matter, and the creep that holds the original back at 50
+steps a second is gone.
+
+Cost of a step, counted natively per step (tracks 1 to 7 alike): 4 ground looks (each the game's 9-cell search), about
+20 `atanf`, 2 `sinf`, 4 `cosf` and the `sincosf` of the corners' turns; the time on the Pocket's CPU is in the report of
+the simulation (`docs/development.md`).
 
 ## Open points
 

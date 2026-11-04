@@ -1318,8 +1318,12 @@ void s2car_camera(const struct s2car_state *s, struct track_cam *cam)
 
 void s2car_look(const struct s2car_state *s, struct car_look *lk)
 {
-    /* car_look (car.h): pitch + tail up (the game's: nose up), steer + right */
-    *lk = (struct car_look){ s->pos[0], s->pos[1], s->pos[2], s->yaw, -s->pitch, s->roll, s->body_pitch * 2.0f,
-                             s->body_roll * 4.0f, s->wheel_spin[0], -s->wheel_steer,
+    /* car_look (car.h): the pose as the renderer takes it: yaw grows to the left (the game's too), pitch + tail up (the
+       game's is nose up: negated), roll as the game's (S1's car_player_look negates S1's own roll, whose sign is the
+       other way), the body's lean (the game's values are the angles the four body blocks are turned by, 0x16878) in the
+       same senses as the car's angles, the wheels' turn as the game's, the steering + right (the game's: + left).
+       The tilt's signs were not seen drawn on a slope. */
+    *lk = (struct car_look){ s->pos[0], s->pos[1], s->pos[2], s->yaw, -s->pitch, s->roll, -s->body_pitch,
+                             s->body_roll, s->wheel_spin[0], -s->wheel_steer,
                              (s->braking ? 0u : 0x4000u) >> 2 };
 }
