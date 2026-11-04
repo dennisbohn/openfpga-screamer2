@@ -39,6 +39,11 @@ uint32_t tb_mmp_vis(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t ca
 uint32_t tb_mmp_ground(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t cap,
                        uint32_t *count);
 
+/* The road kinds of the placements (Screamer 2, header 0x74): one byte per placement, in the order of
+   tb_mmp_placements(): the low byte of the record's word +0x3C, the id of a ROAD KINDS row of the track's
+   MAPnDAT.DTR (36 asphalt, 27 grass on track 1). 0 if a record's word does not fit a byte. */
+uint32_t tb_mmp_kinds(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t cap, uint32_t *count);
+
 /* The road points (header 0x4C): every cell's array 2 unchanged, 12 bytes each (float angle,
    int32 x, y); the walls (header 0x54): array 3, 28 bytes each (float angle, int32 x, y, x1,
    y1, x2, y2); the cells row by row */

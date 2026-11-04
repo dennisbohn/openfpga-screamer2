@@ -216,6 +216,24 @@ uint32_t tb_mmp_vis(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t ca
     return VIS_HEAD + VIS_CELL * ncells + 2 * entries;
 }
 
+uint32_t tb_mmp_kinds(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t cap, uint32_t *count)
+{
+    struct walk w = { mmp, size, 0, 0, 0 };
+    struct cell c;
+    uint32_t n = 0;
+    while(next_cell(&w, &c)) {
+        for(uint32_t j = 0; j < c.n0 + c.n1; j++) {
+            if(n >= cap) return 0;
+            const uint8_t *r = mmp + record(&c, j);
+            if(get32(r + 0x3C) > 255) return 0;
+            out[n++] = r[0x3C];
+        }
+    }
+    if(w.bad) return 0;
+    *count = n;
+    return n;
+}
+
 /* Two walks over the placements: the first counts each grid cell's pieces into first[cell + 1]
    and sums them up, so first[cell] is where the cell's list starts; the second writes the
    numbers, first[cell] counting along to the end of its list; first[] then moves up by one. */

@@ -24,8 +24,8 @@ Image layout, version 7 (the version 6 of tools/make_track.py with the car mater
   then   UNR, palette, placements (and after them the cells' visibility table, visibility() below), camera path
          (empty), ground index, markers (empty), cars (one row),
          car models (5 .3DX, faces moved onto the car materials), road points, walls, race screen
-         (empty), backdrop, opponents (empty); header 0x5C the start (road point 0), 0x70 the far plane
-         (positive units), 0x74 0, 0x7C the background colour, as tools/make_track.py otherwise.
+         (empty), backdrop, opponents (empty), road kinds; header 0x5C the start (road point 0), 0x70 the far plane
+         (positive units), 0x74 the offset of the road kinds (one byte a placement, the last section), 0x7C the background colour, as tools/make_track.py otherwise.
 
 Usage: python tools/s2/make_track_s2.py <Screamer 2 folder> <track 1..7> <out.bin> [H|L] [look 0|1]
   S2START_ROAD=k in the environment: the player's start place is road point k (MMP array 2) instead of
@@ -45,8 +45,8 @@ import datfile
 src = open(os.path.join(tools, "make_track.py")).read()
 ns = {"__file__": os.path.join(tools, "make_track.py"), "__name__": "make_track"}
 exec(compile(src.rsplit("\nmain()", 1)[0], "make_track.py", "exec"), ns)
-placements, ground_index, cell_arrays, car_model, pcx = (
-    ns[k] for k in ("placements", "ground_index", "cell_arrays", "car_model", "pcx"))
+placements, ground_index, cell_arrays, car_model, pcx, cells = (
+    ns[k] for k in ("placements", "ground_index", "cell_arrays", "car_model", "pcx", "cells"))
 BLOCK = ns["BLOCK"]
 FIRST = 0x100
 CARS = 5                                    # AUTO1..5 of a team
@@ -181,6 +181,18 @@ def car_faces_onto(x3d, delta):
     return bytes(x)
 
 
+def road_kinds(mmp):
+    """One byte per placement, in the order of placements(): the low byte of the record's word +0x3C (ROAD KIND id)"""
+    out = bytearray()
+    for c in cells(mmp):
+        n0, n1 = i32(mmp, c + 0x14), i32(mmp, c + 0x18)
+        for k in list(range(n0, n0 + n1)) + list(range(n0)):
+            v = i32(mmp, c + 0x28 + 64 * k + 0x3C)
+            assert 0 <= v < 256, f"road kind {v}"
+            out.append(v)
+    return bytes(out)
+
+
 def main():
     root, n, out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     detail = sys.argv[4] if len(sys.argv) > 4 else "H"
@@ -239,8 +251,8 @@ def main():
     opp = bytes(8)                                                      # ADAPTER: no opponents
 
     sections = [cmat, mlbsec, unr, pal, b"".join(struct.pack("<5i", *p) for p in pl) + visibility(mmp), b"", ground, b"",
-                cars, models, b"".join(dirs), b"".join(walls), hud, back, opp]
-    counts = [0, len(mlbsec), len(unr), 0, len(pl), 0, nground, 0, 1, CARS, len(dirs), len(walls), len(hud)]
+                cars, models, b"".join(dirs), b"".join(walls), hud, back, opp, road_kinds(mmp)]
+    counts = [0, len(mlbsec), len(unr), 0, len(pl), 0, nground, 0, 1, CARS, len(dirs), len(walls), len(hud), 0, 0, len(pl)]
     offs, pos = [], FIRST
     for s in sections:
         offs.append(pos)
@@ -255,7 +267,7 @@ def main():
         struct.pack("<2I", o[1], c[1]) + struct.pack("<I", o[2]) + \
         b"".join(struct.pack("<2I", o[k], c[k]) for k in range(3, 11)) + \
         struct.pack("<2if", sx_, sy_, sa) + struct.pack("<2I", o[11], c[11]) + \
-        struct.pack("<2i", far, 0) + struct.pack("<2I", o[12], colour) + \
+        struct.pack("<2i", far, o[14]) + struct.pack("<2I", o[12], colour) + \
         struct.pack("<2I", o[13], len(opp)) + \
         struct.pack("<2I", pos, len(crcs)) + struct.pack(f"<{len(crcs)}I", *crcs)
     assert len(head) <= 0x100, f"file too large for the block CRCs in the header ({len(crcs)} blocks)"

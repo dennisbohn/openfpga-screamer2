@@ -47,13 +47,17 @@ struct s2car_state {
     int on_ground;                      /* wheels on the ground, 0 .. 4 */
     int skid_flags;                     /* bit w set: wheel w skids (smoke); bit 4: the tyres squeal */
     int hit_wall;                       /* 1 on a step on which the car touched a wall */
+    int braking;                        /* the brake lights: the brake is down */
     int off_track;                      /* 1 if the car's middle has no drivable ground under it (for a reset rule) */
     float cam[6];                       /* the game's chase camera (view 3): x, y, height, yaw, pitch, roll, as track_cam */
     /* ---- input to the physics from the caller ---- */
     int manual;                         /* 1: gears by gear_up / gear_down (the game's MANUAL option); default 0 */
+    int stick;                          /* 1: input.steer is an analog axis (the game's control type 0: its curve, and a
+                                           car that steers 1.3 times as far); 0, the default: the d-pad's keys, the whole
+                                           lock to the side held (type 1). Either may change from step to step. */
     /* ---- private ---- */
     uint32_t rec[0xcc0 / 4];            /* the game's car record, word for word where the port keeps its layout */
-    float cam_yaw, cam_pitch;           /* the chase camera's eased angles */
+    float camst[5];                     /* the chase camera's eased distance, pitch, yaw, roll and height */
     int cam_started;
 };
 
@@ -63,12 +67,21 @@ struct s2car_state {
    1 if it worked, 0 if the track has no start or the params are missing. */
 int s2car_init(struct s2car_state *s, int team, int car, int track, const struct track_image *img);
 
+/* The game's containers the car's numbers come from: DATA/GAME.DAT (CARS.DTR) and DATA/MAPn.DAT of the track
+   (MAPnDAT.DTR, MAPnOPP.SPL). On the Pocket s2car_init() reads them from the ZIP itself (files_zip(), a few
+   KB); the host tests hand them over here before s2car_init(). */
+void s2car_set_data(const uint8_t *game_dat, uint32_t game_size, const uint8_t *map_dat, uint32_t map_size);
+
 /* ONE 20 ms step of the car; fills the outputs. */
 void s2car_step(struct s2car_state *s, const struct s2car_input *in);
 
 /* The car as car.h draws it (struct car_look): place, heading, tilt, body lean, the wheels' turn and
    steering, the texture phase of braking. */
 void s2car_look(const struct s2car_state *s, struct car_look *lk);
+
+/* A test of the reference (OpenScreamer's s2_put): the car at (x, y), height 0, facing heading, its corners worked out
+   and the last frame's record made the same. */
+void s2car_put(struct s2car_state *s, int x, int y, float heading);
 
 /* The chase camera as a track_cam (the same as cam[]) */
 void s2car_camera(const struct s2car_state *s, struct track_cam *cam);

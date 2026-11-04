@@ -106,6 +106,7 @@ static const struct track_dir *dirs;
 static int ndirs;
 static const struct track_wall *walls;
 static int nwalls;
+static const uint8_t *piece_kinds;     /* the road kind of each placement (header 0x74), NULL if the image has none */
 static float anim;                      /* the animation clock, 0..1 */
 static uint32_t piece_phase;            /* the pieces' texture phase: the clock (record +0x20 is -1) */
 static uint32_t clock16;                /* the animation clock, 16 bits (0x21538) */
@@ -116,7 +117,7 @@ static int16_t class_key[MAX_OBJ];      /* the key's change for each mesh's clas
    first face row in that order, with corners (x, z), normal, first corner, a box around them
    and whether the face is convex with an area (only then a point outside the box cannot be
    over it: a flat or bent face always gets the full test, so the answers stay the same) */
-struct cface { float x0, x1, z0, z1; int16_t x[4], z[4], n[3], v[3]; uint8_t nc, boxed; };
+struct cface { float x0, x1, z0, z1; int16_t x[4], z[4], y[4], n[3], v[3]; uint8_t nc, boxed; };
 #define MAX_CFACES  8192
 static struct cface cfaces[MAX_CFACES];
 static int ncfaces;
@@ -133,7 +134,7 @@ static struct cgrid { float x0, z0, sx, sz; int32_t at[CGRID * CGRID + 1]; } cgr
 static uint16_t clist[MAX_CLIST];       /* the cells' faces, from the mesh's first */
 /* the ground list's placements as track_under reads them, worked out once (the same values):
    place, its block's middle, the square of its reach, its turn; obj -1 if it has no faces */
-struct gpiece { float x, y, ox, oy, r2, c, s; int32_t obj, h; };
+struct gpiece { float x, y, ox, oy, r2, c, s; int32_t obj, h, br; uint8_t kind; };
 #define MAX_GROUND  4096
 static struct gpiece gpieces[MAX_GROUND];
 static float sin_q[513];                /* sin(2 pi i / 2048) for i = 0..512 */
@@ -288,6 +289,8 @@ static void gpiece_make(int at, struct gpiece *g)
     g->y = (float)pc->y;
     g->ox = (float)rd16(blk + 4);
     g->oy = (float)rd16(blk + 8);
+    g->br = rd32(blk);
+    g->kind = piece_kinds ? piece_kinds[ground_list[at]] : 0;
     g->r2 = r * r;
     g->c = sin2048((uint32_t)pc->t + 512);
     g->s = sin2048((uint32_t)pc->t);
@@ -330,6 +333,7 @@ int track_init(void)
     walls = (const struct track_wall *)(f + rd32(f + 0x54));
     nwalls = rd32(f + 0x58);
     start = (const struct start *)(f + 0x5C);
+    piece_kinds = rd32(f + 0x74) ? f + rd32(f + 0x74) : NULL;
     unr_count = rd32(unr + 4);
     if(unr_count > MAX_OBJ || npieces > MAX_PIECES || ncars < 1 || nmodels < 1) return 0;
     int32_t far = rd32(f + 0x70);
@@ -367,6 +371,7 @@ int track_init(void)
                 if(vo < 0) { q->nc = 0; break; }       /* a corner that is none: never over it */
                 q->x[c] = rd16(verts + vo);
                 q->z[c] = rd16(verts + vo + 4);
+                q->y[c] = rd16(verts + vo + 2);
                 if(c == 0) q->v[0] = q->x[0], q->v[1] = rd16(verts + vo + 2), q->v[2] = q->z[0];
             }
             for(int c = 0; c < 3; c++) q->n[c] = rd16(fc + 0x14 + 4 * c);
@@ -706,6 +711,81 @@ int track_under(float x, float y, float *h, int *grass)
                 } else
                     for(const struct cface *q = f0; q < fe; q++)
                         if(under_face(q, gp, lx, lz, c, s, h, grass)) return 1;
+        }
+    }
+    return 0;
+}
+
+/* Screamer 2's own "what is under this point" (0x28ce6 -> 0x28db7 -> 0x4c24c, OpenScreamer's s2p_ground), in
+   whole numbers as the game does it: the nine cells round the point in the order of the table at 0x112e84, each
+   cell's drivable pieces in file order, a piece only while the point is inside its first block's circle; the
+   point turned into the piece's frame (cut to whole numbers) and tried up to five times, moved 4 along both axes
+   each time; the faces in the order of the block's first face row; a face holds the point when it is inside the
+   box of its corners and on the inner side (>= 0) of every edge of a TRIANGLE of it -- corners 0 1 2, or for a
+   quad else 0 2 3 -- one winding only. The plane is that triangle's (n = A x B with A = corner 0 less the second,
+   B = corner 0 less the third; a triangle on edge, n.height 0, is passed over); the height is the second
+   corner's less ((point - it) . n) / n.height, the division cut off. only_whether: any face that holds the
+   point will do (no plane, a triangle on edge counts too). *normal is the plane's n turned back into the
+   world, as it is (not made to point up); *kind the placement's road kind. 1 if found. Integer products wrap
+   as the game's 32 bit ones. */
+static inline int32_t imul(int32_t a, int32_t b) { return (int32_t)((uint32_t)a * (uint32_t)b); }
+
+static inline int s2_edge(const struct cface *q, int a, int b, int px, int pz)
+{
+    return imul((int)q->x[a] - q->x[b], pz - q->z[a]) + imul((int)q->z[b] - q->z[a], px - q->x[a]);
+}
+
+int track_ground_s2(int x, int y, int only_whether, int *height, int normal[3], int *kind)
+{
+    static const int8_t cell[9][2] = { {0,0}, {1,0}, {-1,0}, {0,1}, {0,-1}, {1,1}, {-1,-1}, {1,-1}, {-1,1} };
+    int cx = (x + 0x100000) >> 13, cy = (y + 0x100000) >> 13;
+    for(int ci = 0; ci < 9; ci++) {
+        int kx = cx + cell[ci][0], ky = cy + cell[ci][1];
+        if(kx < 0 || kx > 255 || ky < 0 || ky > 255) continue;
+        for(int at = ground_first[ky * 256 + kx]; at < ground_first[ky * 256 + kx + 1]; at++) {
+            struct gpiece made;
+            const struct gpiece *gp = at < MAX_GROUND ? &gpieces[at] : (gpiece_make(at, &made), &made);
+            if(gp->obj < 0) continue;
+            int dx = x - (int)gp->x, dz = y - (int)gp->y;
+            int bx = dx - (int)gp->ox, bz = dz - (int)gp->oy;
+            if(imul(bz, bz) + imul(bx, bx) > imul(gp->br, gp->br)) continue;
+            float c = gp->c, s = gp->s;
+            int lx = (int)((float)dx * c + (float)dz * s), lz = (int)((float)dz * c - (float)dx * s);
+            const struct cface *f0 = &cfaces[cobj_first[gp->obj]], *fe = f0 + cobj_count[gp->obj];
+            const struct cgrid *g = &cgrid[gp->obj];
+            for(int tries = 0; tries < 5; tries++, lx += 4, lz += 4) {
+                const uint16_t *li = 0;
+                int n = (int)(fe - f0);
+                if(g->at[0] >= 0) {                     /* only the faces that may hold the point, in order */
+                    int iz = (int)(((float)lz - g->z0) * g->sz), ix = (int)(((float)lx - g->x0) * g->sx);
+                    int k = cgrid_clamp(iz) * CGRID + cgrid_clamp(ix);
+                    li = clist + g->at[k];
+                    n = g->at[k + 1] - g->at[k];
+                }
+                for(int j = 0; j < n; j++) {
+                    const struct cface *q = li ? f0 + li[j] : f0 + j;
+                    if(!q->nc) continue;
+                    if((float)lx > q->x1 || (float)lx < q->x0 || (float)lz > q->z1 || (float)lz < q->z0) continue;
+                    int which = 0;
+                    if(s2_edge(q, 0, 1, lx, lz) >= 0 && s2_edge(q, 1, 2, lx, lz) >= 0 && s2_edge(q, 2, 0, lx, lz) >= 0) which = 1;
+                    else if(q->nc == 4 && s2_edge(q, 0, 2, lx, lz) >= 0 && s2_edge(q, 2, 3, lx, lz) >= 0 &&
+                            s2_edge(q, 3, 0, lx, lz) >= 0) which = 2;
+                    if(!which) continue;
+                    if(only_whether) { *kind = gp->kind; return 1; }
+                    int a = which, b = which + 1;
+                    int ax = q->x[0] - q->x[a], ay = q->y[0] - q->y[a], az = q->z[0] - q->z[a];
+                    int qx = q->x[0] - q->x[b], qy = q->y[0] - q->y[b], qz = q->z[0] - q->z[b];
+                    int nz = imul(ax, qy) - imul(ay, qx), ny = imul(qx, az) - imul(ax, qz), nx = imul(ay, qz) - imul(az, qy);
+                    if(ny == 0) continue;
+                    int num = imul(lx - q->x[a], nx) + imul(lz - q->z[a], nz);
+                    *height = (-num) / ny + q->y[a] + gp->h;
+                    normal[0] = (int)((float)nx * c - (float)nz * s);
+                    normal[1] = ny;
+                    normal[2] = (int)((float)nz * c + (float)nx * s);
+                    *kind = gp->kind;
+                    return 1;
+                }
+            }
         }
     }
     return 0;

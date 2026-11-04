@@ -510,6 +510,8 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     if(room(&b) < 8) return (uint32_t)fail(&b, "opponents");
     memset(at(&b), 0, 8);                       /* no opponents */
     if(!section(&b, 8, 8, "opponents")) return 0;
+    len = tb_mmp_kinds(mmp, mmp_n, at(&b), room(&b), &count);      /* the placements' road kinds, for the car model */
+    if(!section(&b, len, count, "road kinds")) return 0;
 
     /* the header, offsets and counts as make_track_s2.py packs them (the sections from the MLB on), then the CRCs */
     const uint32_t *o = b.offs + 1, *c = b.counts + 1;
@@ -529,7 +531,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     wr32(out + 0x68, o[11]);
     wr32(out + 0x6C, c[11]);
     wr32(out + 0x70, (uint32_t)-td[0]);         /* the far plane, positive */
-    wr32(out + 0x74, 0);
+    wr32(out + 0x74, o[14]);                    /* the road kinds, one byte a placement */
     wr32(out + 0x78, o[12]);
     wr32(out + 0x7C, colour);
     wr32(out + 0x80, o[13]);
