@@ -16,6 +16,7 @@
 #include "track_build.h"
 #include "road.h"
 #include "s2car.h"
+#include "race.h"
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
    ZIP's entries read whole), the build's scratch up to the program */
@@ -47,11 +48,13 @@
 #define MS_CYCLES   (CPU_HZ / 1000)
 #define LATE_CYCLES (CPU_HZ / 50)       /* a frame over 20 ms misses its vertical blanking */
 
-/* The driving mode (docs/development.md): the physics steps once per video frame since the last picture, at
-   most as many as Screamer 1's race takes (main.c); a car with no drivable ground under it for OFF_STEPS
-   steps (3 s), or this far below the lowest road point of the track, goes back to the start */
+/* The driving mode is a race (race.h, docs/development.md): the physics of the four cars steps once per video frame
+   since the last picture, at most as many as Screamer 1's race takes (main.c); a car with no drivable ground under it
+   for 3 s, or this far below the lowest road point of the track, goes back onto the line (race.c) */
 #define DRIVE_MAX_STEPS 4
-#define OFF_STEPS       150
+#ifndef RACE_OVERLAP
+#define RACE_OVERLAP    1               /* the computers' cars step while the rasterizer finishes the picture (race.h); 0: before the scene */
+#endif
 #define FALL_UNITS      3000.0f
 
 static const struct rs_clip clip = { 0, 0, FB_W, FB_H };
@@ -224,6 +227,8 @@ struct stats {
     uint32_t faces, pieces;             /* sums over the frames */
     float worst_s;                      /* where the longest frame was: units along the road */
     uint32_t video;                     /* video frames (1/50 s) since the first frame */
+    uint64_t phys, others;              /* the driving mode: cycles before the scene (the player's step) and of the computers' steps after it, summed */
+    uint32_t phys_max, others_max;      /* and the longest of each */
 };
 
 /* cars < 0: the driving mode (no cars ahead, no place on the road) */
@@ -244,7 +249,13 @@ static void stats_text(char *p, int n, int cars, const struct stats *s, int full
     *q = 0;
     if (full) {
         q = fmt_udec(fmt_str(q, "/s f"), s->n ? s->faces / s->n : 0);
-        fmt_udec(fmt_str(q, " p"), s->n ? s->pieces / s->n : 0);
+        q = fmt_udec(fmt_str(q, " p"), s->n ? s->pieces / s->n : 0);
+        if (cars < 0) {                                 /* the race: mean and worst ms of the player's step and the scene set-up (ph), of the computers' steps (o) */
+            q = fmt_ms(fmt_str(q, " ph"), s->n ? (uint32_t)(s->phys / s->n) : 0);
+            q = fmt_ms(fmt_str(q, "/"), s->phys_max);
+            q = fmt_ms(fmt_str(q, " o"), s->n ? (uint32_t)(s->others / s->n) : 0);
+            fmt_ms(fmt_str(q, "/"), s->others_max);
+        }
     }
 }
 
@@ -266,15 +277,24 @@ static void leave(int n, int cars, const struct stats *s)
     if (s->n >= 50) log_stats(n, cars, s);
 }
 
-/* the player's car of the driving mode: the physics behind s2car.h (the real one or the stand-in,
-   firmware/Makefile), the gearbox the player chose (it stays through resets and tracks) */
-static struct s2car_state pcar;
+/* the race of the driving mode (race.h): the player's car is car 0; the gearbox the player chose stays through new
+   races and tracks */
 static int manual;
 
-static void car_reset(int n)
+/* a new race on track n: the four cars on the grid, the countdown from 3 s; 0 if the line or a car could not be set up */
+static int race_start(int n, float floor_z)
 {
-    s2car_init(&pcar, 0, 0, n, 0);
-    pcar.manual = manual;
+    uint32_t t0 = rdcycle();
+    int ok = race_init(n, floor_z);
+    race_car(0)->manual = manual;
+    static int logged;                                  /* the log has 4 KB: the first start of the run tells how long it took */
+    if (!ok) dlog_str("viewer: race_init failed\n");
+    else if (!logged++) {
+        dlog_str("race init ");
+        dlog_dec((int32_t)((rdcycle() - t0) / MS_CYCLES));
+        dlog_str(" ms\n");
+    }
+    return ok;
 }
 
 /* the controls of the driving mode from the buttons, as Screamer 1 reads them (car_keys: B the gas, Y the brake,
@@ -287,12 +307,65 @@ static struct s2car_input car_input(uint32_t keys, int sel)
                                  .handbrake = (keys & KEY_A) != 0 };
 }
 
-/* In the simulation the driving mode runs on scripted buttons, one physics step (20 ms) per frame: the gas
-   for 2.6 s, steering left from 0.5 s to 2 s (track 1 starts with a long left bend), right for 0.4 s, then
-   the brake. tools/s2/render_s2.c has the same script for the PC. */
+/* In the simulation the race runs on scripted buttons, one physics step (20 ms) per frame: the gas all the time (the
+   cars are held for the first 3 s, 150 steps), nothing else. */
 static uint32_t sim_keys(uint32_t step)
 {
-    return (step < 130 ? KEY_B : KEY_Y) | (step >= 25 && step < 100 ? KEY_LEFT : step >= 100 && step < 120 ? KEY_RIGHT : 0);
+    (void)step;
+    return KEY_B;
+}
+
+/* "01:23:45" for seconds: minutes, seconds, hundredths */
+static char *fmt_time(char *p, float seconds)
+{
+    uint32_t t = seconds > 0.0f ? (uint32_t)(seconds * 100.0f) : 0, v[3] = { t / 6000 % 100, t / 100 % 60, t % 100 };
+    for (int k = 0; k < 3; k++) {
+        if (k) *p++ = ':';
+        *p++ = (char)('0' + v[k] / 10);
+        *p++ = (char)('0' + v[k] % 10);
+    }
+    *p = 0;
+    return p;
+}
+
+/* the race's text over the picture: the start lights, laps, place and times; when the player has finished, the result */
+static void race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg)
+{
+    struct race_hud h;
+    char l[40], *p;
+    race_get_hud(&h);
+    static const char *const ord[5] = { "", "1ST", "2ND", "3RD", "4TH" };
+    if (h.count >= 0) {                                 /* 3, 2, 1, GO: big, with a shadow */
+        const char *t = h.count == 3 ? "3" : h.count == 2 ? "2" : h.count == 1 ? "1" : "GO!";
+        int x = 160 - (int)__builtin_strlen(t) * 24;
+        con_big(fb, x + 3, 43, 6, t, bg);
+        con_big(fb, x, 40, 6, t, fg);
+    }
+    p = fmt_udec(fmt_str(l, "LAP "), (uint32_t)h.lap);
+    fmt_udec(fmt_str(p, "/"), (uint32_t)h.laps);
+    con_text(fb, CON_COLS - (int)__builtin_strlen(l), 1, l, fg, bg);
+    p = fmt_udec(fmt_str(l, "POS "), (uint32_t)h.place);
+    fmt_udec(fmt_str(p, "/"), (uint32_t)h.cars);
+    con_text(fb, CON_COLS - (int)__builtin_strlen(l), 2, l, fg, bg);
+    fmt_time(fmt_str(l, "TIME "), h.time);
+    con_text(fb, 0, 3, l, fg, bg);
+    fmt_time(fmt_str(l, "LAP  "), h.lap_time);
+    con_text(fb, 0, 4, l, fg, bg);
+    if (h.best_lap >= 0.0f) {
+        fmt_time(fmt_str(l, "BEST "), h.best_lap);
+        con_text(fb, 0, 5, l, fg, bg);
+    }
+    if (h.finished) {                                   /* the end: the place, the time */
+        con_big(fb, 160 - 3 * 32 + 3, 53, 4, "FINISH", bg);
+        con_big(fb, 160 - 3 * 32, 50, 4, "FINISH", fg);
+        p = fmt_str(l, ord[h.place < 5 ? h.place : 4]);
+        p = fmt_str(p, " OF ");
+        fmt_udec(p, (uint32_t)h.cars);
+        con_text(fb, 20 - (int)__builtin_strlen(l) / 2, 11, l, fg, bg);
+        fmt_time(fmt_str(l, "TIME "), h.time);
+        con_text(fb, 20 - (int)__builtin_strlen(l) / 2, 12, l, fg, bg);
+        con_text(fb, 6, 14, " Select+Start: race again ", fg, bg);
+    }
 }
 
 static int other_track(int n, uint32_t press)
@@ -303,8 +376,8 @@ static int other_track(int n, uint32_t press)
 /* A visit to track n until the player picks another (its number), or a button changes the cars, the mode or
    the overlay (they stay: -n, the same track again). The image is set up (load_track).
    Ride mode (*drive 0): the camera rides the road at a constant speed, the player's stand-in car and up to
-   three more ahead of it. Driving mode: the player's car is driven by the physics (s2car.h), the camera is
-   the physics' chase camera, nobody else is on the road. */
+   three more ahead of it. Driving mode: a race (race.h): the player drives car 0 on the physics (s2car.h), three computer
+   cars on the grid with him, the camera is the physics' chase camera. */
 static int visit(int n, int *cars, int *overlay, int *drive)
 {
     const uint32_t *pal = track_palette();
@@ -321,8 +394,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     struct stats st_all = { 0 };
     float s = resume_s, floor_z = road_floor() - FALL_UNITS;
     resume_s = 0.0f;
-    uint32_t win_n = 0, win_sum = 0, win_max = 0, shown_mean = 0, shown_max = 0, shown_faces = 0, off_steps = 0;
-    if (*drive) car_reset(n);
+    uint32_t win_n = 0, win_sum = 0, win_max = 0, shown_mean = 0, shown_max = 0, shown_faces = 0;
+    if (*drive && !race_start(n, floor_z)) {          /* no race on this track: the ride instead */
+        *drive = 0;
+        return -n;
+    }
     for (;;) {
         uint32_t st = wait_swap_done(), t_frame = rdcycle(), vf = VID_FRAME(st);
         uint32_t keys = in_keys(), press = keys & ~keys_before;
@@ -347,9 +423,8 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 return other_track(n, press);
             }
             if (press & KEY_START) {
-                if (sel) {                              /* Select + Start: the car back to the start */
-                    car_reset(n);
-                    off_steps = 0;
+                if (sel) {                              /* Select + Start: the race again from the grid */
+                    race_start(n, floor_z);
                 } else {                                /* Start: back to the ride */
                     leave(n, mode, &st_all);
                     *drive = 0;
@@ -357,7 +432,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 }
             }
             if (press & KEY_X) *overlay = !*overlay;
-            if (press & KEY_UP) pcar.manual = manual = !manual;
+            if (press & KEY_UP) race_car(0)->manual = manual = !manual;
         } else {
             if (press & (KEY_LEFT | KEY_RIGHT)) {
                 leave(n, mode, &st_all);
@@ -381,6 +456,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         struct track_cam cam;
         static struct track_object objs[ROAD_CARS];
         int nobj;
+        uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
         if (*drive) {
             /* the physics at 50 steps a second, one per video frame since the last picture (in the simulation, one a
                frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
@@ -389,14 +465,13 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 struct s2car_input in = car_input(sim ? sim_keys(drawn) : keys, sel);
                 in.gear_up = k == 0 && (press & KEY_R);         /* a gear on the one step the button went down */
                 in.gear_down = k == 0 && (press & KEY_L);
-                s2car_step(&pcar, &in);
-                off_steps = pcar.off_track ? off_steps + 1 : 0;
+                race_step_player(&in);
+                if (!RACE_OVERLAP) race_step_others(1);
             }
-            if (off_steps >= OFF_STEPS || pcar.pos[2] < floor_z) {      /* off the track for good: back to the start */
-                car_reset(n);
-                off_steps = 0;
-            }
-            nobj = road_drive_scene(&pcar, &cam, objs);
+            race_pending = RACE_OVERLAP ? steps : 0;
+            struct s2car_state *rc[RACE_CARS];
+            for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
+            nobj = road_race_scene(rc, race_cars(), &cam, objs);
         } else {
             uint32_t steps = drawn ? (dvf > 10 ? 10 : dvf) : 1;
             s += (float)steps * STEP_S * SPEED;
@@ -404,6 +479,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             nobj = road_scene(s, *cars, &cam, objs);
         }
         tl_mark(TL_PHYS);
+        const uint32_t phys_cycles = rdcycle() - t_frame;
         struct su_view view;
         track_view(&clip, &view);
 
@@ -438,6 +514,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         track_draw_cam(0, &clip, &cam, objs, nobj, &ts);
         tl_scene = 0;
         tl_mark(TL_SCENE);
+        if (*drive) {                                   /* the computers' cars' steps while the rasterizer finishes the picture */
+            uint32_t t_o = rdcycle();
+            race_step_others(race_pending);
+            others_cycles = rdcycle() - t_o;
+        }
         while (RS_DRAW & RS_BUSY)
             ;
         tl_mark(TL_WAIT);
@@ -457,11 +538,13 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             con_text(fb, 0, 1, l, col_text, col_bg);
         }
         if (*drive) {
-            char l[24], *p = fmt_udec(l, (uint32_t)(pcar.speed_mph + 0.5f));
+            const struct s2car_state *pc = race_car(0);
+            char l[24], *p = fmt_udec(l, (uint32_t)(pc->speed_mph + 0.5f));
             p = fmt_str(p, " mph  G");
-            p = pcar.gear > 0 ? fmt_udec(p, (uint32_t)pcar.gear) : fmt_str(p, "N");
+            p = pc->gear > 0 ? fmt_udec(p, (uint32_t)pc->gear) : fmt_str(p, "N");
             fmt_str(p, manual ? " MAN" : " AUTO");
             con_text(fb, CON_COLS - (int)__builtin_strlen(l), 0, l, col_text, col_bg);
+            race_text(fb, col_text, col_bg);
         }
         tl_mark(TL_HUD);
 
@@ -469,6 +552,10 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         st_all.sum += work;
         st_all.n++;
         st_all.faces += faces;
+        st_all.phys += phys_cycles;
+        if (phys_cycles > st_all.phys_max) st_all.phys_max = phys_cycles;
+        st_all.others += others_cycles;
+        if (others_cycles > st_all.others_max) st_all.others_max = others_cycles;
         st_all.pieces += ts.pieces;
         st_all.over += work > LATE_CYCLES;
         if (work > st_all.max) {
@@ -494,15 +581,15 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 dlog_str("d");
                 dlog_dec((int32_t)drawn);
                 dlog_str(": ");
-                dlog_dec((int32_t)(pcar.speed_mph + 0.5f));
+                dlog_dec((int32_t)(race_car(0)->speed_mph + 0.5f));
                 dlog_str(" mph G");
-                dlog_dec(pcar.gear);
+                dlog_dec(race_car(0)->gear);
                 dlog_str(" yaw ");
-                dlog_dec((int32_t)(pcar.yaw * 100.0f));
+                dlog_dec((int32_t)(race_car(0)->yaw * 100.0f));
                 dlog_str(" pos ");
-                dlog_dec((int32_t)pcar.pos[0]);
+                dlog_dec((int32_t)race_car(0)->pos[0]);
                 dlog_char(' ');
-                dlog_dec((int32_t)pcar.pos[1]);
+                dlog_dec((int32_t)race_car(0)->pos[1]);
                 dlog_char('\n');
             }
         }

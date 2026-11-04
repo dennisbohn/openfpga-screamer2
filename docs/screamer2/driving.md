@@ -23,9 +23,10 @@ game's addresses (the comment at each routine in `s2car.c` names it):
 | 0x13f38 | the chase camera (view 3, the one a race starts in): 1300 behind, 200 over the car, looking down 0.274, its turn led towards the way the car goes and eased by speed |
 | 0x16878 (part) | the front wheels' steering and the wheels' turning as drawn |
 
-Left out because a lone car does not need them: the other cars (the solver 0x245a3, the outlines 0x22d35, 0x20a18), the
-driver of the computer's cars (0x17726), laps and the position along the road (0x153c6), cones, sparks, smoke and dust,
-sound, the road kind's look (0x1f1ef), the other camera views. The car's damage is kept (it takes power away and softens
+Left out of `s2car.c` because one car does not need them: the other cars (the solver 0x245a3, the outlines 0x22d35, 0x20a18),
+the driver of the computer's cars (0x17726), laps and the position along the road (0x153c6): these are in `race.c`
+(section "The race" below, with a simpler touch between cars); cones, sparks, smoke and dust,
+sound, the road kind's look (0x1f1ef), the other camera views are not done. The car's damage is kept (it takes power away and softens
 a spring) but nothing shows it.
 
 ## The car's numbers
@@ -146,6 +147,87 @@ physics step, the chase camera and the objects of the scene) 65,600 cycles = 0.8
 0.1 ms. The Pocket and the host agree: 10, 22, 33, 44 mph after 25, 50, 75, 100 steps and the place to 1 unit over 100 steps
 (the picolibc and glibc `sinf` differ in the last bit; a steering flick shows it later). Stack of the program: 4.4 KB.
 
+## The race
+
+`firmware/race.c` (contract `firmware/race.h`, used by the viewer's driving mode) puts the player and three computer cars on
+the grid and runs a three-lap race with the model above for all four cars. The pieces are the game's, ported from the same
+OpenScreamer text (`s2r_car.h`) in single precision:
+
+| Routine | What |
+|---|---|
+| 0x2f519 | the grid: a race of n cars gives car i the place n - 1 - i (the player, car 0, the last); place g is 1000 units to one side of the first node of the line (the sides in turn) and 2000 x g behind it, heading along the road there. The cars are held: the gearbox in neutral (`s2car_state.hold`, the game's race flag `0x11f0a8 & 0x20`) until the race clock passes 3 s |
+| 0x1099a, 0x4a831, 0x108f5, 0x2d59c, 0x309b0 | the line of `MAPnOPP.SPL` (one spline per track, 36 to 48 nodes of 0x38 bytes: two handles each, `+0xc` the speed share, `+0x34` the way from node 0): a quadratic B-spline per half node, a place on it moved by a distance, the line measured once at load by stepping 100 units at a time |
+| 0x153c6 | where a car is along the line: four points half a node apart round where it was, the share along each stretch, the nearest, stepping half a node to the nearer side; round the end of the line a lap is done (or undone); the nodes with the laps in them (`+0x4b8`), the way in units (`+0x4bc`) and the car's distance from the line, signed (`+0x4c0`) |
+| 0x201ee | a lap done (a lap not done before counts; the car's best lap; the last lap: the car has finished (`+0x4c` gets the bits 1 and 2) and gets a fifth of a second for each car behind it) |
+| 0x2da06 | places by the distance along the line (the finished cars keep theirs); the computers' pace (`+0x48`, what the engine takes off their speed: `SKILLS` of `MISC.DTR`, 3 rows x 7 numbers, the arcade race's level 1 = normal, from 0 before the sixth second, then by how far ahead of the player the car is) |
+| 0x17726 | the computer's driver |
+| 0x14e20, 0x1b36f, 0x29571, 0x1f756 | the computer's car in the car model: its handling, wheel lock x 1.3, half the road's roughness in the grip, its own rule at a wall under speed 30, the engine's speed less the pace |
+
+**The laps are counted on the line**, not on markers: Screamer 2 has no `MAPn.MRK`; the game's lap counter is the car's place on the line
+(`MAPnOPP.SPL`, `+0x4b8` in nodes), and the start / finish line is node 0, where the grid is. The cars start a little behind it
+(lap -1); crossing it the first time does not count, so a race is three laps from the line plus the run to it, and the lap clock starts at GO.
+
+**The driver** (0x17726) aims the car at the point of the line `pace` units ahead of the road under it (22,100 in the first six
+seconds, then 170 x its speed held to 10 .. 130, so 1,700 to 22,100 units) from a point one step ahead on its way, and steers the wheels by the angle between the two, times 2, 3 or 5
+by which axle drives. The throttle: full minus how far its heading is off the line's, lifted when its speed is over the line's speed share
+(`+0xc` of the node: percent under the top speed; the corners), cut by the pace and the lock. It looks for slower cars between itself and the
+point it aims at and goes round the one nearest by the side that turns it the least (within an eighth of a turn), and lifts behind one it cannot pass. On the grid it
+revs the engine now and then. All of it from the game's own text, nothing invented but the floats.
+
+**Cars touching.** The game's solver (0x245a3, 18 KB) sweeps the cars' outlines (the wheel corners 1.4 times as wide) through the
+step for the first touch and runs the rest of the step again; it also sparks, knocks the springs and the sound. Here (`collide()`
+in `race.c`) two outlines that overlap at the end of a step are pushed apart along the axis of least overlap and swap their closing speed
+along it (equal masses, as the game's push does): the same outlines, tested once a step, no damage, sparks or sound. A car that is hit
+at speed from behind therefore takes that speed, as in the game. A step moves a car by 280 units at most (the top speed), a quarter of an
+outline's length (1,165), so the overlap found at the end of a step is shallow.
+
+### Checks of the race
+
+- `tools/s2/check_car.sh`: the player's car is unchanged by the additions (the output is the same line for line as before): the computer's
+  rules are all behind `s2car_state.ai`, the hold behind `.hold`. `check_params.sh` and `check_track_build_s2.sh` pass.
+- `tools/s2/render_s2.sh <image> <prefix> g<steps>[,<every>]` runs the race natively (the firmware's own `race.c` and `s2car.c`, the
+  images of the seven tracks) and prints, every `every` steps, per car the laps done, place, mph and node along the line, a line
+  per lap done, and at the end the player's lap, place and times and the number of cars put back on the line. `RACE_GAS=1` makes the
+  player hold the gas, `RACE_ROBOT=1` lets the game's driver drive his car as well (it is marked finished with no end to its time).
+  25,000 steps (500 s) on every track, the game's normal level:
+  every computer car does its three laps, finishes and stops; no car was put back on the line, on any track, in either run.
+
+  | Track | line (units) | computers' best laps, player parked (s) | computers' best laps, player driven by the driver (s) | all four finish at (s) |
+  |---|---|---|---|---|
+  | 1 | 1,019,900 | 98.4, 99.0, 99.6 | 78.6, 79.2, 79.4 | 235 (player, 1st), 244, 247, 248 |
+  | 2 | 896,700 | 90.9, 91.2, 94.7 | 77.3, 79.2, 79.3 | 251, 251, 253 (player, 3rd), 254 |
+  | 3 | 1,171,100 | 117.0, 117.7, 118.3 | 96.2, 96.8, 96.8 | 295 (player, 1st), 299, 300, 303 |
+  | 4 | 1,481,300 | 130.8, 131.4, 131.7 | 105.2, 105.2, 106.7 | 312 (player, 1st), 329, 332, 334 |
+  | 5 | 1,288,300 | 130.3, 131.7, 133.9 | 117.5, 117.6, 118.6 | 359, 362, 362 (player, 2nd), 362 |
+  | 6 | 1,375,400 | 128.5, 129.2, 129.2 | 105.5, 106.5, 106.5 | 316 (player, 1st), 327, 329, 330 |
+  | 7 | 812,600 | 77.6, 77.7, 80.7 | 67.3, 69.4, 70.1 | 216, 217, 219, 220 (player, 4th) |
+
+  The two columns differ by a quarter because of the game's catch-up (0x2da06): a computer car 200,000 units or more ahead of the
+  player gets the level's largest handicap (3.6 against 2.0 level with him), which takes that much off the engine's speed and, through the driver,
+  puts the throttle (1 less the bend's size x the speed share x the handicap x 0.3) under 0.7 in a moderate bend, where the driver stops rounding
+  it up to full; with the player parked at the back the computers are far ahead. A real race is the second column. Track 1 with the player parked: the computers
+  average 93 on the car's speed scale (the dial / 1.513), OpenScreamer's port had measured 97 for the same level with a parked player (`NOTES2.md`
+  S2-5n; its cars ran at 25 steps a second). The original ran at 17 pictures a second with whole-number places that hold a car back (this
+  page, "The car's place stays a float"), so its cars' laps are longer than these; they were not compared with a recording of the original.
+
+### The race on the Pocket's CPU
+
+Simulation of the viewer on track 4 (docs/development.md, 220 frames, the first 150 of them the grid's hold): the first mark of the frame
+timeline of the last frame (70 frames after GO), the step of the four cars with the driver, the cars touching and the scene's objects, is 4.27 ms,
+against 0.88 ms for the lone car: **the three computers cost 3.4 ms a frame** (three physics steps of about 0.9 ms; the rest is the locate
+along the line, the driver and the cars touching, not measured apart). That frame took 13.8 ms mean and 14.6 ms worst at the grid, 50.2 pictures a second, no frame late.
+
+The Pocket's worst frames are rasterizer-bound (docs/screamer2/performance.md): track 4's worst frame while driving the lone car was 15.4
+ms on the Pocket, and the physics comes before the first piece is handed on, so 3.4 ms more of it, and 0.8 ms for the three cars drawn,
+would make about 19.6 ms there, too close to the 20 ms of a picture. So the computers' steps run after the scene is handed to the hardware,
+while the rasterizer finishes the picture (`race_step_others()`, `RACE_OVERLAP` in `viewer.c`): the CPU waited 1.7 ms for the rasterizer at
+the end of the simulated frame, and on the worst frames it waits several ms. By that estimate the worst frame of track 4 stays near 16 to 17 ms.
+**This version was not simulated or run on the Pocket**; the numbers above are of the same race with its steps before the scene
+(`-DRACE_OVERLAP=0`, identical results). `debug.txt` shows what happened: the visit's line ends `ph<mean>/<worst> o<mean>/<worst>` (ms of the
+player's part and the scene set-up, and of the computers' part) after the frame's own mean and worst; a worst frame under about 17 ms on tracks 4 and 7 means
+the overlap works. If it does not (the CPU and the units contend for the SDRAM), `-DRACE_OVERLAP=0` or a cheaper computer car (the
+physics step is the cost: its four ground looks and about 20 `atanf`) are the next steps; the lap and driver code is about 0.1 ms a car.
+
 ## Open points
 
 - The deviations above are chaotic: a wall, a jump or the creep of a nearly stopped car amplifies a last-bit difference, so
@@ -153,4 +235,11 @@ physics step, the chase camera and the objects of the scene) 65,600 cycles = 0.8
   what the check measures.
 - The pose of a tilted car (`s2car_look`) and the wheels' sign of turning have not been seen on a slope, and the camera
   of view 3 only in the numbers.
-- Not done: other cars, laps, the road kind's effects on the look, the dust, damage shown, the camera's other views.
+- Not done: the road kind's effects on the look, the dust, damage shown, the camera's other views.
+- The race (section above): the game's swept solver for touching cars, sparks, sounds and damage from a touch; the split times and
+  "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie are a constant, `LEVEL` in
+  `race.c`) and the number of laps (`RACE_LAPS`) are not in a menu; the computers' cars are teams 2 to 4's cars 2 to 4 whatever the
+  player's car is; the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text; the other cars' models of
+  teams 2 to 4 are team 1's (the image holds those).
+- Not compared with a recording of the original's computer cars: the lap times above are the model's own (the original ran at 17
+  pictures a second with whole-number places; its cars were slower).

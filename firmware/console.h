@@ -33,3 +33,6 @@ char *fmt_str(char *p, const char *s);
 char *fmt_udec(char *p, uint32_t v);
 char *fmt_dec(char *p, int32_t v);
 char *fmt_hex(char *p, uint32_t v, int digits);
+
+/* Text magnified scale times at pixel (x, y), only the strokes (no background); not clipped. */
+void con_big(volatile uint8_t *fb, int x, int y, int scale, const char *s, uint8_t fg);

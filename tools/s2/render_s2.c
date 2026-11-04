@@ -10,8 +10,10 @@
  *           r<i>            road point i of the map (MMP array 2, in the map's order), the camera over the
  *                           drivable surface there, looking along the road's heading
  *           c<x>,<y>,<h>,<yaw>,<pitch>   free camera (yaw 0 = towards -y, radians)
- *           d<k>            the driving mode (firmware/s2car.h: the physics, or the stand-in) after k steps of 20 ms from the
- *                           start on the buttons of the simulation (viewer.c sim_keys: gas to step 130, left from 25 to 100,
+ *           g<k>[,<n>]      the race (firmware/race.c) for k steps, a table every n (RACE_GAS=1: the player holds the gas, RACE_ROBOT=1: the game's driver drives him), the
+ *                           race scene at the end
+ *           d<k>            the lone car (firmware/s2car.h: the physics, or the stand-in) after k steps of 20 ms from the
+ *                           start on a script of its own (gas to step 130, left from 25 to 100,
  *                           right to 120, then the brake), the physics' chase camera over its car
  * Writes <prefix><k>.rgb (320 x 200 x 3) per camera and prints what the renderer reports.
  */
@@ -26,6 +28,7 @@
 #include "blit.h"
 #include "road.h"
 #include "s2car.h"
+#include "race.h"
 
 #define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as the viewer */
 
@@ -93,6 +96,54 @@ int main(int argc, char **argv)
                            car.pos[0], car.pos[1], car.pos[2], car.off_track ? " (off the track)" : "");
             }
             nobj = road_drive_scene(&car, &cam, objs);
+        } else if (argv[a][0] == 'g') {
+            /* the race (firmware/race.c) for k steps, the player holding the gas if RACE_GAS is set, else parked on the grid;
+               every `every` steps (default 250) a line per car: lap done, place, mph, node along the line, place on the map;
+               a line when a car finishes a lap */
+            int steps = atoi(argv[a] + 1), every = 250;
+            const char *comma = strchr(argv[a], ',');
+            if (comma) every = atoi(comma + 1);
+            int tn = 1;
+            for (const char *q = argv[1]; *q; q++) if (*q >= '1' && *q <= '7') tn = *q - '0';
+            if (!race_init(tn, road_floor() - 3000.0f)) { fprintf(stderr, "race_init failed\n"); return 1; }
+            int laps_seen[RACE_CARS] = { 0 };
+            if (getenv("RACE_ROBOT")) {                 /* the game's driver drives the player's car too (it is marked finished with no end to its time) */
+                struct s2car_state *p = race_car(0);
+                float forever = 1e9f;
+                p->rec[0x4c / 4] |= 1;
+                memcpy(&p->rec[1], &forever, 4);
+            }
+            for (int k = 0; k < steps; k++) {
+                struct s2car_input in = { .throttle = getenv("RACE_GAS") != 0 };
+                race_step(&in);
+                for (int i = 0; i < race_cars(); i++) {
+                    const struct s2car_state *c = race_car(i);
+                    int lap = (int)c->rec[0x4ac / 4];
+                    if (lap != laps_seen[i]) {
+                        float best; memcpy(&best, &c->rec[0xc40 / 4], 4);
+                        printf("  car %d: lap %d done at %.2f s (best %.2f)%s\n", i, lap, (float)(k + 1) * 0.02f, best,
+                               (c->rec[0x4c / 4] & 2) ? " FINISHED" : "");
+                        laps_seen[i] = lap;
+                    }
+                }
+                if (k % every == 0 || k == steps - 1) {
+                    printf("step %d (%.1f s):", k + 1, (float)(k + 1) * 0.02f);
+                    for (int i = 0; i < race_cars(); i++) {
+                        const struct s2car_state *c = race_car(i);
+                        float dist; memcpy(&dist, &c->rec[0x4b8 / 4], 4);
+                        printf("  [%d] L%d P%d %3.0fmph n%.1f%s", i, (int)c->rec[0x4ac / 4], (int)c->rec[0xc30 / 4], c->speed_mph, dist, c->off_track ? "!" : "");
+                    }
+                    printf("\n");
+                }
+            }
+            struct race_hud h;
+            race_get_hud(&h);
+            printf("player: lap %d/%d place %d/%d %s time %.2f s lap %.2f best %.2f; the line is %d units\n", h.lap, h.laps, h.place, h.cars,
+                   h.finished ? "FINISHED" : "racing", h.time, h.lap_time, h.best_lap, race_line_length());
+            printf("cars put back on the line: %u\n", (unsigned)race_respawns());
+            struct s2car_state *rc[RACE_CARS];
+            for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
+            nobj = road_race_scene(rc, race_cars(), &cam, objs);
         } else if (argv[a][0] == 'r') {
             int nd;
             const struct track_dir *d = track_dirs(&nd);

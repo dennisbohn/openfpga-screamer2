@@ -40,3 +40,7 @@ int road_scene(float s, int ncars, struct track_cam *cam, struct track_object *o
    has them. The state must stay where it is until the frame is drawn (the car's blocks are made then). Returns 1. */
 struct s2car_state;
 int road_drive_scene(const struct s2car_state *s, struct track_cam *cam, struct track_object *obj);
+
+/* The race's scene: the camera of car 0 (the player's) and the n cars (at most ROAD_CARS) as objects, car k the model
+   AUTO(k+1). The states must stay where they are until the frame is drawn. Returns the number of objects. */
+int road_race_scene(struct s2car_state *const *cars, int n, struct track_cam *cam, struct track_object *objs);

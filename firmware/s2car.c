@@ -5,9 +5,10 @@
  * program in the order of its sums; docs/NOTES2.md S2-5f .. S2-8, S2-5zn). The car is the game's 0xCC0-byte
  * record, kept word for word where the game keeps it, so that the routines below read like theirs: RF(o) and
  * RI(o) are the float and the whole number at byte offset o; the comment at each routine names the game's
- * address. Only what a lone car on the track needs is here: no other cars (the solver 0x245a3, the cars'
- * outlines 0x22d35), no driver, laps, cones, sparks, smoke, sound; the car's picture only as far as the wheels'
- * turn and steering (0x16878).
+ * address. Only what one car on the track needs is here: not the other cars (the solver 0x245a3, the cars'
+ * outlines 0x22d35), the driver, laps and places (race.c has those: the race is four of these cars, the three computer
+ * cars with `ai` set and driven through s2car_step_driven()), cones, sparks, smoke, sound; the car's picture only as far
+ * as the wheels' turn and steering (0x16878).
  *
  * PRECISION. The game's routines run on the x87 set to 53 bits: every sum is one rounding to a double and a
  * float is stored only where the game stores a DWORD. The Pocket's CPU has float32 only, so every sum here is
@@ -494,8 +495,9 @@ static void against_wall(car_t *c, const struct corner_ground q[4])
         } else {
             if(T[0] > 0.0f) {
                 float a;
-                /* (the computer's cars under speed 30 have a rule of their own; this car has controls) */
-                if(RF(0x500) >= 20.0f || !(fabsf(RF(0x660)) > RF(0x6c) * 0.2f)) {
+                if(RF(0x500) < 30.0f && c->ai) {                /* a computer's car under speed 30: out along the wall's way */
+                    a = fabsf(ang_diff(RF(0x160), RF(0x4c4))) > 1.570796370506286f ? ang_diff(RF(0x160), PI_F) : RF(0x160);
+                } else if(RF(0x500) >= 20.0f || !(fabsf(RF(0x660)) > RF(0x6c) * 0.2f)) {
                     float off = fabsf(ang_diff(RF(0x4e8), RF(0x4c4)));
                     if(!((HALF_PI_F - off) * RF(0x1f0) < 0.0f)) a = RF(0x160);
                     else a = fabsf(ang_diff(RF(0x4c4), RF(0x160))) > 1.5707963705f ? ang_diff(RF(0x160), -PI_F) : RF(0x160);
@@ -770,7 +772,9 @@ static void tyres(car_t *c, int *squeal)
     const struct s2_road_kind *k0 = kind_of(RI(0x6b0)), *k1 = kind_of(RI(0x5d0)), *k2 = kind_of(RI(0x720)), *k3 = kind_of(RI(0x640));
     float base = (((k0->grip[ts] + k1->grip[ts]) + k2->grip[ts]) + k3->grip[ts]) * 0.25f;
     float rough = (float)(k0->rough + k1->rough + k2->rough + k3->rough) * 0.25f - (4.0f - RF(0x2c));
-    float grip = 0.0f >= rough ? rough * 0.1f + base : base - rough * 0.2f;      /* the player's (controls: 0xb4) */
+    float grip;                                         /* 0x1b36f: the roughness counts half as much for a computer's car */
+    if(c->ai) grip = 0.0f >= rough ? rough * 0.05f + base : base - rough * 0.1f;
+    else grip = 0.0f >= rough ? rough * 0.1f + base : base - rough * 0.2f;
     memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);
     int against = 0.0f > RF(0x4d4) * RF(0x660) || !(fabsf(RF(0x4d4)) >= 0.01f);
     if((against && fabsf(RF(0x660)) > RF(0x6c) * 0.1f) || RF(0x510) < 1.0f) RI(0xc0) = 0;
@@ -849,7 +853,8 @@ static void engine(car_t *c, const struct s2car_input *in, int manual)
         RF(0x140) = RF(0x140) - DT;
         if(RF(0x140) < 0.0f) RF(0x140) = 0.0f;
     }
-    if(manual) {
+    if(c->hold) RI(0xc7c) = 0;                          /* on the grid: neutral until the race is let go */
+    else if(manual) {
         if(in->gear_up) change_gear(c, 1);
         else if(in->gear_down) change_gear(c, -1);
         else RF(0x140) = 0.0f;
@@ -894,11 +899,26 @@ static void engine(car_t *c, const struct s2car_input *in, int manual)
         if(0.0f < RF(0x510)) {
             RF(0x4fc) = RF(0xc78) / ratio * (RF(0x5c) / RF(0x60));
             if(RI(0x4c) & 0x10) RF(0x4fc) = RF(0x4fc) + -2.5f;
+            if(c->ai) RF(0x4fc) = RF(0x4fc) - RF(0x48);       /* the computer's pace (2da06): what the level takes off */
         }
         if(RF(0x4fc) < 10.0f && RF(0x1ec) < 0.1f) RF(0x4fc) = 0.0f;
     } else RF(0x4fc) = RF(0x500);
     if(RF(0xc78) > RF(0x60)) RF(0xc78) = RF(0x60);
     else if(0.0f > RF(0xc78)) RF(0xc78) = 0.0f;
+}
+
+/* 0x19409's end: the wheels' angle (0x660) and the throttle make the angle the front tyres are turned to (0xbc): put at once
+   for a car with no controls (direct), else eased */
+static void steering_out(car_t *c, int direct)
+{
+    float cs = fabsf(cosf(RF(0x4d4)));
+    float grip = (cs * cs) * (cs * cs);
+    float steer = (RF(0x660) / (RF(0x500) * 4.0f / RF(0x5c) + 2.0f)) * (1.6f - RF(0x1ec) * 0.6f) * grip;
+    if(!(0.0f >= RF(0x4d4) * steer)) steer = (fabsf(sinf(RF(0x4d4))) * 1.5f + 1.0f) * steer;
+    if(direct) RF(0xbc) = steer;
+    else ease(&RF(0xbc), steer, cut(21.0f - RF(0x2c) * 5.0f));
+    if(RI(0x4c) & 4) { RI(0x1ec) = 0; RI(0xbc) = 0; RF(0x1e8) = 1.0f; RI(0x1e4) = 0; RI(0x660) = 0; }
+    RF(0x580) = RF(0x660);
 }
 
 /* 0x19409: the steering. keys (the d-pad): the whole lock to the side held (the game's control type 1);
@@ -930,13 +950,7 @@ static void steering(car_t *c, const struct s2car_input *in, int stick)
         if(RF(0x660) > RF(0x6c)) RF(0x660) = RF(0x6c);
         else if(-RF(0x6c) > RF(0x660)) RF(0x660) = -RF(0x6c);
     }
-    float cs = fabsf(cosf(RF(0x4d4)));
-    float grip = (cs * cs) * (cs * cs);
-    float steer = (RF(0x660) / (RF(0x500) * 4.0f / RF(0x5c) + 2.0f)) * (1.6f - RF(0x1ec) * 0.6f) * grip;
-    if(!(0.0f >= RF(0x4d4) * steer)) steer = (fabsf(sinf(RF(0x4d4))) * 1.5f + 1.0f) * steer;
-    ease(&RF(0xbc), steer, cut(21.0f - RF(0x2c) * 5.0f));
-    if(RI(0x4c) & 4) { RI(0x1ec) = 0; RI(0xbc) = 0; RF(0x1e8) = 1.0f; RI(0x1e4) = 0; RI(0x660) = 0; }
-    RF(0x580) = RF(0x660);
+    steering_out(c, 0);
 }
 
 /* 0x174ca and 0x1756f: the throttle and the brake from the controls (1023ths); the brake split front / rear */
@@ -965,8 +979,8 @@ static void wheel_pictures(car_t *c)
     RF(0x6d4) = RF(0x6d4) - back * PI_F;
 }
 
-/* 0x2baa4 for one car alone, then 0x167e2 */
-static void frame(car_t *c, const struct s2car_input *in, int *squeal)
+/* 0x2baa4 for one car alone, up to the engine (0x167e2's first part) */
+static void frame_body(car_t *c, const struct s2car_input *in, int manual, int *squeal)
 {
     RI(0x4c) &= ~8;
     tyres(c, squeal);
@@ -980,7 +994,12 @@ static void frame(car_t *c, const struct s2car_input *in, int *squeal)
     if(RF(0x30) < 0.0f) RF(0x30) = 0.0f;
     RF(4) = RF(4) - DT;
     if(RF(4) < 0.0f) RF(4) = 0.0f;
-    engine(c, in, c->manual);                           /* 0x167e2: the clocks, the engine, the controls */
+    engine(c, in, manual);                              /* 0x167e2: the clocks, the engine, the controls */
+}
+
+static void frame(car_t *c, const struct s2car_input *in, int *squeal)
+{
+    frame_body(c, in, c->manual, squeal);
     pedals(c, in);
     steering(c, in, c->stick);
 }
@@ -1061,6 +1080,7 @@ static void outputs(car_t *c, int squeal)
         track_ground_s2(cut(RF(0x4d8)), cut(RF(0x4e0)), &held, &h, n, &k);
         c->off_track = !held;
     }
+    if(c->ai) return;                                   /* no camera follows a computer's car */
     chase_camera(c);
     c->cam[3] = c->camst[2];
     c->cam[4] = c->camst[1];
@@ -1077,6 +1097,40 @@ void s2car_step(struct s2car_state *s, const struct s2car_input *in)
     RI(100) = c->manual ? 0 : 1;
     frame(c, in, &squeal);
     outputs(c, squeal);
+}
+
+void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx)
+{
+    static const struct s2car_input none;
+    int squeal = 0;
+    car_t *c = s;
+    RI(100) = 1;
+    frame_body(c, &none, 0, &squeal);
+    RF(0x1e8) = 0.0f;                                   /* 0x1756f: no pedals */
+    RF(0x1e4) = 0.0f;
+    driver(s, ctx);                                     /* 0x19409: the road under the car (0x153c6), the driver (0x17726) */
+    if((RI(0x4c) & 1) && (RI(4) & 0x7fffffff) == 0) { RI(0x1ec) = 0; RF(0x1e8) = 1.0f; }     /* finished and the time is up */
+    steering_out(c, c->ai);
+    outputs(c, squeal);
+}
+
+float s2car_ground_grip(const struct s2car_state *s)
+{
+    const car_t *c = s;
+    const int ts = RI(0x50) < 0 || RI(0x50) > 2 ? 0 : RI(0x50);
+    return ((kind_of(RI(0x6b0))->grip[ts] + kind_of(RI(0x5d0))->grip[ts]) + kind_of(RI(0x720))->grip[ts] + kind_of(RI(0x640))->grip[ts]) * 0.25f;
+}
+
+const uint8_t *s2car_map_dat(uint32_t *size)
+{
+    if(size) *size = G.map_size;
+    return G.map_dat;
+}
+
+const uint8_t *s2car_game_dat(uint32_t *size)
+{
+    if(size) *size = G.game_size;
+    return G.game_dat;
 }
 
 /* ----------------------------------------------------------------------------------------------- loading */
@@ -1199,6 +1253,7 @@ static void make_car(car_t *c, int track)
 {
     int set[6] = { 2, 2, tyre_by_track[track - 1], 2, 2, 2 };
     RI(0x50) = set[2];
+    if(RF(0x94) > 0.8f && c->ai) set[0] = 1;            /* a computer's rear-drive car gets the handling 1 */
     int tyre_set = RI(0x50);
     set[1] = 2;
     float step = 0.01f;                                 /* |0x94 - 0x90| > 0.4: 0.005 */
@@ -1222,17 +1277,19 @@ static void make_car(car_t *c, int track)
     RF(0x5c) = RF(0x5c) * 1.12f;
     RF(0x5c) = (float)(set[1] - 2 - tyre_factor[tyre_set]) + RF(0x5c);
     RF(0x6c) = ((float)(set[0] - 2) * 0.15f + 0.7f) * RF(0x6c);
+    if(c->ai) RF(0x6c) = RF(0x6c) * 1.3f;               /* a car with no controls (or a stick) steers 1.3 times as far */
     RF(0x9c) = (float)set[5] * 0.25f;
     RI(8) = 0;
     for(int i = 0; i < 4; i++) { RI(0xc + 4 * i) = 0; RI(0x1c + 4 * i) = 0; }
     RF(0x2c) = (float)(set[3] + set[4]) * 0.5f;
 }
 
-int s2car_init(struct s2car_state *s, int team, int car, int track, const struct track_image *img)
+static int init_car(struct s2car_state *s, int team, int car, int track, int grid, int ai, const float *at)
 {
     car_t *c = s;
-    (void)img;
-    if(team < 0 || team > 3 || car < 0 || car > 4 || track < 1 || track > 7) return 0;
+    if(team < 0 || team > 3 || car < 0 || car > 4 || track < 1 || track > 7 || grid < 0 || grid > 15) return 0;
+    c->ai = ai != 0;
+    c->hold = 1;
     if(!load_data(track)) return 0;
     index_track();
     int32_t wp[4][3];
@@ -1258,7 +1315,7 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
     RI(0x4d0) = RI(0x5b4) - RI(0x624) < 0 ? RI(0x624) - RI(0x5b4) : RI(0x5b4) - RI(0x624);
     RI(0x4c8) = RI(0x5ac) - RI(0x68c) < 0 ? RI(0x68c) - RI(0x5ac) : RI(0x5ac) - RI(0x68c);
     RF(0xc34) = 1.0f;
-    float x0 = (float)G.start_x, z0 = (float)G.start_z;
+    float x0 = at ? at[0] : (float)G.start_x, z0 = at ? at[1] : (float)G.start_z;
     RF(0x4d8) = placed(x0);
     RF(0x4e0) = placed(z0);
     RI(0x4dc) = -100000;
@@ -1271,11 +1328,12 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
     RF(0x4c4) = G.road_heading;
     RF(0x4e8) = RF(0x4c4);
     RF(0x508) = RF(0x4e8);
-    /* the grid: the only car is the first (grid place 0: a thousand units to the side, none back) */
-    int grid = 0, k = (grid % 2) * 2 - 1;
+    /* the grid (0x2f519): place g is 1000 units to the side (the sides in turn) and 2000 x g back of the line's first node */
+    int k = (grid % 2) * 2 - 1;
     float a = RF(0x4e8);
     float gx = (float)k * sinf(a + HALF_PI_F) * 1000.0f + (float)grid * sinf(a + PI_F) * 2000.0f + x0;
     float gz = z0 - ((float)k * cosf(a + HALF_PI_F) * 1000.0f + (float)grid * cosf(a + PI_F) * 2000.0f);
+    if(at) { gx = x0; gz = z0; }                        /* put back on the line itself (a car that left the road) */
     RF(0x4d8) = placed(gx);
     RF(0x4e0) = placed(gz);
     memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);
@@ -1299,6 +1357,26 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
     ground_under_wheels(c, under);
     make_car(c, track);
     outputs(c, 0);
+    return 1;
+}
+
+int s2car_init_grid(struct s2car_state *s, int team, int car, int track, int grid, int ai)
+{
+    return init_car(s, team, car, track, grid, ai, 0);
+}
+
+int s2car_init_at(struct s2car_state *s, int team, int car, int track, float x, float z, int ai)
+{
+    const float at[2] = { x, z };
+    return init_car(s, team, car, track, 0, ai, at);
+}
+
+/* the lone car of the driving mode: the first place of the grid, driven by the player, not held */
+int s2car_init(struct s2car_state *s, int team, int car, int track, const struct track_image *img)
+{
+    (void)img;
+    if(!s2car_init_grid(s, team, car, track, 0, 0)) return 0;
+    s->hold = 0;
     return 1;
 }
 

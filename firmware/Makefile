@@ -34,7 +34,7 @@ S2CAR_SRCS ?= $(if $(wildcard s2car.c),$(filter-out s2car_stub.c,$(notdir $(wild
 
 BOOT_SRCS = start.S boot.c selftest.c console.c dlog.c trap.c memtest.c screen.c crc32.c slot.c
 PROG_SRCS = start_prog.S main.c viewer.c road.c console.c dlog.c trap.c screen.c raster.c files.c track.c crc32.c slot.c zip.c setup.c geom.c drive.c car.c opp.c ghost.c blit.c hud.c efx.c scenery.c sound.c speech.c music.c fm.c menu.c champ.c save.c intro.c \
-            track_build.c dat.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c s2params.c $(S2CAR_SRCS)
+            track_build.c dat.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c s2params.c race.c $(S2CAR_SRCS)
 BOOT_OBJS = $(patsubst %,$(OUT)/obj/%.o,$(basename $(BOOT_SRCS)))
 PROG_OBJS = $(patsubst %,$(OUT)/obj/%.o,$(basename $(PROG_SRCS)))
 
