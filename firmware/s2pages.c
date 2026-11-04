@@ -185,13 +185,6 @@ static int hs_key(void *self, uint32_t press)
     return 0;
 }
 
-static char *put_int(char *p, int v)
-{
-    if (v >= 10) *p++ = (char)('0' + v / 10);
-    *p++ = (char)('0' + v % 10);
-    return p;
-}
-
 static void hs_draw(void *self, struct blit_list *l, uint32_t tick)
 {
     struct scores *s = self;
@@ -218,15 +211,8 @@ static void hs_draw(void *self, struct blit_list *l, uint32_t tick)
     s2gfx_clip(0x79, 0xB4, 0x77, 0xB4);
     for (int i = first, y = LIST_Y; i < first + VIEW_ROWS && i < LIST_ROWS; i++, y += ROW_H) {
         const struct s2save_row *r = list_row(i);
-        char t[40], *p = t;
-        *p++ = 1;                                       /* fixed pitch */
-        if (i < 9) *p++ = ' ';
-        p = put_int(p, i + 1);
-        *p++ = '.';
-        *p++ = ' ';
-        for (int k = 0; k < 4 && r->name[k]; k++) *p++ = r->name[k];
-        for (int k = 0; k < 6; k++) *p++ = ' ';
-        s2_time_text(p, r->time);
+        char t[40];
+        s2_row_text(t, i, r);
         int chosen = i == s->row;
         s2gfx_text(l, chosen ? SMALL_HOT : SMALL, chosen ? HOT : WHITE, 2, 50, y, t);
         s2gfx_sprite(l, S2G_SPR_CAR + (r->team - 1) * 5 + (r->car - 1), 134, y - 1);

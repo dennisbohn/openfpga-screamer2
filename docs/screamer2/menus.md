@@ -1,7 +1,8 @@
 # Screamer 2's menus: the original's screens, what they are made of, what the core can do
 
-Study and plan (2026-11-04); built so far: the start menu (`firmware/s2menu.c`, docs/development.md "Start menu") and row 1 of section 7, the 2D
-toolkit with the LOADING screen and the pause menu (section 6). Sources:
+Study and plan (2026-11-04); built so far: the start menu (`firmware/s2menu.c`, docs/development.md "Start menu") and rows 1 to 3 of section 7, the 2D
+toolkit with the LOADING screen and the pause menu, the save, the end of the race with the best times, and the GAME SETTINGS and HI SCORES pages
+(section 6). Sources:
 OpenScreamer's `docs/NOTES2.md` (S2-5zg, S2-5zk to S2-5zq, S2-5r, S2-5s: the menu read from the decompiled program and
 compared with DOSBox), `docs/screamer2/comparison.md` (the menu rows), the game's files (sizes below measured with `tools/dat_sizes.py -v`,
 formats checked on the real files), the program `STARTL.EXE` (`tools/dis.sh -f`, `GAME_DIR` = the Screamer 2 folder), and Screamer 1's
@@ -55,11 +56,12 @@ ATTRACT (0x3c9ac): Virgin logo, AND, Milestone, PRESENTS, then an AI race on a t
    TIME ATTACK: TRACK SELECTION (3D map) -> CAR page with 3 LAPS / FREE RUN -> RACE with the ghost car -> END SCREEN (TOTAL, LAP TIME,
         RACE AGAIN / EXIT, best times)
    MULTIPLAYER: MULTIPLAYER MENU, COMBAT MODE, NETWORK GAME, SERIAL LINK, split screen (mode 0x40)
-   GAME SETTINGS (0x3f72a): TRANSMISSION, DETAIL LEVEL, NUMBER OF LAPS (1/3/5/10), ARCADE ENEMIES SKILL, MULTIPLAYER ENEMIES, TIME ATTACK
-        GHOST CAR, DAMAGES, MUSIC, VIEW HIGH SCORES -> HI SCORES TABLE (0x4254f: total / lap, arcade / championship / time attack,
+   GAME SETTINGS (0x4228a): TRANSMISSION, DETAIL LEVEL, NUMBER OF LAPS (1/3/5/10), ARCADE ENEMIES SKILL, MULTIPLAYER ENEMIES, TIME ATTACK
+        GHOST CAR, DAMAGES, MUSIC, VIEW HIGH SCORES -> HI SCORES TABLE (0x42719: total / lap, arcade / championship / time attack,
         1/3/5/10 laps, track, 15 rows, VIEW REPLAY)
 in the race:  ESC = pause: RESUME | RESTART (not in the championship) | CD PLAYER | EXIT, over the darkened race (0x49f8e)
-at its end:   4 s CONGRATULATIONS / place / total time, then REPLAY | RACE AGAIN | EXIT and the track's 15 best times (0x47040 by the kind of game)
+at its end:   4 s CONGRATULATIONS / place / total time, then REPLAY | RACE AGAIN | EXIT and the track's 15 best times (0x4720c, by the kind of game
+              0x47636 arcade, 0x48041 championship, 0x48b4c time attack)
 exit:         EXIT SCREAMER 2? YES / NO
 ```
 
@@ -87,10 +89,10 @@ a scene built like a track (the track's engine). Sizes are stored in the ZIP / u
 | TRACK SELECTION (time attack, league) | `MAPS1.DAT` (523 KB / 865 KB): `AMAP1..7-VS.3DX` (29 to 109 KB; the largest has four blocks, 377 vertices at most, 1,886 faces, GU_MAX_VERT is 512), `MAPS.MLB` 406 KB; `LEAG_0L.BKK`, TERRAIN / DIFFICULTY lines (`STRINGS.TXT`) | 3D-o | a turning 3D map of the track, see-through look from the material table; S1's `map_blocks` did this with six maps |
 | LEAGUE SELECTION, WELCOME, LEAGUE REPORT | `LEAG_1..4L.BKK` (cups, 33 to 36 KB), `BKG_3L` (two black boxes in orange frames, loaded at 0x433b8 inside the league pages), `STRINGS.TXT` lines, big font, the four badges (3D in the original) | 2D (+3D-o) | the report lists place, badge, name (MIL / CPU), points; the badges can be the race screen's small team marks (what the PC port did) |
 | CUSTOMIZE | the car (3D-o), `STRINGS.TXT` (HANDLING, BRAKES, TIRE TYPE, TIRE PRESSURE, FRONT / REAR SUSPENSIONS, SAVE, EXIT), the six numbers a set-up holds | 3D-o + 2D | the numbers go into the car's start record (`0x14e20`); whether `s2car.c`'s record takes them was not checked |
-| GAME SETTINGS | `BKG_*`, `STRINGS.TXT` (9 rows, 22 characters, values `:AUTO :MANUAL :LOW :MEDIUM :HIGH :1 :3 :5 :10 :ROOKIE :NORMAL :PRO :OFF :ON ...`) | 2D | the start menu's rows are a subset of this page |
-| HI SCORES TABLE | `HISCOREL.BKK` (40 KB), `GAME.TXT` header, the lists from `CHOICE.DAT` | 2D | clip box y 119 to 180, five rows visible of 15, VIEW REPLAY lit on rows that have a replay |
+| GAME SETTINGS | `BKG_7L.BKK`, `STRINGS.TXT` (9 rows, 22 characters, values `:AUTO :MANUAL :LOW :MEDIUM :HIGH :1 :3 :5 :10 :ROOKIE :NORMAL :PRO :OFF :ON ...`) | 2D | built, `firmware/s2pages.c` (section 6); the start menu's rows are a subset of this page |
+| HI SCORES TABLE | `HISCOREL.BKK` (40 KB), `STRINGS.TXT`, the lists from `CHOICE.DAT`, `MENUL.SPR`'s cars' side views | 2D | built, `firmware/s2pages.c`; clip box y 119 to 180, five rows visible of 15, VIEW REPLAY lit on rows that have a replay |
 | Pause | `GAME.TXT` lines 34 to 37 (RESUME, RESTART, CD PLAYER, EXIT), the darkened race, `GAMEL.SPR` sprite 10 for the CD player | 2D | built (RESUME, RESTART, EXIT), `firmware/s2pause.c`; `STARTL.EXE` 0x49f8e: the items in font 0 (`GAMEL.FNT`'s, the same art as `MENUL.FNT`'s second font) colour 1 spaced 2, centred at y = 22 i - 11 n + 102, over the picture darkened once (the table the original builds for the palette: for each colour the nearest entry to 0.67 of it), a box (x 80, y 94 - 11 n, 160 x 22 n + 12) darkened again over them, the chosen item bright and blinking over it; the effects ease out, the CD plays on |
-| End of the race | `GAME.TXT` (1ST .. 4TH, POSITION, CONGRATULATIONS !, TIME OVER, REPLAY, RACE AGAIN, EXIT, CONTINUE, BEST TOTAL TIMES, THIS LAP, TOTAL, BEST LAP!), the track banner sprite, the best-times list with the cars' pictures | 2D | the race screen's fonts (`GAMEL.FNT`) and the end of S1's `hud.c`; the start menu's FINISH text is the stand-in |
+| End of the race | `GAME.TXT` (1ST .. 4TH, POSITION, CONGRATULATIONS !, TIME OVER, REPLAY, RACE AGAIN, EXIT, CONTINUE, BEST TOTAL TIMES, THIS LAP, TOTAL, BEST LAP!), `GAMEL.SPR`'s track banners, the best-times list with the cars' pictures | 2D over the race | built, `firmware/s2end.c` (section 6); the race screen's fonts (`GAMEL.FNT`) are the menu's fonts 1, 2 and 3 |
 | Replay | the player's controls per 20 ms step | race | S1's `rec[]` / `RACE_REPLAY` (docs/architecture.md) |
 | Credits | `ATTRACT.TXT` | 2D | in the attract sequence |
 
@@ -152,8 +154,9 @@ Not feasible here: MULTIPLAYER (network, serial link, combat mode, split screen)
 ## 6. What exists
 
 **The start menu.** `s2menu.c` is the arcade flow in one list: track, team, car, laps, level, gearbox, race / watch, with the original's texts and the choices kept.
-What it leaves out of the original's arcade: the pictures and 3D of the TRACK and CAR pages, the end screen, the game's own names for the 20 cars,
+What it leaves out of the original's arcade: the pictures and 3D of the TRACK and CAR pages, the game's own names for the 20 cars,
 the options room, every other kind of game. Its choices are kept in the save (section 7.1): the laps, level and gearbox rows are the GAME SETTINGS rows of the same name.
+Two rows at its end, GAME SETTINGS and HI SCORES, open the pages of row 3 (`s2menu_run()` runs them and takes the settings back from the save).
 
 **The 2D toolkit (row 1, built 2026-11-04).** Four small modules over the blitter, all in `firmware/`, tested on the PC (`tools/menu_screens.sh`):
 
@@ -161,10 +164,21 @@ the options room, every other kind of game. Its choices are kept in the save (se
 |---|---|
 | `s2gfx.c` | `.BKK` pictures (`s2gfx_bkk`: 24-byte header, palette x4, 64,000 pixels, read from `GFX/GRAF1.DAT` of the ZIP by range, about 40 KB and 50 ms for a picture), `MENUL.SPR` sprites and `MENUL.FNT` fonts as the blitter's image tables, text with the original's spacing (`s2gfx_text`, 0x50f45), sprites (also centred, 0x333d9), the `LOCAL.DAT` lines, the original's darkening table and a darkened still of the screen; one frame = `s2gfx_begin()` (blitter list for the back buffer), the page's commands, `s2gfx_end(pal, fade)` (palette faded, swap) |
 | `s2page.c` | the page runner: `struct s2_page` (picture, palette, fade in / out frames, and a frame, key and draw function) and `s2page_run()`, the loop of the original's pages (keys with repeat as the start menu has them, fade, draw, swap); the Pocket's buttons are Screamer 1's: B or Start = ENTER, A or Select = ESC (`S2PAGE_ENTER`, `S2PAGE_ESC`) |
-| `s2load.c` | the LOADING screen and the one function (`s2_best_get`) that will give it the track's best total time and best lap from the save (row 2): none yet, shown as `--:--:-- MIL` |
+| `s2load.c` | the LOADING screen; `s2_best_get` gives it the track's best total time and best lap, the first rows of the save's arcade lists (`--:--:-- MIL` for a track nobody has driven); `s2_time_text` is the original's time text (0x37e1e) |
 | `s2pause.c` | the pause menu |
+| `s2end.c` | the end of the race (below) |
+| `s2pages.c` | the GAME SETTINGS and HI SCORES pages (below) |
 
-*Memory* (SDRAM, docs/soc.md): the toolkit lives at `0x10A0_0000`, Screamer 1's menu region, 1 MB with 0.93 MB used: two picture buffers (64,000 bytes each: the page's picture,
+*Added with row 3*: `s2gfx_clip()` (the original's two clip boxes, 0x51189 for text and 0x50f3c for sprites: rows only; the pages and the end screen narrow them for their lists),
+`s2gfx_text_boxed()` (0x332f5: centred in a box), `s2gfx_dark_fb()` (the original's box darkening of the screen, 0x51868: in words of four pixels, so x and width lose their low two bits, a box at
+x 30 is 28 to 288), `s2gfx_dark_after()` (the same applied once the blitter has drawn the page: for the page's text under the box), `s2gfx_begin_on()` / `s2gfx_flush()` (a list for a frame another
+loop draws: the race), and the race screen's track banners. The end screen draws `GAMEL.SPR` 0x27 + track - 1, which is the loading screen's `MENUL.SPR` 0x13 + track - 1 but for the second: the
+race screen's banner reads COLUMBIA, the menu's COLOMBIA (224 pixels differ). `s2gfx_init()` therefore unpacks `GFX/GAME1.DAT`'s `GAMEL.SPR` (197,668 bytes, 60 KB read, 0.1 s on the Pocket) to `0x10B0_0000`
+and puts the seven banners into the image table behind the fonts (`s2gfx_banner(track)` gives the number; without GAME1.DAT in the ZIP it falls back to the loading screen's). The cars' side views
+(`S2G_SPR_CAR` = `MENUL.SPR` 0x55 + 5 team + car) and the race screen's fonts 0, 7 and 8 (`GAMEL.FNT`) are, glyph for glyph and pixel for pixel, `MENUL.SPR`'s and `MENUL.FNT`'s fonts 1, 2 and 3
+(checked), so nothing else is loaded.
+
+*Memory* (SDRAM, docs/soc.md): the toolkit lives at `0x10A0_0000`, Screamer 1's menu region, 1 MB with 0.93 MB used (and `GAMEL.SPR` at +0x100000): two picture buffers (64,000 bytes each: the page's picture,
 the pause's still), 160 KB for an entry's stored bytes, 72 KB for one unpacked, then `MENUL.SPR` as the file is (446 KB, the sprites' pixels are read from it) and the fonts'
 glyphs one byte a pixel (121 KB); the tables of 937 images are 11 KB of `.bss`. A deflated ZIP cannot be read by range: its `GRAF1.DAT` is inflated whole once, at
 `0x1100_0000` (4.2 MB; the files screen's read test region, free by then), tested on a deflated ZIP made on the fly. The track window, the cars, `SOUND.DAT` and the music ring are not touched.
@@ -172,8 +186,8 @@ glyphs one byte a pixel (121 KB); the tables of 937 images are 11 KB of `.bss`. 
 *Sounds.* The menu's click sounds are not in `GAME.DTR`'s 33: `MENU.DTR` is a second table of `DATA/SOUND.DAT` (the container the race's sound is read from, already
 in memory at `0x11C0_0000`), 15 samples `MENU1.RAW` .. `MENU15.RAW` with ids 0 to 14 (11,025 Hz, two at 22,050; the original loads them with its menu pages, 0xafc70).
 `s2snd_parse_menu()` reads the table with the race's rules, `s2sound_menu(id)` plays one on voice 10. Which sample a page plays is the page's own business; read from the
-code: the TRANSMISSION page 0 (MENU1) for a cursor move and 2 (MENU3) for ENTER, the GAME SETTINGS page 12 (MENU13) for a row move and 13 (MENU14) on the way out
-(`S2PAGE_SND_*`). The original's pause is silent (no `MENU.DTR` in a race); ours clicks (`PAUSE_CLICKS` in `s2pause.c`).
+code: the TRANSMISSION page 0 (MENU1) for a cursor move and 2 (MENU3) for ENTER, the GAME SETTINGS page 10 (MENU11) for a cursor move, 12 (MENU13) when ENTER steps a value and 13 (MENU14)
+for VIEW HIGH SCORES (ESC is silent); the HI SCORES page and the end of the race play none (`S2PAGE_SND_*`; an earlier reading of this page's sounds was of another page's code). The original's pause is silent (no `MENU.DTR` in a race); ours clicks (`PAUSE_CLICKS` in `s2pause.c`).
 
 **The LOADING screen.** `viewer_run()` puts it up before `load_track()` (the track image build, the cars, 3 to 5 s) and keeps it through the race's set-up (`race_init`, the music's first
 fill); `visit()` then fades it out in 0.4 s. The display is driven by the hardware from the front framebuffer and its palette, so nothing has to be done while the CPU is busy: the
@@ -186,7 +200,41 @@ loaded) and EXIT (the start menu), over the darkened race. Up / down choose, B o
 race loop stops; the first frame after it takes one 20 ms step), the effects ease out over a second and come back whole, the music plays on. Select + B back to the menu stays only
 where the toolkit is not up. Start no longer switches to the ride; the ride is the start menu's WATCH.
 
-What the start menu still leaves out of the original: see the list above; the race's end screen and the other pages follow in rows 3 to 6.
+**The end of the race** (`firmware/s2end.c`, `STARTL.EXE` 0x4720c, the arcade's 0x47636). When the player's car has done its laps it is the driver's and slows to a stop; the race goes on behind the
+screen, and the viewer calls `s2end_frame()` once a frame after the rasterizer is done (the CPU darkens part of what the race drew and one blitter list draws the rest, about as much as the pause's
+list; nothing is added to a frame of the race before the finish). The clocks run by the video frame counter (50 a second); all positions are the original's, read from its code:
+
+| Time since the finish | What is drawn (font 0 of the race screen = the menu's font 1, colour 1, spacing 2, centred; the others the menu's fonts 2 and 3) |
+|---|---|
+| 0 to 4 s | `CONGRATULATIONS !` at y 70 if first, `1ST POSITION` (the place's word and `POSITION`) at y 100, the total time (`MM:SS:CC`) at y 130; the keys do nothing |
+| from 4 s | the track's banner (sprite 0x27 + track - 1 of `GAMEL.SPR`) at y 4; the band y 180 to 200 and the box x 28 to 288, y 78 to 142 darkened once through the table of the race's palette (the pause's table); `RACE AGAIN` and `EXIT` in halves of the band at y 184 (the lit one in font 3, colour 3, blinking with the original's clock bit 0x20, lit again when it moves); the list of the 15 best times of the race's length: rows `N. NAM      MM:SS:CC` (fixed pitch) at x 50, 12 apart, the car's side view at x 134, the clip rows 81 to 140 (sprites 80 to 140), the player's row in font 3 colour 3 |
+| 4.5 s on | the list moves up four rows a second until the player's row is the third in view (row - 2, at most the 11th at the top) |
+
+The best times are put in when the choices come up (the original's call at that moment, 0x353cb): the total time into the list of the race's length (arcade), the best lap into the lap list, the player's
+name (`s2save_name()`), team and car, no replay; a time slower than the fifteenth goes nowhere (no row is lit, the list stays at the top). Only the human car is entered, and only if it finished
+(a race left by the pause or from the menu enters nothing). The original's REPLAY is left out (it appears in thirds with RACE AGAIN and EXIT once there is a replay; without one the two stand in halves,
+as here). The keys: d-pad left / right choose, B or Start take (the original's ENTER; only a new press counts, so the gas held across the line does nothing), A and Select do nothing (as the original's ESC).
+RACE AGAIN is the race from the grid again (like the pause's RESTART), EXIT the start menu. The music fades out over 3 s from the finish as before. The log has `end: T4 place 1 01:25:50 rank 7` for the first
+three races of a run (the rank is the row, 0 if none). The end screen is only up when the toolkit is (`ui_ready` of the viewer); without it the old FINISH text and A / B are used.
+
+**GAME SETTINGS** (`firmware/s2pages.c`, `s2_page_settings()`, 0x4228a; `BKG_7L.BKK`). The title at y 4 (font 0), the nine rows from y 48 in steps of 14: label at x 10, value at x 200 (font 2, colour 1; the
+values are the texts `:AUTO` ... of `STRINGS.TXT`), the value of the row under the cursor in font 3 colour 3 while the original's clock bit 0x20 is clear (the colon drawn again over it in font 2), VIEW HIGH SCORES
+lit as a whole. The original's keys: up / down move (no wrap, a click of id 10), ENTER steps the row's value round (id 12; VIEW HIGH SCORES: id 13 and the HI SCORES page), ESC leaves (the screen fades to black
+over 0.5 s; it comes in whole). Here B or Start are ENTER, A or Select ESC, and left / right also step the value back and on (the original ignores them). The value goes into the save at once
+(`s2save_set`); the start menu reads the save again when the page returns. Which of the eight act: TRANSMISSION, NUMBER OF LAPS and ARCADE ENEMIES SKILL (the start menu's rows, `apply_cfg()` in `viewer.c`),
+DAMAGES (`s2car_damages`: off, a knock from a wall marks nothing and hurts nothing, as the game's 0x19aaa; **off is the save's default, as in the game, so the damage marks of earlier builds need DAMAGES ON**) and
+MUSIC (`music_on`: off, no song in the race). **DETAIL LEVEL, MULTIPLAYER ENEMIES and TIME ATTACK GHOST CAR only keep their value** (the core draws the H sets of the tracks and has no ghost or multiplayer yet);
+the original's MUSIC row also starts and stops the menu's CD track, which this core does not play.
+
+**HI SCORES TABLE** (`s2_page_hiscores()`, 0x42719; `HISCOREL.BKK`). The title at y 4; four boxes of 160 pixels (text centred in them, font 2 colour 1; the chosen one in font 3 colour 3 while the clock bit 0x20 is set):
+TOTAL TIME / LAP TIME and the kind (ARCADE, CHAMPIONSHIP, TIME ATTACK) at y 44, the length (1 LAP .. 10 LAPS) and the track at y 65, VIEW REPLAY centred at y 85; below, the list of 15 rows at y 120 + 12 n: the rows as at the end
+of the race, the chosen row in font 3 colour 3, clip rows 121 to 180 (sprites 119 to 180), so five rows show; the list starts at the chosen row - 2 (the top for the first three, the 11th for the last three). The keys: up / down
+the row, left / right the box (lit again when it moves), ENTER (B or Start) steps the value of the chosen box round (the list's type, the kind, the length (only for arcade and championship totals: time attack has only the 3-lap list),
+the track in the order they open: England, Egypt, California, Finland, Switzerland, Columbia, The Tunnel; the unlocked ones), ESC (A or Select) leaves back to GAME SETTINGS or the start menu. The page is silent. VIEW REPLAY is
+dark (its box 0x21, 0x51, 0x102 x 0x12 through the darkening table three times, over the text) unless the chosen row has a replay number: the save keeps them (`s2save_set_replay`), nothing writes one yet and ENTER
+on it does nothing. The four choices are kept while the power is on only (the original keeps them in its settings block); the first visit shows the arcade totals of the laps and the track the start menu is set to.
+
+What the start menu still leaves out of the original: see the list above; the other pages follow in rows 4 to 6.
 
 ## 7. Build order and rough costs (days of work, one developer; the PC-side tests of each step as for the start menu)
 
@@ -194,7 +242,7 @@ What the start menu still leaves out of the original: see the list above; the ra
 |---|---|---|---|
 | 1 | **done 2026-11-04** (section 6). **2D toolkit**: `.BKK` loader (header, palette x4, copy), `MENUL.SPR` / `.FNT` loader into the blitter's image tables (Screamer 1's `menu_init` and `tb_hud.c` as templates), a page runner (keys with repeat, fade in/out, the menu click sounds from `SOUND.DAT`'s `MENU.DTR`); the **LOADING screen** (`LOAD_nL` + LOADING + BEST TIME / BEST LAP) and the **pause menu** (RESUME, RESTART, EXIT over the darkened race, replacing Select + B) | zip range reads of `GRAF1.DAT`; the existing blitter | 2 |
 | 2 | **The save** (done, 7.1): a Screamer 2 layout for `CHOICE.DAT` (settings, volumes, unlocks, set-ups, best times; the start menu's fields moved into it, the old layout is migrated once), `data.json` size 36,864 | `core/data.json` | 1 |
-| 3 | **End of race**: the 4 s CONGRATULATIONS / place / time screen, then RACE AGAIN / EXIT (REPLAY later) and the track's best times (a table of 15 in the new save); GAME SETTINGS and HI SCORES pages on the same toolkit | 2 | 2 |
+| 3 | **done 2026-11-04** (section 6). **End of race**: the 4 s CONGRATULATIONS / place / time screen, then RACE AGAIN / EXIT (REPLAY later) and the track's best times (a table of 15 in the new save); GAME SETTINGS and HI SCORES pages on the same toolkit | 2 | 2 |
 | 4 | **Arcade pages**: TRACK page (`TKG`, banners, lit frame), TRANSMISSION page, the arcade title, the page chain with ESC going back; the start menu becomes the stand-in for the pages that do not exist yet | 1 | 1.5 |
 | 5 | **3D-o pages**: the CAR page (carousel of the team's cars with the plate: the 20 cars' names to read), TEAM SELECTION (four badges), ENTER YOUR NAME (letter tyres), the track maps for time attack and league | geometry unit pieces with a page MLB; `s2teams.c`; `LOGO1`, `PLATES1`, `MAPS1` read by range | 4 |
 | 6 | **Championship**: leagues, points (10 / 6 / 3 / 0), unlocks, LEAGUE SELECTION / WELCOME / REPORT, the level per league, weather per race (our core has day only: skip), LEAVING LEAGUE | 2, 4, 5 | 3 |
@@ -295,5 +343,7 @@ into 19,348 bytes), and the migration with the owner's real file.
 - The room's face count and the frame cost of a room, a scene and the heaviest map (measure when step 5 or 8 starts; the budget is the race's 20 ms).
 - The menu sounds: the 15 samples are read (section 6); which one each page plays is known for two pages only (the code of the others calls
   the sound manager with ids 0 to 14 at 60 places, `STARTL.EXE` 0x307e3 .. 0x436fd). The menu's music (CD track 2 while in the menu) is not played.
-- The loading screen's and the pause screen's pixels were not compared with the original running (their positions, fonts and spacing are read from its code); the
-  race screen's own text is still the console's, not `GAMEL.FNT`'s.
+- The loading screen's, the pause screen's, the end screen's and the two pages' pixels were not compared with the original running (their positions, fonts, spacing and colours are read from its code, and the
+  tests compare the firmware with an independent drawing of the same reading: `tools/menu_screens.sh`); the race screen's own text is still the console's, not `GAMEL.FNT`'s.
+- The pages' fade in (a cut, as read: nothing in the pages' code fades them in, the way out fades to black in 0.5 s), the end screen's sound fade of the effects (0xaee60 in its code) and the CD / menu music are not done.
+- The end screen's cost on the Pocket is not measured (the simulation has no menus: the darkening of 23,000 pixels, one list and the 74 ms of the darkening table at the finish).

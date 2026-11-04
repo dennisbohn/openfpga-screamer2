@@ -53,6 +53,19 @@ char *s2_time_text(char *p, float t)
     return p;
 }
 
+void s2_row_text(char *p, int row, const struct s2save_row *r)
+{
+    *p++ = 1;
+    if (row < 9) *p++ = ' ';
+    if (row >= 9) *p++ = (char)('0' + (row + 1) / 10);
+    *p++ = (char)('0' + (row + 1) % 10);
+    *p++ = '.';
+    *p++ = ' ';
+    for (int k = 0; k < 4 && r->name[k]; k++) *p++ = r->name[k];
+    for (int k = 0; k < 6; k++) *p++ = ' ';
+    s2_time_text(p, r->time);
+}
+
 void s2_record_text(char *p, const struct s2_record *r)
 {
     p = s2_time_text(p, r->time);

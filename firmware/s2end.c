@@ -53,13 +53,6 @@ static void record(const struct s2_end_in *in)
     }
 }
 
-static char *put_int(char *p, int v)
-{
-    if (v >= 10) *p++ = (char)('0' + v / 10);
-    *p++ = (char)('0' + v % 10);
-    return p;
-}
-
 /* CONGRATULATIONS ! (first place), "1ST POSITION", the total time: the race screen's font 0, colour 1, spacing 2, centred at y 70, 100, 130 */
 static void congratulations(struct blit_list *l, const struct s2_end_in *in)
 {
@@ -89,15 +82,8 @@ static void choices(struct blit_list *l, const struct s2_end_in *in)
     s2gfx_clip(0x51, 0x8C, 0x50, 0x8C);
     for (int i = E.first, y = y0; i < E.first + VIEW && i < ROWS; i++, y += 12) {
         const struct s2save_row *r = s2save_row(S2S_KIND_ARCADE, in->track, list, i);
-        char t[40], *p = t;
-        *p++ = 1;                                       /* fixed pitch */
-        if (i < 9) *p++ = ' ';
-        p = put_int(p, i + 1);
-        *p++ = '.';
-        *p++ = ' ';
-        for (int k = 0; k < 4 && r->name[k]; k++) *p++ = r->name[k];
-        for (int k = 0; k < 6; k++) *p++ = ' ';
-        s2_time_text(p, r->time);
+        char t[40];
+        s2_row_text(t, i, r);
         int mine = i == E.rank;
         s2gfx_text(l, mine ? SMALL_HOT : SMALL, mine ? HOT : WHITE, 2, 50, y, t);
         s2gfx_sprite(l, S2G_SPR_CAR + (r->team - 1) * 5 + (r->car - 1), 134, y - 1);

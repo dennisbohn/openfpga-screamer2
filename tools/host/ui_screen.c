@@ -702,6 +702,13 @@ static void check_end(const char *ref, const char *prefix)
     CHECK(b->time == 140.125f && b->team == 4 && b->car == 2, "track 1 row 8: %g", b->time);
     CHECK(c->time == 64.0f && s2save_row(S2S_KIND_ARCADE, 7, 0, 0)->time == 50.0f, "a slower time than the fifteenth goes nowhere (row 15 is %g)", c->time);
     CHECK(s2save_row(S2S_KIND_ARCADE, 7, S2S_LAP, 0)->time >= S2S_NO_TIME, "a run without a best lap writes none");
+    /* a time equal to one in the list goes ahead of it (0x354cf: fcomp, ja): 83.01 against DDD and CCC (the later one went ahead of the first in
+       rows.txt) of track 1's 3-lap list; the race's frames up to the choices (200 of them) are enough to put it in */
+    struct s2_end_in tie = { 1, 3, 2, (float)83.01, 0.0f, 1, 1 };
+    for (int j = 0; j <= 200; j++) s2end_frame(FB(1), 1, pal, &tie, (uint32_t)j, 5000 + (uint32_t)j, 0);
+    CHECK(s2save_row(S2S_KIND_ARCADE, 1, 1, 2)->time == tie.time && !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 2)->name, "MIL") &&
+          !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 3)->name, "DDD") && !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 4)->name, "CCC") &&
+          !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 1)->name, "BBB"), "a tied time goes ahead of the old ones");
     /* the loading screen's BEST TIME / BEST LAP from the same lists */
     struct s2_record total, lap;
     s2_best_get(4, 3, &total, &lap);

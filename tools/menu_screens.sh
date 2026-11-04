@@ -2,8 +2,9 @@
 # The start menu (firmware/s2menu.c) and the 2D toolkit (s2gfx.c, s2page.c, s2load.c, s2pause.c: loading screen, pause menu, page
 # runner) on the PC from the firmware's own code: tests of the menu's logic (keys, the grid, the kept choices, the texts read from
 # the real ZIP's DATA/LOCAL.DAT), of the toolkit against independent references made from the game's files (tools/ui_reference.py:
-# .BKK pictures, text and sprites, MENU.DTR) and pictures of the screens in several states, in build/check/menu/*.png (never
-# committed). Exit code 0 if all tests passed.
+# .BKK pictures, text and sprites, MENU.DTR), of the pages of menus row 3 (GAME SETTINGS, HI SCORES, the end of the race and the
+# best-time flow: s2pages.c, s2end.c) against references drawn from the game's files, and pictures of the screens in several states,
+# in build/check/menu/*.png (never committed). Exit code 0 if all tests passed.
 # Usage: tools/menu_screens.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2"
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)

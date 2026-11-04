@@ -658,6 +658,17 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             int finished = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES);
             if (finished && ui_ready) end_screen(n, fb, pal, fin_frames, vf, press);
             fin_frames = finished ? fin_frames + 1 : 0;
+#ifdef S2_SIM_END
+            if (sim && drawn >= 2 && drawn <= 9) {          /* a measurement build (tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_END=1 TAG=simend): the end screen over the first frames */
+                uint32_t t_e = rdcycle();
+                end_screen(n, fb, pal, drawn == 2 ? 0 : 1, drawn == 2 ? 1000 : drawn == 3 ? 1200 : 1201 + drawn - 4, 0);
+                dlog_str("end screen frame ");
+                dlog_dec((int32_t)drawn);
+                dlog_str(": ");
+                dlog_dec((int32_t)((rdcycle() - t_e) / (CPU_HZ / 1000000)));
+                dlog_str(" us\n");
+            }
+#endif
         }
         tl_mark(TL_HUD);
 
@@ -765,7 +776,11 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     s2snd_init(z);
     s2menu_init(z);
     s2menu_load(&cfg);
+#ifdef S2_SIM_END
+    ui_ready = s2gfx_init(z);                           /* (the measurement build of the end screen has the toolkit in the simulation) */
+#else
     ui_ready = !sim && s2gfx_init(z);                   /* (the simulation has no menus) */
+#endif
     for (;;) {
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
             int go = s2menu_run(&cfg);

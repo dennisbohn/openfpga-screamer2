@@ -90,6 +90,7 @@ docs/screamer2/menus.md). Everything is open from the start: all seven tracks, a
 | ARCADE ENEMIES SKILL | ROOKIE, NORMAL, PRO (the original's levels; `race_level = 2 - skill`, the row of `SKILLS` the computers' pace is read from) |
 | TRANSMISSION | AUTOMATIC, MANUAL |
 | START RACE / WATCH | the race (driving mode), or the viewer's ride (for timing) |
+| GAME SETTINGS, HI SCORES | the original's two pages (`firmware/s2pages.c`, "End of the race and the two pages" below); A or Start opens one, A or Select leaves it |
 
 | Button (menu) | |
 |---|---|
@@ -106,9 +107,8 @@ files screen, Start). The grid is applied when the track image is built (`load_t
 `tools/menu_screens.sh` runs the menu's code on the PC: tests of the keys, the grid, the kept choices and the texts read from the real ZIP,
 and pictures of the list in `build/check/menu/`.
 
-Back to the menu: EXIT in the race's pause menu (Start, "Loading screen and pause menu" below), Select + B in the ride (the music stops), and after
-the player has finished a race (a second later, so that the gas held across the line does nothing) A starts the race again and B goes to the menu; the
-FINISH screen says so. The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
+Back to the menu: EXIT in the race's pause menu (Start, "Loading screen and pause menu" below), Select + B in the ride (the music stops), and EXIT on the end screen
+of a finished race ("End of the race and the two pages" below). The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
 
 | Button (ride) | |
 |---|---|
@@ -130,8 +130,8 @@ the cars. The four cars (`firmware/s2car.c`) each wear their own team's model an
 (CONDOR), the computers' are team 2's car 2, team 3's car 3 and team 4's car 4; the start menu sets the player's team and car and the
 computers get the other three teams ("Teams" below). Speed in mph, gear and the gearbox (AUTO / MAN) are drawn top right, below it
 `LAP 1/3` and `POS 1/4`, top left under the timing overlay `TIME`, `LAP` (this lap's clock) and `BEST`
-(mm:ss:hundredths). After his last lap the player's car is the game's driver's (it slows to a stop) and `FINISH`, his place and total
-time are on the screen.
+(mm:ss:hundredths). After his last lap the player's car is the game's driver's (it slows to a stop) and the original's end screen comes over the race
+("End of the race and the two pages" below).
 
 | Button (drive) | |
 |---|---|
@@ -143,13 +143,13 @@ time are on the screen.
 | X | timing overlay on / off (B is the gas here; Screamer 1's X, the camera, has no use yet) |
 | Select + left / right | previous / next track (the track is loaded again, a new race) |
 | Select + Start | a new race from the grid |
-| A / B after the finish | the race again / back to the menu (from a second after the line) |
+| After the finish | the end screen: d-pad left / right choose RACE AGAIN or EXIT, B or Start take it (after the four seconds of CONGRATULATIONS) |
 | Start | the pause menu (RESUME, RESTART, EXIT; not once the player has finished), the original's Esc; B or Start take the item, A or Select resume |
 
 ### Loading screen and pause menu
 
 Both are the original's pages on the 2D toolkit (`firmware/s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`; docs/screamer2/menus.md section 6 has the details and
-the SDRAM map). **LOADING:** the track's `LOAD_nL` picture with the track's banner, BEST TIME and BEST LAP (empty until the save exists: `--:--:-- MIL`) and
+the SDRAM map). **LOADING:** the track's `LOAD_nL` picture with the track's banner, BEST TIME and BEST LAP (the first rows of the save's arcade lists for the race's length: `--:--:-- MIL` for a track nobody has driven) and
 LOADING... is put up before `load_track()` and stays through the track's build and the race's set-up: the display is driven by the hardware from the front
 buffer and its palette, so the CPU can be busy for the 3 to 5 s of `T1 load` and the picture does not change. It then fades out in 0.4 s. The log has
 `ui: loading screen up after N ms` (the picture's read, unpacking and drawing: 35 ms in the simulation, where a data slot is 3 times faster than the Pocket's, so
@@ -163,6 +163,18 @@ mean and 11.5 worst, and 10.2 and 11.1, against 10.8 / 11.5 and 10.3 / 11.1 of t
 palette N ms` in the log, once: the darkening table and the copy of the screen, then the screen stands); a frame of the menu itself is one blitter list (the still and
 a few letters, about 1.5 ms of the CPU's time). The screens drawn by the hardware in the simulation equal the PC's drawing pixel for pixel (LOADING, track 4: 0 of 64,000
 pixels differ; the pause's picture was looked at: darkened race, box, dim items).
+
+### End of the race and the two pages
+
+Row 3 of the menus (docs/screamer2/menus.md section 6 has the positions and rules, read from `STARTL.EXE`). **End of the race** (`firmware/s2end.c`): once the player has done his laps, four
+seconds of CONGRATULATIONS ! (first place only), `1ST POSITION` and his total time over the race that goes on behind it, then the track's banner, a darkened band with RACE AGAIN / EXIT (d-pad left /
+right choose, B or Start take; the race from the grid again, or the start menu) and the track's 15 best times for the race's length, the player's new row lit and scrolled into view. At that moment his total time
+and best lap go into the save's lists (name from the save, team and car of the grid, arcade), and the LOADING screen of the next race shows the track's best total time and best lap from them. Nothing is
+drawn or run for it before the finish; the draw is after the rasterizer, like the old FINISH text it replaces (which stays for a core without the toolkit). **GAME SETTINGS** and **HI SCORES** (`firmware/s2pages.c`):
+the start menu's last two rows open them. GAME SETTINGS: up / down choose a row, B or Start (or left / right) step its value, A or Select leave; the eight settings are kept in the save and TRANSMISSION, NUMBER OF LAPS,
+ARCADE ENEMIES SKILL, DAMAGES (off by default as in the game: no damage marks or damage from a knock until it is on) and MUSIC act in the race, DETAIL LEVEL, MULTIPLAYER ENEMIES and TIME ATTACK GHOST CAR only keep their value.
+HI SCORES TABLE: up / down choose a row of the list of 15, left / right the box above (TOTAL TIME / LAP TIME, the kind of game, the laps, the track, VIEW REPLAY), B or Start step the value in that box, A or
+Select leave; VIEW REPLAY stays dark (no replays yet). Both are tested on the PC against references made from the game's files (`tools/menu_screens.sh`).
 
 A car (any of the four) with no drivable ground under it for 3 s (`off_track` of the state), or more than 3,000 units below the
 lowest road point of the track, or a computer's car that has not moved for 6 s, is put back onto the line by itself (the nearest point
@@ -448,7 +460,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/dat_sizes.py <file.DAT>...` | lists a game container with unpacked sizes (`-v`: every file) |
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
-| `tools/menu_screens.sh`, `tools/host/menu_screen.c`, `tools/host/ui_screen.c`, `tools/ui_reference.py` | the 2D toolkit (`s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`) on the PC with the blitter's C model and scripted buttons, against references made from the game's files by `ui_reference.py` (its own LZW, `.SPR` / `.FNT` and text readers): the 28 `L` pictures of `GRAF1.DAT` (CRC-32 of pixels and palette, on the stored ZIP and on a deflated one made on the fly), 20 text and sprite cases pixel for pixel, the loading screens of the seven tracks, the pause menu (keys, clicks, the easing of the effects, the darkened still pixel for pixel, the darkening table against a double-precision search) on three of the repository's race pictures quantized to their track's palette, the page runner's key repeat and fades, the 15 samples of `MENU.DTR`; pictures in `build/check/menu/` (`menu_load*.png`, `menu_pause*.png`). And the start menu `firmware/s2menu.c` with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
+| `tools/menu_screens.sh`, `tools/host/menu_screen.c`, `tools/host/ui_screen.c`, `tools/ui_reference.py` | the 2D toolkit (`s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`) on the PC with the blitter's C model and scripted buttons, against references made from the game's files by `ui_reference.py` (its own LZW, `.SPR` / `.FNT` and text readers): the 28 `L` pictures of `GRAF1.DAT` (CRC-32 of pixels and palette, on the stored ZIP and on a deflated one made on the fly), 20 text and sprite cases pixel for pixel, the loading screens of the seven tracks, the pause menu (keys, clicks, the easing of the effects, the darkened still pixel for pixel, the darkening table against a double-precision search) on three of the repository's race pictures quantized to their track's palette, the page runner's key repeat and fades, the 15 samples of `MENU.DTR`; pictures in `build/check/menu/` (`menu_load*.png`, `menu_pause*.png`). The pages of row 3 (`s2pages.c`, `s2end.c`): the references `tools/ui_reference.py` makes (the game's fonts and sprites drawn by its own routines: four states of GAME SETTINGS, nine of HI SCORES, the end screens of three runs frame by frame, 21 best-times rows for the lists) against the firmware's frames pixel for pixel (the darkening applied with the firmware's own table, which is checked against a search in double precision for every palette used), scripted buttons for the keys, clicks, scrolling, the settings in the save, the best-time flow (rank, ties, a slower time than the fifteenth, the lap list) and the start menu's two rows; the seven `GAMEL.SPR` banners from a stored and a deflated ZIP. And the start menu `firmware/s2menu.c` with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
 | `tools/s2/check_save_s2.sh`, `tools/s2/check_save_s2.c` | the save `firmware/s2save.c` natively in Docker under the sanitizers, with a fake data slot and the SDRAM window of `CHOICE.DAT` at its address: the defaults and the layout's bytes (against the table in docs/screamer2/menus.md 7.1), the interface and its clamping, the unlocks, the best-times ranking against a plain model (ties, the 15 rows, kinds / tracks / lists apart, time attack's one total list, 20,000 random insertions), a round trip through a "power-off", the migration of the old layout (with and without its marker, values out of range), and broken files: empty, short, foreign, random, oversized, a failing read, every byte of a valid file damaged in turn (the damaged part falls back to the defaults and the other keeps its data), damage with a matching checksum but values out of range, random damage; after every load the save is sealed and in range and nothing outside the layout was touched |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py`, `tools/s2/check_cars_s2.py` | the Screamer 2 track image on the PC (the reference; `S2CARS=team:car,...` chooses the grid's cars) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks and three grids, natively under the sanitizers; the windows' reflection picture and the cars' materials, textures and colours in the image against the original's |

@@ -21,6 +21,10 @@ int s2_laps_list(int laps);
 /* "01:23:45" (minutes, seconds, hundredths, p needs 9 bytes) as the original prints a time (0x37e1e); a time that is not above 0 or
    is 3599.9 and over (an empty row) is --:--:--. Returns the end of the text. */
 char *s2_time_text(char *p, float t);
+/* A row of a best-times list as the end screen and the HI SCORES page set it (0x42d99): fixed pitch (the byte 1), the row's number (1 .. 15, a space in front
+   of a one-digit one), ". ", the name, six spaces, the time: "\x01 1. MIL      01:23:45". p needs 40 bytes. */
+struct s2save_row;
+void s2_row_text(char *p, int row, const struct s2save_row *r);
 /* The same and the name behind it, as the original prints a record (0x37e1e, "%s %s"); p needs 16 bytes. */
 void s2_record_text(char *p, const struct s2_record *r);
 
