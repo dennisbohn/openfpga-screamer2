@@ -111,7 +111,7 @@ static float anim;                      /* the animation clock, 0..1 */
 static uint32_t piece_phase;            /* the pieces' texture phase: the clock (record +0x20 is -1) */
 static uint32_t clock16;                /* the animation clock, 16 bits (0x21538) */
 static uint8_t multi[MAX_OBJ];          /* the mesh has several blocks or moving parts */
-static int16_t class_key[MAX_OBJ];      /* the key's change for each mesh's class (+0x32c) */
+static int16_t class_key[MAX_OBJ];      /* the key's change for each mesh (the header's entry 43, track_class_key) */
 
 /* What track_under() reads, made once from the drivable meshes: each mesh's faces of its
    first face row in that order, with corners (x, z), normal, first corner, a box around them
@@ -467,8 +467,8 @@ int track_init(void)
 
 int track_class_key(const uint8_t *obj)
 {
-    (void)obj;      /* Screamer 2's object header (0xC8 bytes) has no class word at +0x32C: 0 for every mesh */
-    return 0;
+    /* the object header's table entry 43 (+0xC4), read at 0x7e9a5 and taken off the 16-bit key */
+    return obj ? -(int)(int16_t)rd32(obj + 0xC4) : 0;
 }
 
 /* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and
@@ -907,6 +907,14 @@ static int camera_cell(float x, float y)
     return lo < nvcells && vcells[lo].key == key ? lo : -1;
 }
 
+/* The drawing key of a piece or object at squared distance d2 from the camera, STARTL.EXE 0x7e8c0..0x7e97b: the walk
+   stores d^2 >> 3 (0x76f46), the key is -(sqrt of it, rounded to nearest, >> 2): about the distance / 11.3, far first.
+   A piece adds its mesh's class key (track_class_key: minus the object header's entry 43), an object 300 more */
+static inline int32_t depth_key(float d2)
+{
+    return -((int32_t)lrintf(sqrtf(d2 * 0.125f)) >> 2);
+}
+
 /* the list drawn: key << 16 | i, i (the low half) a piece, or npieces + an object */
 #define MAX_OBJS    64
 static int32_t vis[MAX_PIECES + MAX_OBJS];
@@ -1082,8 +1090,6 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
     const float down = (float)(clip->y1 - clip->y0 - eye) / FOCAL;
     int nv = 0;
     float nearest = 1e30f;
-    /* the game's key (0x8a7b0): -(sqrt(dist^2 >> 2), rounded, >> 2) */
-#define KEY(d2) (-((int32_t)lrintf(sqrtf((d2) * 0.25f)) >> 2))
     /* The cells to look at, in the order of the file (so the pieces come in the order of their numbers): the
        original's walk over the map (STARTL.EXE 0x76d80, docs/screamer2/draw_distance.md) takes only the cells
        that the list of the cell the camera is in names, if that cell has a list (most of the road's cells
@@ -1121,7 +1127,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             INT_NOW8(nearer, o0, o1, o2, o3, o4, o5, o6);
             if(nearer) nearest = d2;
             if(o0 | o1 | o2 | o3 | o4 | o5 | o6) continue;
-            vis[nv++] = (KEY(d2) + cpiece_key[i]) * 65536 + i;
+            vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;
         }
     }
     for(int k = 0; k < nobj && k < MAX_OBJS; k++) {
@@ -1134,8 +1140,8 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         INT_NOW6(o1, o2, o3, o4, o5, o6);               /* (one wait for the answers, as above) */
         if(o1 | o2 | o3 | o4 | o5 | o6) continue;
         float d2 = dx * dx + dy * dy + dh * dh;
-        /* 0x8a8c3: an object counts nearer; 0x8a8d7: its mesh's class */
-        vis[nv++] = (KEY(d2) + 800 + ob->key) * 65536 + npieces + k;
+        /* an object (a car) counts 300 nearer (0x7e991), less its mesh's class key (0x7e9a5) */
+        vis[nv++] = (depth_key(d2) + 300 + ob->key) * 65536 + npieces + k;
         st->objects++;
     }
     st->nearest = nearest < 4e18f ? (uint32_t)__builtin_sqrtf(nearest) : 0xFFFFFFFFu;

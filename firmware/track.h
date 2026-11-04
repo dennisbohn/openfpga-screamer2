@@ -186,23 +186,21 @@ void track_reflection_rate(float k);
    for a model drawn without a track (the menu's, menu.h) */
 void track_block_piece(const struct track_cam *cam, const struct track_block *b, struct gu_piece *g);
 
-/* The change of the drawing key for a mesh (an object of the UNR or a .3DX file) by its class: Screamer 1
-   has it in the header's last word at +0x32c (0x8a8d7: 3 -6000, 1 -1500, 2 -800, 4 -200, else 0);
-   Screamer 2's header is shorter and has none: always 0 */
+/* The change of the drawing key for a mesh (an object of the UNR or a .3DX file) by its class: minus the 16-bit word
+   of the object header's table entry 43 (+0xC4; 0x7e9a5 takes it off the key). A positive entry sends the mesh further
+   off, a negative one nearer. Screamer 2's tracks: a)NN.. (crowds, galleries, big backdrop panels) N x 100, a(NN.. (stands,
+   columns) -N x 100, akk.. (lawns, squares and carpets under the road, tracks 3 and 4) 6000, the rest 0 */
 int track_class_key(const uint8_t *obj);
 
 /* The camera's frame as the drawing takes it: forward, right, up (unit vectors in world x, y,
    height); a block placed with the columns right, up, forward faces the screen */
 void track_cam_axes(const struct track_cam *cam, float f[3], float r[3], float u[3]);
 
-/* The view from the camera, clipped to clip, with the objects sorted in among the pieces as
-   the game does it (0x83164, 0x8a6a8, 0x8a7b0, 0x832c0): the key is -(sqrt(dist^2 >> 2)
-   rounded, >> 2), about the distance / 8; an object (a car) counts 800 nearer, 6400 units,
-   so the road it stands on never covers it; a mesh's class (its header's last word, +0x32c)
-   puts it further off: 3 (track 1's lawn under the road) 6000, 1 1500, 2 800, 4 200 (a
-   shadow: before its car), for an object as well (track_object.key). Far first; on a tie in
-   the order the game puts them in: the pieces as in the file (each cell's scenery before its
-   road), the objects after them. Up to 32 objects. */
+/* The view from the camera, clipped to clip, with the objects sorted in among the pieces as the game does it
+   (STARTL.EXE 0x76d80 the walk, 0x7e880 the keys, 0x77130 the sort): the key is -(sqrt(dist^2 >> 3) rounded, >> 2),
+   about the distance / 11.3, taken from the placement's place; a piece adds its mesh's class key (track_class_key), an
+   object (a car) 300 more and its own. Far first; on a tie in the order the game puts them in: the pieces as in the
+   file (each cell's scenery before its road), the objects after them. Up to 32 objects. */
 void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
                     struct track_object *objs, int nobj, struct track_stats *st);
 
