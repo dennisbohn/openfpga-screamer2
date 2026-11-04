@@ -168,7 +168,7 @@ MANUAL as two sprites, the chosen one blinking lit). ENTER fades the picture out
 The sounds are each page's own, read from its code (`MENU.DTR` ids 0 to 14): title ENTER 1, TRACK moves 0 and ENTER 2, CAR moves 4, TRANSMISSION moves 0 and ENTER 3. ESC on the TRACK
 page goes to the options room, as the original's does (here the start menu), not back to the title; ESC on the CAR page goes to TRACK and on the TRANSMISSION page to CAR. After
 the TRANSMISSION page the race loads (the LOADING screen). **Checked against the running original** (STARTL.EXE in its DOSBox, `tools/s2/dosbox_arcade.py`, Ctrl+F5 raw frames, 47 screenshots with
-all seven tracks open, and a first run by hand on a fresh save with three): the title's prompt band (on and off), the TRACK page whole at every one of the seven places (the frame
+all seven tracks open and 27 on a fresh save with three): the title's prompt band (on and off), the TRACK page whole at every one of the seven places (the frame
 hidden, and shown at the first place and in the glides; the dim and lit pictures, the arrows, the scroll), the CAR page's title, badge and name plate, and the TRANSMISSION page's title, badge and buttons (both choices, lit and dim) are
 **pixel for pixel equal** to the model of `tools/ui_arcade_ref.py`, and so to the firmware (`tools/menu_screens.sh` compares 105 frames of the firmware's code with the model
 pixel for pixel); the 8 screenshots taken in the middle of a move are frames the original was half way through drawing (it draws on the screen it shows: the top rows are one tick of
