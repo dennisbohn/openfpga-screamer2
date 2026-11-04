@@ -23,6 +23,7 @@
 #include "s2gfx.h"
 #include "s2load.h"
 #include "s2pause.h"
+#include "s2hud.h"
 #include "prof.h"
 #include <string.h>
 
@@ -322,6 +323,7 @@ static int race_start(int n, float floor_z)
         dlog_str(" ms\n");
     }
     if (ok) s2snd_race_start(n);                        /* (after the timing: the music's first fill takes 170 ms) */
+    if (ok) s2hud_begin(n);
     return ok;
 }
 
@@ -366,34 +368,36 @@ static void others_slice(void)
     others_in_scene += rdcycle() - t;
 }
 
-/* the race's text over the picture: the start lights, laps, place and times; when the player has finished, the result and,
-   once offer is set (a second after the finish, so that the gas button held across the line does nothing), the two buttons: A
+/* the race's text over the picture: the start lights, laps, place and times (hud: s2hud.c draws those); when the player has finished, the
+   result and, once offer is set (a second after the finish, so that the gas button held across the line does nothing), the two buttons: A
    the race again, B the menu. Returns 1 if the player has finished. */
-static int race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg, int offer)
+static int race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg, int offer, int hud)
 {
     struct race_hud h;
     char l[40], *p;
     race_get_hud(&h);
     static const char *const ord[5] = { "", "1ST", "2ND", "3RD", "4TH" };
-    if (h.count >= 0) {                                 /* 3, 2, 1, GO: big, with a shadow */
+    if (!hud && h.count >= 0) {                         /* 3, 2, 1, GO: big, with a shadow */
         const char *t = h.count == 3 ? "3" : h.count == 2 ? "2" : h.count == 1 ? "1" : "GO!";
         int x = 160 - (int)__builtin_strlen(t) * 24;
         con_big(fb, x + 3, 43, 6, t, bg);
         con_big(fb, x, 40, 6, t, fg);
     }
-    p = fmt_udec(fmt_str(l, "LAP "), (uint32_t)h.lap);
-    fmt_udec(fmt_str(p, "/"), (uint32_t)h.laps);
-    con_text(fb, CON_COLS - (int)__builtin_strlen(l), 1, l, fg, bg);
-    p = fmt_udec(fmt_str(l, "POS "), (uint32_t)h.place);
-    fmt_udec(fmt_str(p, "/"), (uint32_t)h.cars);
-    con_text(fb, CON_COLS - (int)__builtin_strlen(l), 2, l, fg, bg);
-    fmt_time(fmt_str(l, "TIME "), h.time);
-    con_text(fb, 0, 3, l, fg, bg);
-    fmt_time(fmt_str(l, "LAP  "), h.lap_time);
-    con_text(fb, 0, 4, l, fg, bg);
-    if (h.best_lap >= 0.0f) {
-        fmt_time(fmt_str(l, "BEST "), h.best_lap);
-        con_text(fb, 0, 5, l, fg, bg);
+    if (!hud) {
+        p = fmt_udec(fmt_str(l, "LAP "), (uint32_t)h.lap);
+        fmt_udec(fmt_str(p, "/"), (uint32_t)h.laps);
+        con_text(fb, CON_COLS - (int)__builtin_strlen(l), 1, l, fg, bg);
+        p = fmt_udec(fmt_str(l, "POS "), (uint32_t)h.place);
+        fmt_udec(fmt_str(p, "/"), (uint32_t)h.cars);
+        con_text(fb, CON_COLS - (int)__builtin_strlen(l), 2, l, fg, bg);
+        fmt_time(fmt_str(l, "TIME "), h.time);
+        con_text(fb, 0, 3, l, fg, bg);
+        fmt_time(fmt_str(l, "LAP  "), h.lap_time);
+        con_text(fb, 0, 4, l, fg, bg);
+        if (h.best_lap >= 0.0f) {
+            fmt_time(fmt_str(l, "BEST "), h.best_lap);
+            con_text(fb, 0, 5, l, fg, bg);
+        }
     }
     if (h.finished) {                                   /* the end: the place, the time */
         con_big(fb, 160 - 3 * 32 + 3, 53, 4, "FINISH", bg);
@@ -529,6 +533,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         static struct track_object objs[ROAD_CARS];
         int nobj;
         uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
+        uint32_t hud_steps = 1;                             /* the 20 ms steps this frame took, for the race screen's timers */
         others_in_scene = 0;
         if (*drive) {
             /* the physics at 50 steps a second, one per video frame since the last picture (in the simulation, one a
@@ -542,6 +547,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 if (!RACE_OVERLAP) race_step_others(1);
             }
             race_pending = RACE_OVERLAP ? steps : 0;
+            hud_steps = steps;
             if (race_pending && RACE_OVERLAP > 1) race_others_begin(race_pending);
             struct s2car_state *rc[RACE_CARS];
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
@@ -609,8 +615,16 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         tl_mark(TL_WAIT);
         uint32_t work = rdcycle() - t_frame, faces = GU_FACES;
 
-        /* the timing, drawn over the picture once the rasterizer is done; in the driving mode also the speed
-           and the gear (top right) */
+        /* the race screen (s2hud.c): the blitter draws it over the finished scene; the timing overlay's two lines come after it, and the
+           screen's elements near them move down 16 rows while the overlay is on */
+        const int hud = *drive && s2hud_ready();
+        if (hud) {
+            s2hud_draw(&cam, &view, hud_steps, *overlay ? 16 : 0);
+            while (RS_DRAW & RS_BUSY)
+                ;
+        }
+        /* the timing, drawn over the picture once the rasterizer is done; in the driving mode without the race screen also the
+           speed and the gear (top right) */
         if (*overlay) {
             char l[40], *p;
             p = fmt_ms(l, shown_mean);
@@ -628,8 +642,8 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             p = fmt_str(p, " mph  G");
             p = pc->gear > 0 ? fmt_udec(p, (uint32_t)pc->gear) : fmt_str(p, "N");
             fmt_str(p, manual ? " MAN" : " AUTO");
-            con_text(fb, CON_COLS - (int)__builtin_strlen(l), 0, l, col_text, col_bg);
-            fin_frames = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES) ? fin_frames + 1 : 0;
+            if (!hud) con_text(fb, CON_COLS - (int)__builtin_strlen(l), 0, l, col_text, col_bg);
+            fin_frames = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES, hud) ? fin_frames + 1 : 0;
         }
         tl_mark(TL_HUD);
 
@@ -736,6 +750,7 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     s2menu_init(z);
     s2menu_load(&cfg);
     ui_ready = !sim && s2gfx_init(z);                   /* (the simulation has no menus) */
+    s2hud_init(z);                                      /* the race screen (the simulation has it: its cost is measured there) */
     for (;;) {
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
             int go = s2menu_run(&cfg);

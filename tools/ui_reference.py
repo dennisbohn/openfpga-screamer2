@@ -228,4 +228,5 @@ def main():
     print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames -> {out}")
 
 
-main()
+if __name__ == "__main__":
+    main()

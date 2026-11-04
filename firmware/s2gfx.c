@@ -34,7 +34,7 @@
 #define TAIL_MAX    4096u                       /* the end of GRAF1.DAT: its directory (60 records of 32 bytes) and size */
 #define IMAGES      1024
 #define GIMAGES     768                         /* GAMEL's: 115 sprites and 578 glyphs */
-#define FONTS       8
+#define FONTS       12                          /* (MENUL.FNT has 6, GAMEL.FNT 9) */
 #define LINES       400
 
 static struct zip *zip;

@@ -222,6 +222,7 @@ struct s2car_state *race_car(int i) { return &R.car[i]; }
 int race_cars(void) { return R.n; }
 uint32_t race_steps(void) { return R.steps; }
 int race_line_length(void) { return L.n ? L.nd[L.n - 1].dist : 0; }
+int race_line_nodes(void) { return L.n; }
 static uint32_t respawns;
 uint32_t race_respawns(void) { return respawns; }
 

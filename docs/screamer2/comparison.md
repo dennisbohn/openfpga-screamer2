@@ -107,7 +107,7 @@ code, against about 2,400 lines of car, drive and opp in our firmware.
 | `tb_mmp.c` | `.MMP` | same | identical | none |
 | `tb_spl.c` | 10 splines | 1 spline, `DIR`, `OST` | small change | indices |
 | `tb_gfx.c` | `.COL`, `.BCK` | same | identical | none |
-| `tb_hud.c`, `hud.c` | `GAMEL.SPR/.FNT`, `IMPLET_L/IMPRES_L`, `CDFRONTL`, `GAME.TXT` | `GAMEL.SPR` same, `.FNT` head changed; cockpits `COCK1..8_L.PKC`, `MIRROR_L.PKC`, dashboard numbers `CRUSC.DTR`; no `IMPLET/IMPRES`; 115 sprites | small change + new screens | medium |
+| `tb_hud.c`, `hud.c` | `GAMEL.SPR/.FNT`, `IMPLET_L/IMPRES_L`, `CDFRONTL`, `GAME.TXT` | `GAMEL.SPR` same, `.FNT` head changed; cockpits `COCK1..8_L.PKC`, `MIRROR_L.PKC`, dashboard numbers `CRUSC.DTR`; no `IMPLET/IMPRES`; 115 sprites | small change + new screens | medium; **the chase camera's race screen is built** (`firmware/s2hud.c`, docs/screamer2/hud.md), cockpits, dashboards and the mirror are open |
 | `track.c` | image: MLB, UNR, pieces, ground, walls | works with `MAX_OBJ` 1024, `MAX_PIECES` 4096, class key 0 (E3). `MAX_CFACES` 8192: drivable faces 4,697 to 8,079 (track 2 at 98.6 %); grass/kind from the piece record `+0x3C` instead of the block name; fade (`DEPTH`) not there | small change | constants, kinds |
 | `car.c`, `drive.c` | `CARS_DATA`, OpenScreamer `drive.c` (engine, gearbox, grip) | new model: per-wheel grip and traction, springs and body lean, road kinds with tyre/weather grip, damage (look = texture picture, power loss), wheelspin smoke (N2 S2-5o, 5u, 5zd, 5zq) | **new** | large |
 | `opp.c` | `OPPONENTS` rows, 10 splines | `OPP.SPL` aim line, `DIR.SPL`, `SKILLS` catch-up by distance and level (`0x2da06`), computer cars from teams | new | large |
@@ -180,7 +180,7 @@ commits). Sizes: small = under a day, medium = 1 to 2 days, large = 3 days or mo
 | Fade by depth (night, fog) | medium to large | new unit logic; may stay out at first |
 | Car, physics, wheels, body, road kinds, damage | large | the heart; 8,000-line reference |
 | Opponents, skills, cones, animations (`.PTH`), cameras (`.MCM`), mirror | large | together |
-| HUD, cockpits, dashboards | medium | |
+| HUD, cockpits, dashboards | medium | the race screen in the chase camera is done (docs/screamer2/hud.md); cockpits, dashboards, mirror open |
 | Sound (new tables), CD cue | small | |
 | Menus (3D rooms, `.BKK`, league), intro, attract race | large | a plain menu first: small |
 | Total for a drivable race with a plain menu | about 8 to 10 days | |

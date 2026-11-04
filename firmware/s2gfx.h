@@ -57,11 +57,11 @@ void s2gfx_picture(struct blit_list *l, const uint8_t *pic);
 void s2gfx_sprite(struct blit_list *l, int n, int x, int y);
 /* Sprite n in the middle of the screen at row y (the original's 0x333d9: (320 - (w + x offset)) / 2 - x offset / 2) */
 void s2gfx_sprite_centred(struct blit_list *l, int n, int y);
-/* Text as the original's routine with an explicit spacing (0x50f45): every character takes its width + space, the glyph at the
-   cell's left; a control byte 1 sets fixed pitch (every character the font's widest + space, centred in its cell), 2 proportional.
-   Draws at (x, y) and returns the width in pixels; with l = 0 it only measures. */
+/* Text as the original's engine routine with an explicit spacing (0xc67f0 draws, 0xc6c88 measures): `space` pixels between two characters (none
+   before the first or after the last); a control byte 1 sets fixed pitch (a character centred in a cell of the font's widest, the first's cell
+   without the space, the later ones with it), 2 proportional. Draws at (x, y) and returns the width in pixels; with l = 0 it only measures. */
 int s2gfx_text(struct blit_list *l, int font, int colour, int space, int x, int y, const char *s);
-/* The same centred on the screen (0x3327c: x = (320 - width) / 2) */
+/* The same centred on the screen (0x33294: x = (320 - width) >> 1) */
 void s2gfx_text_centred(struct blit_list *l, int font, int colour, int space, int y, const char *s);
 
 /* The race screen's sprites and fonts: GAMEL.SPR and GAMEL.FNT of GFX/GAME1.DAT (the formats of MENUL's; 115 sprites and 9 fonts, font 0 is the menu's
