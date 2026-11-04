@@ -1,6 +1,6 @@
 """Draw docs/frame_timeline.svg: one frame of the race over time, from the firmware's timeline.
 
-Usage: python tools/make_timeline_svg.py [log] [out.svg]
+Usage: python tools/make_timeline_svg.py [log] [out.svg] ["scene text for the heading"]
   log: a simulation log (build/sim/check.log, the default) or the Pocket's debug.txt; the last
   "timeline" block in it is drawn (main.c tl_log: the last whole frame before the logged one).
 
@@ -17,18 +17,19 @@ from html import escape
 
 CPU_HZ = 74_250_000
 BUDGET = CPU_HZ // 50                   # cycles per picture at 50 fps
-STAMP = "2026-10-30"
+STAMP = "2026-11-04"
 
-T_START, T_PHYS, T_PREP, T_CULL, T_PIECES, T_SCENE, T_CLEAR, T_HUD, T_WAIT, T_END, T_MUSIC = range(11)
+T_START, T_PHYS, T_PREP, T_CULL, T_PIECES, T_SCENE, T_CLEAR, T_HUD, T_WAIT, T_END, T_MUSIC, T_OTHERS = range(12)
 
 # the CPU's phases: the mark that ends a stretch names it (categorical slots of the dataviz
 # reference palette, light and dark)
 PHASES = [
     ("music", "Music (read command to the SD card)", "#008300", "#008300", (T_MUSIC,)),
-    ("phys", "Physics (car, opponents)", "#2a78d6", "#3987e5", (T_PHYS,)),
+    ("phys", "Player's physics, sound", "#2a78d6", "#3987e5", (T_PHYS,)),
     ("prep", "Preparation (camera, objects, backdrop)", "#eda100", "#c98500", (T_PREP,)),
     ("cull", "Selection (visibility test, sorting)", "#eb6834", "#d95926", (T_CULL,)),
     ("pieces", "Pieces (matrices, hand-over to the hardware)", "#1baf7a", "#199e70", (T_PIECES, T_SCENE)),
+    ("others", "Computers' physics (after the pieces)", "#a6633b", "#c98a63", (T_OTHERS,)),
     ("hud", "Race display and radar", "#e87ba4", "#d55181", (T_CLEAR, T_HUD)),
     ("wait", "Waiting for the hardware", "#898781", "#898781", (T_WAIT,)),
     ("rest", "Counters, log", "#c3c2b7", "#52514e", (T_END,)),
@@ -118,7 +119,7 @@ def main():
             parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" class="{cls}">'
                          f'<title>{escape(title)}</title></rect>')
 
-    seen = f"race frame {frame - 1}" if frame else "a race frame"
+    seen = sys.argv[3] if len(sys.argv) > 3 else f"race frame {frame - 1}" if frame else "a race frame"
     text(40, 36, "Timeline of one frame", "h")
     text(40, 60, f"Simulation, {seen}, CPU clocks at 74.25 MHz (20 ms = {fmt(BUDGET)} clocks "
                  f"for 50 frames per second) · {STAMP}", "s")
@@ -167,8 +168,8 @@ def main():
              f"waiting for the frame change: {fmt(BUDGET - end)} clocks ({ms(BUDGET - end)} ms)")
         text((px(end) + px(BUDGET)) / 2, y + lane_h / 2 + 4, "free", "m", "middle")
     # phase names over the CPU lane where they fit
-    short = {"music": "Music", "phys": "Physics", "prep": "Prep", "cull": "Select", "pieces": "Pieces",
-             "hud": "Display", "wait": "", "rest": ""}
+    short = {"music": "Music", "phys": "Player", "prep": "Prep", "cull": "Select", "pieces": "Pieces",
+             "others": "Computers", "hud": "Display", "wait": "", "rest": ""}
     for key, (t0, t1, *_) in runs.items():
         w = px(t1) - px(t0)
         label = short[key]

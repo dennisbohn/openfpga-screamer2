@@ -33,7 +33,7 @@ void su_view_regs(const struct su_view *v);
    began, the busy clocks of the units and the CPU's cycles writing to them. tl_begin() with the cycle
    counter at the frame's start, tl_mark() at each stage, tl_log() the last whole frame's marks into
    the debug log. hw_piece() marks the pieces while tl_scene is set. */
-enum { TL_START, TL_PHYS, TL_PREP, TL_CULL, TL_PIECES, TL_SCENE, TL_CLEAR, TL_HUD, TL_WAIT, TL_END, TL_MUSIC };
+enum { TL_START, TL_PHYS, TL_PREP, TL_CULL, TL_PIECES, TL_SCENE, TL_CLEAR, TL_HUD, TL_WAIT, TL_END, TL_MUSIC, TL_OTHERS };
 extern uint32_t tl_scene;
 void tl_begin(uint32_t t_frame);
 void tl_mark(uint32_t tag);

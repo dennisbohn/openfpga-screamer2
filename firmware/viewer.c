@@ -601,6 +601,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 ;
             else race_step_others(race_pending);
             others_cycles = rdcycle() - t_o + others_in_scene;
+            tl_mark(TL_OTHERS);                         /* (the timeline: the computers' steps after the scene, not a wait) */
         }
         const uint32_t t_wait = rdcycle();
         while (RS_DRAW & RS_BUSY)
