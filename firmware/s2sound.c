@@ -20,6 +20,7 @@
 #define V_TYRE      5                           /* the player's tyres */
 #define V_KNOCK     6                           /* voices 6 .. 9: knocks */
 #define KNOCKS      4
+#define V_MENU      10                          /* the menu's clicks (s2sound_menu) */
 #define ALL_VOICES  0x3FFu
 #define DOPPLER     (50.0f / 30.0f)             /* the game's shift is per frame of its own (30 a second); ours are 50 */
 #define KNOCK_GAP   3                           /* frames between two knocks, unless the second is harder (the game's frames are 1/17 to 1/30 s apart) */
@@ -30,7 +31,7 @@ union word { int32_t i; uint32_t u; float f; };
 #define RF(c, o)    (((const union word *)(c)->rec)[(o) >> 2].f)
 #define RI(c, o)    (((const union word *)(c)->rec)[(o) >> 2].i)
 
-static struct s2snd_sample smp[S2SND_SAMPLES];
+static struct s2snd_sample smp[S2SND_SAMPLES], menu_smp[S2SND_MENU_SAMPLES];
 static int inited, ready;                       /* init done; SOUND.DAT there with samples */
 static int active;                              /* a race is on (s2snd_race_start .. s2snd_stop) */
 static int cd[7] = { 9, 8, 6, 7, 4, 3, 5 };     /* CD_TRACKS of the game's MISC.DTR (read at the first race) */
@@ -49,15 +50,19 @@ static uint32_t max_fx, max_music;
 
 static void log_cost(void);
 
-static void play(int v, int id, uint32_t step, uint32_t reg)
+static void play_sample(int v, const struct s2snd_sample *s, uint32_t step, uint32_t reg)
 {
-    const struct s2snd_sample *s = &smp[id];
     AU_ADDR(v) = s->addr;
     AU_END(v) = s->addr + s->len;
     AU_LOOP(v) = s->loop ? 255u << 24 | s->len : 0;
     AU_STEP(v) = step;
     AU_VOL(v) = reg;
     AU_PLAY = 1u << v;
+}
+
+static void play(int v, int id, uint32_t step, uint32_t reg)
+{
+    play_sample(v, &smp[id], step, reg);
 }
 
 void s2snd_init(struct zip *z)
@@ -74,11 +79,14 @@ void s2snd_init(struct zip *z)
         dcache_invalidate();
         int n = s2snd_parse((const uint8_t *)(uintptr_t)SOUND_MEM, e->size, SOUND_MEM - SDRAM_BASE, smp);
         ready = n > 0;
+        int m = s2snd_parse_menu((const uint8_t *)(uintptr_t)SOUND_MEM, e->size, SOUND_MEM - SDRAM_BASE, menu_smp);
         dlog_str("sound: SOUND.DAT ");
         dlog_dec((int32_t)(e->size / 1024));
         dlog_str(" KB, ");
         dlog_dec(n);
-        dlog_str(" samples, ");
+        dlog_str(" + ");
+        dlog_dec(m);
+        dlog_str(" menu samples, ");
         dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
         dlog_str(" ms\n");
     }
@@ -222,6 +230,29 @@ void s2snd_frame(const struct track_cam *cam)
     if (t1 - t0 > max_fx) max_fx = t1 - t0;
     if (t2 - t1 > max_music) max_music = t2 - t1;
     if (frames == 250 && !cost_logged) log_cost();          /* 5 s into the race: in the log even if the core is quit in the race */
+}
+
+void s2sound_menu(int id)
+{
+    if (!inited || id < 0 || id >= S2SND_MENU_SAMPLES || !menu_smp[id].len) return;
+    const struct s2snd_sample *s = &menu_smp[id];
+    play_sample(V_MENU, s, s2snd_step(s->rate), s2snd_vol_reg(s->vol, 0x8000));
+}
+
+void s2sound_effects(int32_t f)
+{
+    uint32_t k = f < 0 ? 0 : f > 0x8000 ? 0x8000 : (uint32_t)f;
+    if (!active) return;
+    if (k == 0x8000) {                                      /* whole: the registers the race left */
+        for (int i = 0; i < RACE_CARS; i++)
+            if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = eng[i].reg;
+        if (tyre.id >= 0) AU_VOL(V_TYRE) = tyre.reg;
+        return;
+    }
+    for (int i = 0; i < RACE_CARS; i++)
+        if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = (eng[i].reg & 255) * k >> 15 | ((eng[i].reg >> 8 & 255) * k >> 15) << 8;
+    if (tyre.id >= 0) AU_VOL(V_TYRE) = (tyre.reg & 255) * k >> 15 | ((tyre.reg >> 8 & 255) * k >> 15) << 8;
+    AU_STOP = 0xFu << V_KNOCK;                              /* (a knock is over in a moment; it would sound again at the resume) */
 }
 
 /* what a frame of the sound cost: mean / worst cycles of the effects and of the music's ring (music_frame) */

@@ -1,7 +1,9 @@
 #!/bin/sh
-# The start menu (firmware/s2menu.c) on the PC from the firmware's own code: tests of its logic (keys, the grid, the kept
-# choices, the texts read from the real ZIP's DATA/LOCAL.DAT) and pictures of the list in several states, in
-# build/check/menu/*.png (never committed). Exit code 0 if all tests passed.
+# The start menu (firmware/s2menu.c) and the 2D toolkit (s2gfx.c, s2page.c, s2load.c, s2pause.c: loading screen, pause menu, page
+# runner) on the PC from the firmware's own code: tests of the menu's logic (keys, the grid, the kept choices, the texts read from
+# the real ZIP's DATA/LOCAL.DAT), of the toolkit against independent references made from the game's files (tools/ui_reference.py:
+# .BKK pictures, text and sprites, MENU.DTR) and pictures of the screens in several states, in build/check/menu/*.png (never
+# committed). Exit code 0 if all tests passed.
 # Usage: tools/menu_screens.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2"
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -11,15 +13,16 @@ out="$root/build/check/menu"
 [ -f "$game/SCREAMER2.zip" ] || { echo "$game/SCREAMER2.zip is missing: name the game's folder"; exit 1; }
 py=python3
 "$py" -c "" 2>/dev/null || py=python     # Windows: python3 may be the Store's stub
-mkdir -p "$out"
+mkdir -p "$out/ref"
 rm -f "$out"/*.rgb "$out"/*.png
+"$py" -I "$root/tools/ui_reference.py" "$game" "$out/ref" || exit 1
 
 # the firmware's sources with hw.h's RISC-V instructions made plain C (as tools/files_screens.sh does)
 src="$root/build/host/menu"
 rm -rf "$src"
 mkdir -p "$src/host"
 cp "$root"/firmware/*.c "$root"/firmware/*.h "$src/"
-cp "$root/tools/host/menu_screen.c" "$src/host/"
+cp "$root/tools/host/menu_screen.c" "$root/tools/host/ui_screen.c" "$src/host/"
 "$py" -I - "$src/hw.h" <<'PY'
 import sys
 p = sys.argv[1]
@@ -40,8 +43,8 @@ else
 fi
 set +e
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
-    cd /b/host/menu && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c &&
-    cd /b/check/menu && /b/host/menu_screen /game/SCREAMER2.zip /b/check/menu/menu"
+    cd /b/host/menu && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c host/ui_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c s2gfx.c s2page.c s2load.c s2pause.c s2snd.c s2params.c blit.c -lm &&
+    cd /b/check/menu && /b/host/menu_screen /game/SCREAMER2.zip /b/check/menu/menu /b/check/menu/ref /b/check/menu/ref/graf_deflated.zip"
 status=$?
 for f in "$out"/*.rgb; do
     [ -f "$f" ] || continue

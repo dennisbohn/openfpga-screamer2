@@ -75,7 +75,7 @@ the road at 150 km/h in a loop, with the player's car and three more ahead (`fir
 hardware path (geometry unit, setup unit, rasterizer, blitter) with the original's level of detail at
 DETAIL HIGH (`track_lod_level()`: placed meshes switch at 6,000 and 9,000 units, cars at 2,000 and 6,000;
 far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). The ride is silent (the race has sound and music,
-"Sound" below). Start switches between this ride and the driving mode ("Driving mode" below).
+"Sound" below). Start starts the driving mode ("Driving mode" below); the way back to the ride is the start menu's WATCH.
 
 ### Start menu
 
@@ -106,9 +106,9 @@ files screen, Start). The grid is applied when the track image is built (`load_t
 `tools/menu_screens.sh` runs the menu's code on the PC: tests of the keys, the grid, the kept choices and the texts read from the real ZIP,
 and pictures of the list in `build/check/menu/`.
 
-Back to the menu: Select + B in the race and in the ride (the music stops), and after the player has finished a race (a second later,
-so that the gas held across the line does nothing) A starts the race again and B goes to the menu; the FINISH screen says so. The
-loading screen shows the buttons too. The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
+Back to the menu: EXIT in the race's pause menu (Start, "Loading screen and pause menu" below), Select + B in the ride (the music stops), and after
+the player has finished a race (a second later, so that the gas held across the line does nothing) A starts the race again and B goes to the menu; the
+FINISH screen says so. The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
 
 | Button (ride) | |
 |---|---|
@@ -143,9 +143,26 @@ time are on the screen.
 | X | timing overlay on / off (B is the gas here; Screamer 1's X, the camera, has no use yet) |
 | Select + left / right | previous / next track (the track is loaded again, a new race) |
 | Select + Start | a new race from the grid |
-| Select + B | back to the menu (the music stops) |
 | A / B after the finish | the race again / back to the menu (from a second after the line) |
-| Start | back to the ride |
+| Start | the pause menu (RESUME, RESTART, EXIT; not once the player has finished), the original's Esc; B or Start take the item, A or Select resume |
+
+### Loading screen and pause menu
+
+Both are the original's pages on the 2D toolkit (`firmware/s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`; docs/screamer2/menus.md section 6 has the details and
+the SDRAM map). **LOADING:** the track's `LOAD_nL` picture with the track's banner, BEST TIME and BEST LAP (empty until the save exists: `--:--:-- MIL`) and
+LOADING... is put up before `load_track()` and stays through the track's build and the race's set-up: the display is driven by the hardware from the front
+buffer and its palette, so the CPU can be busy for the 3 to 5 s of `T1 load` and the picture does not change. It then fades out in 0.4 s. The log has
+`ui: loading screen up after N ms` (the picture's read, unpacking and drawing: 35 ms in the simulation, where a data slot is 3 times faster than the Pocket's, so
+about 60 ms there), and once at the start `ui: 111 sprites, 6 fonts ... ms` (the toolkit's assets, before the start menu: 169 ms in the simulation, about 0.3 s on the Pocket).
+The Pocket's log of 2026-11-04 (the build before this one) has the time the picture covers: track 4 `T4 load 4487 ms` (read 2,413 KB 2,117 ms, build 1,742 ms, road 424 ms)
+and `race init 160 ms`, 4.65 s in all. **Pause:** Start in the race stops it over the darkened picture; the race loop is not
+run, so the clock, the cars and the frame statistics stand still (the first frame after it takes one 20 ms step); the effects (engines, tyres) ease out over a
+second and come back whole, the music plays on. RESTART is the race again from the grid (the track stays loaded), EXIT the start menu. The pause adds nothing to a
+frame of the race but the test of one button bit: the race in the simulation (220 frames from the grid, track 4 and track 1, the code shifted by the new objects) took 10.7 ms
+mean and 11.5 worst, and 10.2 and 11.1, against 10.8 / 11.5 and 10.3 / 11.1 of the build before. Opening the menu takes 74 ms in the simulation (`pause: still and
+palette N ms` in the log, once: the darkening table and the copy of the screen, then the screen stands); a frame of the menu itself is one blitter list (the still and
+a few letters, about 1.5 ms of the CPU's time). The screens drawn by the hardware in the simulation equal the PC's drawing pixel for pixel (LOADING, track 4: 0 of 64,000
+pixels differ; the pause's picture was looked at: darkened race, box, dim items).
 
 A car (any of the four) with no drivable ground under it for 3 s (`off_track` of the state), or more than 3,000 units below the
 lowest road point of the track, or a computer's car that has not moved for 6 s, is put back onto the line by itself (the nearest point
@@ -356,7 +373,7 @@ restart of the race on the same track (Select + Start) keeps its song. A frame a
 What is open: the original's volume balance is not known (the CD drive's analogue mix is not in the program; the two thirds are
 Screamer 1's choice), the pan law of the effects is HMI's as Screamer 1's `sound.c` has it, the car against car knock is the
 firmware's closing speed, the cones' knock and the scenery's sounds (`ANIMATIONS` rows with a sound, `AMBIENT*.DTR`) are not
-done, no menu sounds (the start menu is silent), no pause.
+done, no menu sounds in the start menu (the clicks of `MENU.DTR` exist, `s2sound_menu()`, the pause menu uses them), the pause eases the effects out (above).
 
 ## PC renderer
 
@@ -431,7 +448,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/dat_sizes.py <file.DAT>...` | lists a game container with unpacked sizes (`-v`: every file) |
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
-| `tools/menu_screens.sh`, `tools/host/menu_screen.c` | the start menu `firmware/s2menu.c` on the PC with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
+| `tools/menu_screens.sh`, `tools/host/menu_screen.c`, `tools/host/ui_screen.c`, `tools/ui_reference.py` | the 2D toolkit (`s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`) on the PC with the blitter's C model and scripted buttons, against references made from the game's files by `ui_reference.py` (its own LZW, `.SPR` / `.FNT` and text readers): the 28 `L` pictures of `GRAF1.DAT` (CRC-32 of pixels and palette, on the stored ZIP and on a deflated one made on the fly), 20 text and sprite cases pixel for pixel, the loading screens of the seven tracks, the pause menu (keys, clicks, the easing of the effects, the darkened still pixel for pixel, the darkening table against a double-precision search) on three of the repository's race pictures quantized to their track's palette, the page runner's key repeat and fades, the 15 samples of `MENU.DTR`; pictures in `build/check/menu/` (`menu_load*.png`, `menu_pause*.png`). And the start menu `firmware/s2menu.c` with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
 | `tools/s2/check_save_s2.sh`, `tools/s2/check_save_s2.c` | the save `firmware/s2save.c` natively in Docker under the sanitizers, with a fake data slot and the SDRAM window of `CHOICE.DAT` at its address: the defaults and the layout's bytes (against the table in docs/screamer2/menus.md 7.1), the interface and its clamping, the unlocks, the best-times ranking against a plain model (ties, the 15 rows, kinds / tracks / lists apart, time attack's one total list, 20,000 random insertions), a round trip through a "power-off", the migration of the old layout (with and without its marker, values out of range), and broken files: empty, short, foreign, random, oversized, a failing read, every byte of a valid file damaged in turn (the damaged part falls back to the defaults and the other keeps its data), damage with a matching checksum but values out of range, random damage; after every load the save is sealed and in range and nothing outside the layout was touched |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py`, `tools/s2/check_cars_s2.py` | the Screamer 2 track image on the PC (the reference; `S2CARS=team:car,...` chooses the grid's cars) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks and three grids, natively under the sanitizers; the windows' reflection picture and the cars' materials, textures and colours in the image against the original's |
@@ -442,6 +459,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/s2/check_vis_s2.sh`, `tools/s2/check_vis_s2.c` | the track's drawing key and walks natively in Docker (`docs/screamer2/draw_distance.md`): the key `-(sqrt(d^2 >> 3) >> 2)` against a double-precision reading, every mesh's class key (header entry 43) against the file bytes, and from cameras round the road of each track no piece within 6,000 units that the whole walk takes may be left out by the camera cell's list |
 | `tools/s2/report_carsort_s2.sh`, `tools/s2/report_carsort_s2.c` | a report (not a check) on the painter's order of a computer car against the static pieces: the race robot's cameras with a computer car taken from later steps, a per-pixel depth map of every polygon (patched temporary copies of `track.c` and `geom.c`) and the count of poses where the car is drawn through a nearer piece (`docs/screamer2/draw_distance.md`, "A car behind a wall") |
 | `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene, the lone car and the race on the PC from the firmware's own code (`NOLOD=1`: no level of detail; `g<k>`: the race, laps and places of the four cars as a table) |
+| `tools/s2/map_shift.py <old.map> <new.map>` | which objects of the program moved between two builds (`build/firmware/program.map`): the I-cache is 8 KB and direct mapped, so code added in front of the frame's code shifts what follows (`docs/screamer2/performance.md` section 7); judge the shift by the race in the simulation (`tools/s2/sim_race.sh`) |
 | `tools/s2/framestats.sh`, `tools/s2/perf_patch.py`, `tools/s2/perf_model.py`, `tools/s2/lod_report.py` | the study's counting build (counters in copies of the firmware) and cost model, `docs/screamer2/performance.md` |
 | `tools/s2/framestats.sh race`, `tools/s2/racestats.c`, `tools/s2/perf_race.py`, `tools/s2/check_cull_s2.sh <commit>`, `tools/s2/sim_race.sh` | the race's frame time (`docs/screamer2/performance.md` section 7): a race on the PC with the game's driver at all four cars and the counters per frame (and per piece), the frame times along a lap from them, a check that the cull of this tree hands on the same pieces in the same order and draws the same pictures as the tree of another commit (7 tracks), and the viewer's race in the simulation with its frame timeline; `tools/fw.sh PROF=1` builds the cycle counters of `firmware/prof.h` for it, `CODE_PAD=n` / `CODE_PAD2=n` move the code to see what the caches' alignment costs |
 | `tools/fmcheck.sh [song ...]`, `tools/fmsongs.py`, `tools/host/fmdump.c`, `tools/host/fmref.c` | the FM music on the PC: `fmsongs.py` reads the songs of `DATA/MUSIC.DAT` independently (tracks, messages, lengths); `fmdump.c` runs `firmware/fm.c` against a model of the hardware's write queue; `fmref.c` is openscreamer's driver with the chip replaced by a log; `fmcheck.sh` runs all of them (Docker) and compares the register writes tick by tick |

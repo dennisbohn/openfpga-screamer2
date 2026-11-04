@@ -4,7 +4,8 @@
  * list in several states as raw RGB frames for tools/rgb2png.py. The SDRAM and the registers are mapped at their addresses as in
  * tools/host/files_screen.c. Exit code 0 if every test passed.
  *
- * Usage: menu_screen <SCREAMER2.zip> <out prefix>      writes <out prefix>_<state>.rgb
+ * Usage: menu_screen <SCREAMER2.zip> <out prefix> [<reference dir of tools/ui_reference.py> [<deflated ZIP>]]
+ *        writes <out prefix>_<state>.rgb; with the reference dir it also runs the 2D toolkit's tests (ui_screen.c)
  */
 #define _GNU_SOURCE
 #include "../s2menu.h"
@@ -21,14 +22,16 @@
 #define SCRATCH     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))
 #define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000))
 
-static FILE *zf;
-static uint32_t zsize;
-static struct zip zip;
+static FILE *zf, *zf2;                  /* slot 3: the ZIP; slot 4: a deflated one for the toolkit's test */
+static uint32_t zsize, zsize2;
+static struct zip zip, zip2;
 static int failures;
+
+int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix);
 
 uint32_t slot_size(uint32_t id)
 {
-    return id == 3 ? zsize : 0;
+    return id == 3 ? zsize : id == 4 ? zsize2 : 0;
 }
 
 /* (s2save.c links in for the choices; s2save_load() is not called here: tools/s2/check_save_s2.sh tests it) */
@@ -52,14 +55,13 @@ uint32_t zip_addr(const void *p)
 int slot_read(uint32_t id, uint32_t off, uint32_t addr, uint32_t len)
 {
     void *to = addr == OUTSIDE ? outside : (void *)(uintptr_t)addr;
-    if (id != 3 || (off & 3) || off >= zsize || (len != SLOT_REST && ((len & 3) || off + len > zsize))) return 2;
-    uint32_t n = len == SLOT_REST ? zsize - off : len;
+    FILE *f = id == 4 ? zf2 : zf;
+    uint32_t size = id == 4 ? zsize2 : zsize;
+    if ((id != 3 && id != 4) || (off & 3) || off >= size || (len != SLOT_REST && ((len & 3) || off + len > size))) return 2;
+    uint32_t n = len == SLOT_REST ? size - off : len;
     memset(to, 0, (n + 3) & ~3u);
-    return fseek(zf, off, SEEK_SET) || fread(to, 1, n, zf) != n ? 2 : 0;
+    return fseek(f, off, SEEK_SET) || fread(to, 1, n, f) != n ? 2 : 0;
 }
-
-/* the library of the firmware's own: the menu's loop is not run here */
-uint32_t wait_swap_done(void) { return 0; }
 
 #define CHECK(cond, ...) do { if (!(cond)) { failures++; printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
@@ -85,7 +87,7 @@ static int press(struct s2_menu_cfg *c, int *cursor, uint32_t keys)
 
 int main(int argc, char **argv)
 {
-    if (argc < 3) { fprintf(stderr, "usage: %s <SCREAMER2.zip> <out prefix>\n", argv[0]); return 2; }
+    if (argc < 3) { fprintf(stderr, "usage: %s <SCREAMER2.zip> <out prefix> [<reference dir> [<deflated ZIP>]]\n", argv[0]); return 2; }
     int fd = memfd_create("sdram", 0);
     if (fd < 0 || ftruncate(fd, SDRAM_SIZE)
         || mmap((void *)(uintptr_t)SDRAM_BASE, SDRAM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED
@@ -208,5 +210,15 @@ int main(int argc, char **argv)
 
     printf("%s", (const char *)(uintptr_t)DLOG_BASE + DLOG_HEAD);
     printf(failures ? "menu: %d tests FAILED\n" : "menu: all tests passed\n", failures);
+    if (argc > 3) {                                                 /* the 2D toolkit: pictures, text, loading, pause, runner, sounds */
+        struct zip *def = 0;
+        if (argc > 4 && (zf2 = fopen(argv[4], "rb"))) {
+            fseek(zf2, 0, SEEK_END);
+            zsize2 = (uint32_t)ftell(zf2);
+            CHECK(zip_open(&zip2, 4, SCRATCH, SCRATCH_MAX) == ZIP_OK, "zip_open of the deflated ZIP");
+            def = &zip2;
+        }
+        failures += ui_tests(&zip, def, argv[3], argv[2]);
+    }
     return failures != 0;
 }
