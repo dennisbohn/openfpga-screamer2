@@ -36,8 +36,11 @@ union word { int32_t i; uint32_t u; float f; };
 enum { T_THIS_LAP, T_TOTAL, T_BEST_LAP, T_BEST_TOTAL, T_BEST_LAP_NEW, T_WRONG_WAY, T_POSITION, T_LAP, T_UNIT, TEXTS };
 static const char *const english[TEXTS] = { "THIS LAP", "TOTAL", "BEST LAP", "BEST TOTAL", "BEST LAP!", "WRONG WAY", "POSITION", "LAP", "MPH" };
 
-static struct blit_list list;
-static int ready, miles;                        /* miles: the unit's word begins with M (0x2ef4e): the speed shows as km/h / 1.6 */
+static struct blit_list list;                   /* a frame's commands */
+static struct blit_list fixed;                  /* the commands that do not change from frame to frame (labels, records, the bar's frame), made for the buffer 0 */
+static struct blit_list *out = &list;           /* where the helpers below draw */
+static int fixed_top = -1, fixed_stale = 1;     /* `top` fixed was made for; the records changed since */
+static int ready, miles, position_x;                        /* miles: the unit's word begins with M (0x2ef4e): the speed shows as km/h / 1.6 */
 static const char *text[TEXTS];
 
 static struct {
@@ -59,6 +62,7 @@ int s2hud_init(struct zip *z)
     if (!s2gfx_game_init(z)) return 0;
     for (int i = 0; i < TEXTS; i++) text[i] = s2gfx_line("THIS LAP", i, english[i]);
     miles = (text[T_UNIT][0] | 0x20) == 'm';
+    position_x = 0x138 - s2gfx_game_text(0, FONT_LABEL, 3, -1, 0, 0, text[T_POSITION]);       /* POSITION ends at x 312 */
     ready = 1;
     return 1;
 }
@@ -108,6 +112,7 @@ void s2hud_begin(int track)
     s2_best_get(track, race_laps, &total, &lap);
     S.rec_total = total.time;
     S.rec_lap = lap.time;
+    fixed_stale = 1;
     S.seen_best = RF(race_car(0), 0xc40);
     /* the bends' arrows: MAPnDIR.SPL, a count and 56 bytes a node (x +4, y +8, the arrow +0xc) */
     uint32_t size;
@@ -189,6 +194,7 @@ static void update(const struct s2car_state *const car[], int n, uint32_t steps,
         S.seen_best = best;
         if (best < S.rec_lap) {
             S.rec_lap = best;
+            fixed_stale = 1;
             S.best_left = MESSAGE_S;
         }
     }
@@ -196,10 +202,10 @@ static void update(const struct s2car_state *const car[], int n, uint32_t steps,
 
 /* ------------------------------------------------------------------------------------------------ drawing */
 
-static void sprite(int n, int x, int y) { s2gfx_game_sprite(&list, n, x, y); }
-static void centred(int n, int y) { s2gfx_game_sprite_centred(&list, n, y); }
-static int txt(int font, int colour, int space, int x, int y, const char *s) { return s2gfx_game_text(&list, font, colour, space, x, y, s); }
-static void txt_centred(int font, int colour, int space, int y, const char *s) { s2gfx_game_text_centred(&list, font, colour, space, y, s); }
+static void sprite(int n, int x, int y) { s2gfx_game_sprite(out, n, x, y); }
+static void centred(int n, int y) { s2gfx_game_sprite_centred(out, n, y); }
+static int txt(int font, int colour, int space, int x, int y, const char *s) { return s2gfx_game_text(out, font, colour, space, x, y, s); }
+static void txt_centred(int font, int colour, int space, int y, const char *s) { s2gfx_game_text_centred(out, font, colour, space, y, s); }
 
 /* the dial (0x46d42): the sprite, the speed and the gear in its two windows, the rev needle from its pivot (0x4923d: three lines to one
    tip, one from the pivot and one from a point a pixel to each side of it) */
@@ -220,17 +226,15 @@ static void dial(const struct s2car_state *p)
     if (fabsf(a) < 0.001f) a = 0.0f;
     const float s = sinf(a), c = cosf(a);
     const int px = 271, py = 168, tx = (int)((float)px + s * 30.0f), ty = (int)((float)py - c * 30.0f);
-    blit_line(&list, px, py, tx, ty, 0, 0, 320, 200, NEEDLE_COLOUR);
-    blit_line(&list, (int)((float)px + c), (int)((float)py + s), tx, ty, 0, 0, 320, 200, NEEDLE_COLOUR);
-    blit_line(&list, (int)((float)px - c), (int)((float)py - s), tx, ty, 0, 0, 320, 200, NEEDLE_COLOUR);
+    blit_line(out, px, py, tx, ty, 0, 0, 320, 200, NEEDLE_COLOUR);
+    blit_line(out, (int)((float)px + c), (int)((float)py + s), tx, ty, 0, 0, 320, 200, NEEDLE_COLOUR);
+    blit_line(out, (int)((float)px - c), (int)((float)py - s), tx, ty, 0, 0, 320, 200, NEEDLE_COLOUR);
 }
 
-/* the bar of the four cars along the track (0x458c7): a darkened box, the bar, a mark for each other car (its team's) 50 pixels to the left of the
-   middle for each 200,000 units it is behind, to the right for each it is ahead, the player's in the middle */
-static void bar(const struct s2car_state *const car[], int n, int y)
+/* the bar of the four cars along the track (0x458c7): a darkened box and the bar (fixed), a mark for each other car (its team's) 50 pixels to the left of
+   the middle for each 200,000 units it is behind, to the right for each it is ahead, the player's in the middle */
+static void bar_marks(const struct s2car_state *const car[], int n, int y)
 {
-    blit_fill(&list, 0x6c, y + 1, 0x68, 7, 0);                  /* (the original darkens what is there; this is dark) */
-    sprite(SPR_BAR, 0x6c, y - 1);
     for (int i = 1; i < n; i++) {
         float d = (RF(car[0], 0x4bc) - RF(car[i], 0x4bc)) / 200000.0f;
         if (d > 1.0f) d = 1.0f;
@@ -238,6 +242,43 @@ static void bar(const struct s2car_state *const car[], int n, int y)
         sprite(SPR_MARK + race_grid[i].team - 1, (int)((160.0f - d * 50.0f) + -4.0f), y);
     }
     sprite(SPR_PLAYER, 0x9c, y);
+}
+
+/* What does not change from frame to frame: the labels, the track's records, the bar's box and frame. Making the commands (each character looks up its
+   glyph) took more than half of the screen's cost; they are made when `top` or a record changes and copied into each frame's list. They go
+   after the 1ST mark and before everything that is drawn over them (the clocks, the bar's marks); none of them overlaps what comes before. */
+static void make_fixed(int top)
+{
+    char t[24];
+    out = &fixed;
+    blit_start(&fixed, 0);
+    txt(FONT_LABEL, 3, -1, 8, 2 + top, text[T_LAP]);
+    txt(FONT_LABEL, 3, -1, 8, 0x38, text[T_THIS_LAP]);
+    txt(FONT_LABEL, 3, -1, 8, 0x48, text[T_TOTAL]);
+    txt(FONT_LABEL, 3, -1, 0x10e, 0x38, text[T_BEST_LAP]);
+    clock_text(t, S.rec_lap);
+    txt(FONT_LABEL, 1, -1, 0x10e, 0x40, t);
+    txt(FONT_LABEL, 3, -1, 0x10e, 0x48, text[T_BEST_TOTAL]);
+    clock_text(t, S.rec_total);
+    txt(FONT_LABEL, 1, -1, 0x10e, 0x50, t);
+    blit_fill(out, 0x6c, BAR_Y + top + 1, 0x68, 7, 0);          /* (the original darkens what is there; this is dark) */
+    sprite(SPR_BAR, 0x6c, BAR_Y + top - 1);
+    out = &list;
+    fixed_top = top;
+    fixed_stale = 0;
+}
+
+/* the fixed commands into the frame's list, for the buffer the frame is drawn into */
+static void append_fixed(int buffer)
+{
+    for (int i = 0; i < fixed.n && list.n < BLIT_MAX; i++, list.n++) {
+        uint32_t *c = list.c[list.n];
+        c[0] = fixed.c[i][0];
+        c[1] = fixed.c[i][1] ^ (uint32_t)buffer << 30;
+        c[2] = fixed.c[i][2];
+        c[3] = fixed.c[i][3];
+        list.src[list.n] = fixed.src[i];
+    }
 }
 
 /* the 1ST mark over the car that leads when it is not the player's (0x4962c): sprite 0x26 at the point 500 above the car as the scene projects it,
@@ -272,33 +313,26 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
     dial(car[0]);
     if (!h.finished) {                                          /* (0x45cfb: none of the rest once the player has done his laps) */
         char t[24], *q;
+        if (fixed_stale || fixed_top != top) make_fixed(top);
+        append_fixed((int)draw_buf);
         if (S.bend_left > 0.0f) centred(SPR_ARROW + S.bend_id, 0x32 + top);
         if (h.place == 1) sprite(SPR_LAUREL, 0x10e, 4);
-        txt(FONT_LABEL, 3, -1, 0x138 - s2gfx_game_text(0, FONT_LABEL, 3, -1, 0, 0, text[T_POSITION]), 2, text[T_POSITION]);   /* (right edge 312) */
+        txt(FONT_LABEL, 3, -1, position_x, 2, text[T_POSITION]);
         fmt_udec(t, (uint32_t)h.place);
         txt(FONT_BIG, 1, 2, 0x11e, 0xb, t);
         if (S.msg_left > 0.0f) txt_centred(FONT_CHECK, 3, -1, 0x23 + top, S.msg);
-        txt(FONT_LABEL, 3, -1, 8, 2 + top, text[T_LAP]);
         q = fmt_udec(t, (uint32_t)h.lap);
         *q++ = ':';                                             /* ("%d%c": the figures' font has the colon after the nine) */
         *q = 0;
         const int w = txt(FONT_BIG, 1, 2, 8, 0xb + top, t);
         fmt_udec(t, (uint32_t)h.laps);
         txt(FONT_MID, 1, 2, w + 5, 0x14 + top, t);
-        txt(FONT_LABEL, 3, -1, 8, 0x38, text[T_THIS_LAP]);
         clock_text(t, h.lap_time);
         txt(FONT_LABEL, 1, -1, 8, 0x40, t);
-        txt(FONT_LABEL, 3, -1, 8, 0x48, text[T_TOTAL]);
         clock_text(t, h.time);
         txt(FONT_LABEL, 1, -1, 8, 0x50, t);
-        txt(FONT_LABEL, 3, -1, 0x10e, 0x38, text[T_BEST_LAP]);
-        clock_text(t, S.rec_lap);
-        txt(FONT_LABEL, 1, -1, 0x10e, 0x40, t);
-        txt(FONT_LABEL, 3, -1, 0x10e, 0x48, text[T_BEST_TOTAL]);
-        clock_text(t, S.rec_total);
-        txt(FONT_LABEL, 1, -1, 0x10e, 0x50, t);
         if (S.best_left > 0.0f && ((int)(S.best_left * 2.0f) & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_BEST_LAP_NEW]);
-        bar(car, n, BAR_Y + top);
+        bar_marks(car, n, BAR_Y + top);
     }
     if (((int)S.wrong & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_WRONG_WAY]);
     if (h.count >= 0 && !h.finished) centred(SPR_LIGHTS + 3 - h.count, 60);
