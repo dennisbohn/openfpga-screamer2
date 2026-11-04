@@ -111,7 +111,7 @@ static float anim;                      /* the animation clock, 0..1 */
 static uint32_t piece_phase;            /* the pieces' texture phase: the clock (record +0x20 is -1) */
 static uint32_t clock16;                /* the animation clock, 16 bits (0x21538) */
 static uint8_t multi[MAX_OBJ];          /* the mesh has several blocks or moving parts */
-static int16_t class_key[MAX_OBJ];      /* the key's change for each mesh's class (+0x32c) */
+static int16_t class_key[MAX_OBJ];      /* the key's change for each mesh (the header's entry 43, track_class_key) */
 
 /* What track_under() reads, made once from the drivable meshes: each mesh's faces of its
    first face row in that order, with corners (x, z), normal, first corner, a box around them
@@ -467,8 +467,8 @@ int track_init(void)
 
 int track_class_key(const uint8_t *obj)
 {
-    (void)obj;      /* Screamer 2's object header (0xC8 bytes) has no class word at +0x32C: 0 for every mesh */
-    return 0;
+    /* the object header's table entry 43 (+0xC4), read at 0x7e9a5 and taken off the 16-bit key */
+    return obj ? -(int)(int16_t)rd32(obj + 0xC4) : 0;
 }
 
 /* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and

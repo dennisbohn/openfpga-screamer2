@@ -186,9 +186,10 @@ void track_reflection_rate(float k);
    for a model drawn without a track (the menu's, menu.h) */
 void track_block_piece(const struct track_cam *cam, const struct track_block *b, struct gu_piece *g);
 
-/* The change of the drawing key for a mesh (an object of the UNR or a .3DX file) by its class: Screamer 1
-   has it in the header's last word at +0x32c (0x8a8d7: 3 -6000, 1 -1500, 2 -800, 4 -200, else 0);
-   Screamer 2's header is shorter and has none: always 0 */
+/* The change of the drawing key for a mesh (an object of the UNR or a .3DX file) by its class: minus the 16-bit word
+   of the object header's table entry 43 (+0xC4; 0x7e9a5 takes it off the key). A positive entry sends the mesh further
+   off, a negative one nearer. Screamer 2's tracks: a)NN.. (crowds, galleries, big backdrop panels) N x 100, a(NN.. (stands,
+   columns) -N x 100, akk.. (lawns, squares and carpets under the road, tracks 3 and 4) 6000, the rest 0 */
 int track_class_key(const uint8_t *obj);
 
 /* The camera's frame as the drawing takes it: forward, right, up (unit vectors in world x, y,
