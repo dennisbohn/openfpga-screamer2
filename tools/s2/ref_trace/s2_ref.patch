@@ -49,17 +49,17 @@ index c6edf97..5f954e0 100644
  void s2_robot(int on);
 diff --git a/port/src/s2_ref.h b/port/src/s2_ref.h
 new file mode 100644
-index 0000000..1dfd5b2
+index 0000000..00f1994
 --- /dev/null
 +++ b/port/src/s2_ref.h
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,115 @@
 +/*
 + * REFERENCE TRACES (a patch for the Pocket port's study, not part of the game's port): the player's
 + * car driven from a scenario file, one CSV line per physics step.  Included at the end of s2_hooks.c.
 + *
 + *   OS_S2PHYS=<steps> OS_S2REF=<scenario> OS_S2REFOUT=<csv> [OS_S2STEP=<seconds>] [OS_S2RAW=<seconds>]
 + *
-+ * The scenario: lines "<step> <keys>" -- from that step on, until the next line, the keys held:
++ * The scenario: lines "<step> <keys>" (steps of 20 ms) -- from that step on, until the next line, the keys held:
 + * A accelerate, B brake, L left, R right, U gear up, D gear down, - none.  Lines starting with # or @
 + * are comments / directives for the script.  Row k of the CSV is the state after the k-th step, with
 + * the keys held in that step; row 0 is the state before any step.
@@ -127,7 +127,8 @@ index 0000000..1dfd5b2
 +    if (getenv("OS_S2REFROBOT")) s2_robot(1);      /* (a test of the tooling: the game's own driver has the car) */
 +    double px = I32(car + 0x4d8), ph = I32(car + 0x4dc), py = I32(car + 0x4e0);
 +    for (int n = 0; n <= steps; n++) {
-+        const char *kk = n == 0 ? "-" : s2_ref_keys_at(key, nkey, n);
++        /* (the scenario's step numbers are 20 ms steps: at another step the line applies from the same time) */
++        const char *kk = n == 0 ? "-" : s2_ref_keys_at(key, nkey, (int)floor((double)n * (dt / (double)0.02f) + 1e-6));
 +        if (n > 0) {
 +            s2_controls(strchr(kk, 'A') != NULL, strchr(kk, 'B') != NULL, strchr(kk, 'L') != NULL, strchr(kk, 'R') != NULL,
 +                        strchr(kk, 'U') != NULL, strchr(kk, 'D') != NULL);

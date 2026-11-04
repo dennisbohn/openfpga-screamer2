@@ -86,8 +86,10 @@ all() {
         [ $team = 0 ] && [ $model = 1 ] && continue
         run a_full_throttle 1 $team $model dt20 "$dest"; run a_flat 1 $team $model dt20 "$dest"
     done; done
-    # the port's own pace (step 1.1/17.7 s) for (a)
-    run a_full_throttle 1 0 1 dtport "$dest"; run a_flat 1 0 1 dtport "$dest"
+    # the port's own pace (step 1.1/17.7 s): the same scenarios (their step numbers are 20 ms steps and are kept in time)
+    for s in a_full_throttle b_steer_lr c_brake e_wall; do for t in 1 3 4 7; do run $s $t 0 1 dtport "$dest"; done; done
+    for s in a_flat b_flat c_flat g_manual; do run $s 1 0 1 dtport "$dest"; done
+    run d_offroad 1 0 1 dtport "$dest"; run f_jump 4 0 1 dtport "$dest"
 }
 
 check() {
