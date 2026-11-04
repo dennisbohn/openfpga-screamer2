@@ -220,10 +220,11 @@ no menu here); a car against a car does not knock yet.
 - `tools/s2/check_car.sh`: the player's car is unchanged by the additions (the output is the same line for line as before): the computer's
   rules are all behind `s2car_state.ai`, the hold behind `.hold`. `check_params.sh` and `check_track_build_s2.sh` pass.
 - **The cars' look** (`check_looks()` in `tools/s2/render_s2.c`, every run): the player's car on the start line is drawn from four sides: standing it
-  has look 0 and texture phase 0; braking it has `0x200` and the rear lights brighter (672 pixels, nothing else but the rear: not from the front);
-  each of the four marks changes the car from some side; each wheel flag changes the hubs; at full throttle the rear (driven) wheels blur from step 15
-  and the front ones from step 101, the brake lights never; in a race of 1,100 steps no car on the grid has a look and the computers show their brake lights
-  (77 car steps). It fails 11 checks with the rule of Screamer 1. `LOOK_DUMP=/b/s2host/look_` writes the pictures.
+  has look 0 and texture phase 0; braking it has `0x200` and the rear lights brighter (614 to 687 pixels on the seven tracks, nothing else but the
+  rear: not from the front); each of the four marks changes the car from some side; each wheel flag changes the hubs; at full throttle the rear
+  (driven) wheels blur from step 15 and the front ones from step 84 to 101, the brake lights never; in a race of 1,100 steps no car on the grid has a
+  look and the computers show their brake lights (48 to 449 car steps). The snapshots are of a copy of the car at rest with the look set (a car held on
+  the grid creeps, which moves the whole picture). It fails 11 checks with the rule of Screamer 1. `LOOK_DUMP=/b/s2host/look_` writes the pictures.
 - **The cars as drawn** (`tools/s2/render_s2.c`, every run): each car model of the image is drawn with and without the wheels' spin and
   steering, and exactly four blocks (the hubs) may change with the spin and four (the front wheels) with the steering; in a `g` run every
   car's pose each step must be a number and a car's (tilt under 1.2 rad, body lean under 0.5, steering under 1). It failed for AUTO02 and

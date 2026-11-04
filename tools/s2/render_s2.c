@@ -155,6 +155,17 @@ static int pic_diff(const uint8_t *a, const uint8_t *b, int *brighter)
     return n;
 }
 
+/* the car at rest, kept: a snapshot is of this car with the look given (a car held on the grid creeps a little, which moves the whole picture) */
+static struct s2car_state held;
+
+static void shot(uint32_t look, float az, float dist, float up, uint8_t *out)
+{
+    static struct s2car_state st;
+    st = held;
+    st.look = look;
+    snap(&st, az, dist, up, out);
+}
+
 /* The look of a car as its physics hands it to the drawing (s2car.h look; STARTL.EXE 0x16878 from 0x1737b: 0x200 while the brake is
    down, 0x400 / 0x8000 a pair of wheels turning fast, the marks of the four sides' damage 0x2000 0x800 0x4000 0x1000 from +0xb8; a
    texture's picture is flags >> 9) and what it does to the car as drawn. The player's car on the start line, drawn from four sides:
@@ -177,13 +188,15 @@ static int check_looks(int tn)
     EXPECT(car.look == 0, "standing: look %x, not 0", (unsigned)car.look);
     s2car_look(&car, &lk);
     EXPECT(lk.phase == 0, "standing: the drawing's texture phase is %x, not 0", (unsigned)lk.phase);
-    for (int k = 0; k < 4; k++) snap(&car, az[k], LOOK_DIST, LOOK_UP, base[k]);
+    held = car;
+    for (int k = 0; k < 4; k++) shot(0, az[k], LOOK_DIST, LOOK_UP, base[k]);
 
     for (int k = 0; k < 3; k++) s2car_step(&car, &brake);
     EXPECT(car.look == 0x200, "braking: look %x, not 200", (unsigned)car.look);
     s2car_look(&car, &lk);
     EXPECT(lk.phase == 0x80, "braking: the drawing's texture phase is %x, not 80 (picture 1)", (unsigned)lk.phase);
-    snap(&car, 0.0f, LOOK_DIST, LOOK_UP, alt);
+    const uint32_t braking = car.look;
+    shot(braking, 0.0f, LOOK_DIST, LOOK_UP, alt);
     dump_pic("standing", base[0]);
     dump_pic("braking", alt);
     n = pic_diff(base[0], alt, &lit);
@@ -191,7 +204,7 @@ static int check_looks(int tn)
     EXPECT(n > 0 && lit > 0, "braking does not light the rear lights");
     EXPECT(n < FB_W * FB_H / 20, "braking changes %d pixels: more than the rear lights", n);
     for (int k = 1; k < 4; k++) {                               /* from the front and the sides the lights are hidden: only the rear differs (some pixels) */
-        snap(&car, az[k], LOOK_DIST, LOOK_UP, alt);
+        shot(braking, az[k], LOOK_DIST, LOOK_UP, alt);
         n = pic_diff(base[k], alt, &lit);
         EXPECT(k == 2 ? n == 0 : n < FB_W * FB_H / 20, "braking from side %d changes %d pixels", k, n);
     }
@@ -206,7 +219,7 @@ static int check_looks(int tn)
         EXPECT(lk.phase == marks[m] >> 2, "mark %x: the drawing's texture phase is %x", (unsigned)marks[m], (unsigned)lk.phase);
         int shown = 0;
         for (int k = 0; k < 4; k++) {
-            snap(&car, az[k], LOOK_DIST, LOOK_UP, alt);
+            shot(car.look, az[k], LOOK_DIST, LOOK_UP, alt);
             shown += pic_diff(base[k], alt, &lit) > 0;
         }
         printf("car look: mark %x is seen from %d of 4 sides\n", (unsigned)marks[m], shown);
@@ -217,9 +230,8 @@ static int check_looks(int tn)
     for (int w = 0; w < 2; w++) {                               /* a pair of wheels' blur (poked: the physics' side is below) */
         const uint32_t flag = w ? 0x8000 : 0x400;
         int shown = 0;
-        car.look = flag;
         for (int k = 1; k < 4; k += 2) {
-            snap(&car, az[k], 500.0f, 60.0f, alt);
+            shot(flag, az[k], LOOK_DIST, LOOK_UP, alt);
             shown += pic_diff(base[k], alt, &lit) > 0;
         }
         printf("car look: wheels' flag %x is seen from %d of 2 sides\n", (unsigned)flag, shown);
