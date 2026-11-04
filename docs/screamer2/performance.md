@@ -12,6 +12,10 @@ and in the answer is recomputed with it (changes: mean -0.1 to -0.4 ms, track 4 
 **With the original's LOD, which it uses at every detail, all seven tracks hold 50 pictures/s in the 4-car
 case** (section 6); the tables below are the picture without it.
 
+Later (2026-11-04, `draw_distance.md`): the original also takes only the cells that the camera cell's visibility
+list names; the firmware does that now, which removes 0.9 to 1.7 ms more from the model's mean (placements tested
+521 -> 238 on track 1) and never costs a frame time. Every table here is without it ("every placement in reach").
+
 ## Answer
 
 Near chase camera, the player's car and 3 opponents in view (A), physics as on the S1 grid (M):
