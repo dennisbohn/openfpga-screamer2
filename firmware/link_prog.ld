@@ -23,6 +23,13 @@ SECTIONS
         KEEP(*(.text.header))       /* start_prog.S: header, entry, trap entry */
         KEEP(*(.text.start))
         . = . + CODE_PAD;           /* (0; tools/fw.sh CODE_PAD=n: the code moves n bytes, to see what the caches' alignment costs) */
+        /* The code that runs for every piece of a frame, together: the I-cache is 8 KB and direct mapped, so two hot pieces
+           of code that lie a multiple of 8 KB apart (mod 8 KB) throw each other out on every piece. With hw_piece (main.c)
+           somewhere else, the frame of the race took 0.9 ms more than with a few bytes between the files
+           (docs/screamer2/performance.md, section 7). Here they cannot collide while the block is under 8 KB (checked below) */
+        __hot_start = .;
+        *(.text.tl_mark) *(.text.hw_piece) *(.text.face_eye) *(.text.block_piece) *(.text.draw)
+        __hot_end = .;
         *(.text.unlikely .text.unlikely.*)
         *(.text.startup .text.startup.*)
         *main.o(.text .text.*)
@@ -66,6 +73,8 @@ SECTIONS
         . = ALIGN(4);
         __bss_end = .;
     } > SDRAM
+
+    ASSERT(__hot_end - __hot_start <= 8192, "the hot code (tl_mark, hw_piece, face_eye, block_piece, draw) is over 8 KB: it would collide with itself in the I-cache")
 
     __stack_top = 0x00008000;       /* top of the 32 KB boot RAM */
 

@@ -154,12 +154,15 @@ car's gearbox in neutral (`s2car_state.hold`): on the grid the throttle revs the
 `race init <n> ms` (the first start of a run), and the visit's last line the mean and worst ms of the player's step and the
 scene set-up (`ph<mean>/<worst>`, the first mark of the frame timeline) and of the computers' three steps (`o<mean>/<worst>`).
 
-The computers' steps (the cars' physics, the driver, the cars touching) cost 3.4 ms a frame on the CPU, more than a third
-of what the lone car's whole frame took. The viewer therefore runs them after the pieces are handed to the hardware, while the
-rasterizer finishes the picture (`race_step_others()`, `RACE_OVERLAP` in `viewer.c`, 1 by default; `-DRACE_OVERLAP=0` runs
-them before the scene as one step with the player's): where the rasterizer is the bound, which the worst frames are, the CPU
-waits for it anyway and the steps cost nothing; the computers' cars are drawn from the step before, 20 ms old. See
-docs/screamer2/driving.md, "The race", for the numbers.
+The computers' steps (the cars' physics, the driver, the cars touching) cost 3.2 ms a frame on the CPU (2.6 ms since the sine and
+cosine of the physics are remembered, performance.md section 7), more than a third of what the lone car's whole frame took. The viewer
+therefore runs them while the hardware has work (`race_others_begin()`, `race_others_slice()`, `RACE_OVERLAP` in `viewer.c`, 2 by
+default): in slices (one car's step, or the cars touching) whenever handing a piece to the geometry unit had to wait 1,200 cycles
+for room in its buffer (`hw_idle` in `frame.h`: the buffer holds 107 pieces and is then full), and what is left after the last
+piece, while the rasterizer finishes the picture. `-DRACE_OVERLAP=1` runs them all after the last piece, `-DRACE_OVERLAP=0` before
+the scene as one step with the player's. Where the hardware is the bound, which the worst frames are, the CPU waits for it anyway and
+the steps cost nothing; the computers' cars are drawn from the step before or the one just taken, 20 ms apart. See
+docs/screamer2/driving.md, "The race", and performance.md section 7 for the numbers.
 
 The physics sits behind `firmware/s2car.h` (`s2car_init`, `s2car_step` for one 20 ms step, `s2car_look`,
 `s2car_camera`; the header is the contract with the car physics). `s2car.c` is the game's car model (docs/screamer2/driving.md). Until `firmware/s2car.c`
@@ -178,14 +181,19 @@ the last second in ms, the track, the cars and the faces of the frame. A frame's
 start (the swap before it is done) to the end of the rasterizer's work, not including the wait for the next
 vertical blanking, so 10 ms still shows 50 pictures a second; the camera advances by the real time
 (video frames of 1/50 s), so a frame over 20 ms makes the picture slower but not the movement.
-`debug.txt` (4 KB, not a ring: when it is full later lines are lost, so the lines are short): its first line is the
+`debug.txt` (4 KB, not a ring: when it is full later lines are lost, so the lines are short): its first line (128 bytes; the
+boot loader's `firmware.bin` and `program.bin` must be of the same build) is the
 live statistics of the current visit (`Screamer Pocket T1 c4 fr1234 avg10.4 max12.8 late0 fps49.9`: track, cars or `drv`
-in the driving mode, frames, mean and worst ms, frames over 20 ms, pictures a second); one line per track load (`T1 load
+in the driving mode, frames, mean and worst ms, frames over 20 ms, pictures a second), followed by what the longest frame was made of
+(` | a1.3 c1.4 s7.1 o3.4 w0.0 f873 p219 n77`: ms before the scene (the player's step, the sound, the backdrop), in the cull, in the
+pieces' loop (waiting for the geometry unit included), in the computers' steps, waiting for the rasterizer at the end; faces and
+pieces of that frame; in the race the player's place on the line, as a node of it); one line per track load (`T1 load
 5100 ms: read 2973 KB ... ms, build 4494 KB ... ms (unpack ...), road 1440 pts ... ms, 2000 pl`; on the first load `read` is 255 KB
 and the ms of the cars' unpacking more than later ones, the cars staying unpacked); one line when a visit
 ends (another track, the cars or the mode changed; a visit of under 50 frames leaves none), `T1 c4 249fr avg10.4
 max12.8@512k late0 50.0/s f1180 p95` (track, cars or drv, frames, mean and worst ms and where on the road in thousand
-units (not in drv), frames over 20 ms, pictures a second, faces and pieces a frame); the frame timeline (`tl_*`: cycles and
+units (not in drv), frames over 20 ms, pictures a second, faces and pieces a frame, in the race `ph` / `o` and the same parts of the
+longest frame as the first line has); the frame timeline (`tl_*`: cycles and
 the units' busy clocks at each stage, 1 KB) once, 5 s into the first visit. A visit that ends with the core being quit
 has no line: the first line is its last state. The load no longer checks the image's CRC-32s (they cost 1.4 s; the
 native check of the build has them, and the firmware's builder leaves them 0).
