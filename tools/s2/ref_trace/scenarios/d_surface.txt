@@ -1,0 +1,7 @@
+# d: level ground of one road kind (a kind belongs to a track: track:kind below), the car at track 1's grid place, full throttle 5 s, then braking
+@steps 450
+@flat 36
+@put -63,15865,0.0378828049
+@surfaces 1:36 1:27 2:15 2:26 2:11 2:33 2:38 3:17 3:13 3:12 4:10 4:32 5:0 5:3 5:8 5:1 6:28 6:39 6:21 7:52
+0 A
+250 B

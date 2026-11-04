@@ -1,0 +1,7 @@
+# b: full throttle; full left from 1 s for 3 s, then full right for 3 s, then straight
+@steps 1000
+@tracks 1 3 4 7
+0 A
+50 AL
+200 AR
+350 A

@@ -1,0 +1,6 @@
+# d: track 1: full throttle, a flick right (0.12 s) at 2.8 s: onto the grass, a wall, along the grass, back on the asphalt
+@steps 700
+@tracks 1
+0 A
+140 AR
+146 A

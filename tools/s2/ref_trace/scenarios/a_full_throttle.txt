@@ -1,0 +1,5 @@
+# a: 20 s full throttle from the grid, straight (acceleration, gear changes, top speed). On the real track the car
+# leaves the road where it bends (walls from ~4 s on); a_flat.txt is the same on level ground.
+@steps 1000
+@tracks 1 3 4 7
+0 A
