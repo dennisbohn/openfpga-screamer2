@@ -219,21 +219,20 @@ void s2save_load(void)
     uint32_t size = slot_size(SAVE_CHOICE_SLOT), n = size & ~3u;
     const char *how;
     if (n > S2SAVE_SIZE) n = S2SAVE_SIZE;                   /* (a longer file: only the layout's part; the window ends at ATTACK.DAT) */
-    memset(sv, 0, S2SAVE_SIZE);
     if (!n) {
         s2save_reset();
         how = size ? "too short: defaults" : "none: defaults";
     } else if (slot_read(SAVE_CHOICE_SLOT, 0, SAVE_CHOICE_ADDR, n)) {
-        memset(sv, 0, S2SAVE_SIZE);
         s2save_reset();
         how = "unreadable: defaults";
-    } else if (sv->h.magic == MAGIC) {
-        how = check(n);
-    } else if (size == CHOICE_SIZE) {
-        how = migrate();
     } else {
-        s2save_reset();
-        how = "not ours: defaults";
+        memset((uint8_t *)sv + n, 0, S2SAVE_SIZE - n);      /* (written after the read, not before: the APF writes the SDRAM on its own) */
+        if (sv->h.magic == MAGIC) how = check(n);
+        else if (size == CHOICE_SIZE) how = migrate();
+        else {
+            s2save_reset();
+            how = "not ours: defaults";
+        }
     }
     sv->h = (struct head){ MAGIC, S2SAVE_VERSION, S2SAVE_SIZE, 0, 0 };
     seal_main();

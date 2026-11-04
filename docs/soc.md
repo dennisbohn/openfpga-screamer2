@@ -290,14 +290,17 @@ log. A firmware reload from the menu is only a reset: until the new firmware cle
 the previous run's log is still there.
 
 **Saved games** take the same path but live in the SDRAM: the nonvolatile data slots
-`CHOICE.DAT` (id 23, `0x13F0_0000`, 1120 bytes: the original's settings file with options,
-championship, records and unlocks) and `ATTACK.DAT` (id 24, `0x13F1_0000`, 6 x 60,016 bytes:
+`CHOICE.DAT` (id 23, `0x13F0_0000`, 19,348 bytes in Screamer 2's own layout, `firmware/s2save.c`,
+docs/screamer2/menus.md section 7.1: settings, volumes, unlocks, set-ups and the best times; `size_maximum` in
+`core/data.json` is 36,864) and `ATTACK.DAT` (id 24, `0x13F1_0000`, 6 x 60,016 bytes:
 per track the kept time-trial run, `struct ghost_file` in `ghost.h`, which `ghost.c` reads
 and writes directly there). Both are `deferload`: the firmware reads them right after start
-(`save_load` in `save.c`); without a file, or for a `CHOICE.DAT` that does not look like the
-original's, it takes the original's defaults (`0x1bbb8`) and then enters the full size into
-the slot table with `DS_SIZE`, so the Pocket saves them on exit. From then on every CPU write
-there (`choice` in `champ.h`) is already the saved game; the Pocket reads it on exit through
+(`save_load` in `save.c`, `s2save_load()` for `CHOICE.DAT`); without a file, with a short, foreign or damaged one
+it takes the defaults (the old 1,120-byte layout of Screamer 1's block is migrated once) and then enters the full
+size into the slot table with `DS_SIZE` (a dual-port memory of the core, `datatable` in `core_bridge_cmd.v`: the entry the
+CPU writes is what the Pocket reads when it saves), so the Pocket saves them on exit. That a missing file gets saved is how `debug.txt` and Screamer 1's saves work; for an existing
+smaller file (the old 1,120 bytes) it follows from the same table, but only the first quit with the new firmware will show it: `CHOICE.DAT` on the SD card 19,348 bytes long. From then on every CPU write
+there is already the saved game, so the save's setters seal it (checksum) at once; the Pocket reads it on exit through
 the bridge from the SDRAM (`sdram_port.v`: a bridge read word goes to the controller right
 after the bridge's write buffer and has until the next bridge word, at least 88 clocks, to
 complete). If the core is quit before `save_load` ran (in the first second), the Pocket saves

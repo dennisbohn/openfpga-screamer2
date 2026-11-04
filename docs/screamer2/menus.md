@@ -135,9 +135,10 @@ Not feasible here: MULTIPLAYER (network, serial link, combat mode, split screen)
   4.2 MB). At the Pocket's 1.2 MB/s and 3 MB/s for the LZW: a 2D page 35 KB read and 65 KB unpacked, about 50 ms; a room 0.8 MB read, 2.9 MB unpack, about 1.7 s; a scene's one `MAPn`
   (about 2 MB) and the team's cars about 2 s. Pages that must change at once (the 5 stations of the room) stay loaded.
 - **Slots**: none needed for the menu (ZIP). Free: 24 of 32 (firmware, log, program, ZIP, music 2, CHOICE.DAT, ATTACK.DAT are 8).
-- **Saves**: the original's `CHOICE.DAT` (33,244 bytes: name, volumes, view, settings, leagues and unlocks, set-ups 0x188 per team, best times: lists of 15 rows of time,
-  name, team, model, replay number, per kind, track and length of race) does not fit the 1,120 bytes of the Screamer 1 layout the core's slot has (and the start menu borrows
-  fields of). A Screamer 2 layout of our own, about 20 to 36 KB, needs only `core/data.json`'s `size_maximum` raised (the Pocket writes back what the firmware keeps).
+- **Saves** (done, section 7.1): the original's `CHOICE.DAT` (33,244 bytes: name, volumes, view, settings, leagues and unlocks, set-ups 0x188 per team, best times: lists of 15 rows of time,
+  name, team, model, replay number, per kind, track and length of race) did not fit the 1,120 bytes of the Screamer 1 layout the core's slot had (and the start menu borrowed
+  fields of). `firmware/s2save.c` keeps a Screamer 2 layout of our own in the same slot, 19,348 bytes, with `core/data.json`'s `size_maximum` raised to 36,864
+  (the Pocket writes back what the firmware keeps).
   The ghost (the original records 0x20 bytes a frame, 7,000 frames, per track) is re-simulated from the controls, which the physics' fixed 20 ms step allows: 4 bytes a step,
   3 laps about 60 KB a track, 7 tracks 0.4 MB in `ATTACK.DAT` (`ghost.c` of Screamer 1 is the model; its slot is 360 KB: raise it likewise).
 
@@ -145,14 +146,15 @@ Not feasible here: MULTIPLAYER (network, serial link, combat mode, split screen)
 
 `s2menu.c` is the arcade flow in one list: track, team, car, laps, level, gearbox, race / watch, with the original's texts and the choices kept. What it leaves
 out of the original's arcade: the pictures and 3D of the TRACK and CAR pages, the loading picture, the pause and end screens, the game's own names for the 20 cars,
-the options room, every other kind of game. The race's end and pause exist as the viewer's text (FINISH, Select + B).
+the options room, every other kind of game. The race's end and pause exist as the viewer's text (FINISH, Select + B). Its choices are kept in the save
+(section 7.1): the laps, level and gearbox rows are the GAME SETTINGS rows of the same name.
 
 ## 7. Build order and rough costs (days of work, one developer; the PC-side tests of each step as for the start menu)
 
 | # | Step | Needs | Cost |
 |---|---|---|---|
 | 1 | **2D toolkit**: `.BKK` loader (header, palette x4, copy), `MENUL.SPR` / `.FNT` loader into the blitter's image tables (Screamer 1's `menu_init` and `tb_hud.c` as templates), a page runner (keys with repeat, fade in/out, the menu click sounds from `SOUND.DAT`'s `MENU.DTR`); the **LOADING screen** (`LOAD_nL` + LOADING + BEST TIME / BEST LAP) and the **pause menu** (RESUME, RESTART, EXIT over the darkened race, replacing Select + B) | zip range reads of `GRAF1.DAT`; the existing blitter | 2 |
-| 2 | **The save**: a Screamer 2 layout for `CHOICE.DAT` (settings, volumes, best times; the start menu's fields move into it), `data.json` size | `core/data.json` | 1 |
+| 2 | **The save** (done, 7.1): a Screamer 2 layout for `CHOICE.DAT` (settings, volumes, unlocks, set-ups, best times; the start menu's fields moved into it, the old layout is migrated once), `data.json` size 36,864 | `core/data.json` | 1 |
 | 3 | **End of race**: the 4 s CONGRATULATIONS / place / time screen, then RACE AGAIN / EXIT (REPLAY later) and the track's best times (a table of 15 in the new save); GAME SETTINGS and HI SCORES pages on the same toolkit | 2 | 2 |
 | 4 | **Arcade pages**: TRACK page (`TKG`, banners, lit frame), TRANSMISSION page, the arcade title, the page chain with ESC going back; the start menu becomes the stand-in for the pages that do not exist yet | 1 | 1.5 |
 | 5 | **3D-o pages**: the CAR page (carousel of the team's cars with the plate: the 20 cars' names to read), TEAM SELECTION (four badges), ENTER YOUR NAME (letter tyres), the track maps for time attack and league | geometry unit pieces with a page MLB; `s2teams.c`; `LOGO1`, `PLATES1`, `MAPS1` read by range | 4 |
@@ -166,6 +168,80 @@ the options room, every other kind of game. The race's end and pause exist as th
 
 Total about 29 days if every row is done (13.5 for rows 1 to 6: a complete arcade and championship with 2D and small-3D pages, none of the room, the scene or the ghost; rows 9 and 10 add 4). The order follows what the player needs while testing: the loading screen and a pause menu first, then the end of the race, then the
 choice pages.
+
+### 7.1 The save (row 2)
+
+`firmware/s2save.c` / `s2save.h`, test `tools/s2/check_save_s2.sh`. **Where and when it is written**: the save is the nonvolatile data slot 23
+(`CHOICE.DAT`, `core/data.json` `size_maximum` 36,864) and lives in the SDRAM at `0x13F0_0000`, 64 KB of window up to `ATTACK.DAT`. The firmware never writes
+the file: the Pocket reads the slot out of the SDRAM through the bridge when the core is quit or switched off (docs/soc.md, "Saved games"). So there is no dirty flag and no
+"write back": every call that changes the save seals the changed part (its CRC-32) at once, and what the SDRAM holds is always what the next start reads. At boot `s2save_load()`
+(called by `save_load()`, early in `prog_main`) reads the slot and puts its size, 19,348 bytes, into the APF's slot table (`slot_set_size`), because the APF keeps a size only for a file it
+found and writes the slot back with it: an existing shorter file (the 1,120 bytes of the old layout) is read by its own size and is replaced by the full-size one at the next quit.
+`size_maximum` is only the limit for what the Pocket may load: 36,864 leaves room for later versions of the layout; more than that (the window ends at 64 KB) needs `data.json` raised again, and
+`data.json` is read when the core is loaded, so a change of it needs a full deploy.
+
+**The layout** (little-endian, all offsets in bytes; the numbers in brackets are the defaults, which are the original's first start where it has one):
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 4 | marker `S2SV` |
+| 4 | 2 | version (1) |
+| 6 | 2 | size of the layout (19,348) |
+| 8 | 4 | CRC-32 of the main part (bytes 16 .. 447) |
+| 12 | 4 | CRC-32 of the best times (bytes 448 .. 19,347) |
+| 16 | 4 | the player's name: three printable characters and 0 (`MIL`) |
+| 20 | 8 | the GAME SETTINGS rows, each the index of its value in the page's list: TRANSMISSION (0 AUTOMATIC), DETAIL LEVEL (2 HIGH), NUMBER OF LAPS (1: 3 laps), ARCADE ENEMIES SKILL (1 NORMAL), MULTIPLAYER ENEMIES (0 OFF), TIME ATTACK GHOST CAR (0 ON), DAMAGES (0 OFF), MUSIC (0 ON). The start menu's laps, level and gearbox rows are the rows 2, 3 and 0 |
+| 28 | 6 | volumes: effects, CD, FM music; three `u16`, 0 .. 0x7FFF, 0x6000 is the nominal level of `snd_master()`, `music_master()`, `fm_master()` (0x6000 each) |
+| 34 | 1 | the view a race starts in (the game's view number 1 .. 7; 2, the first from the car) |
+| 35 | 3 | the start menu's last choices: track 1 .. 7, team 1 .. 4, car 1 .. 5 as the files number them (1, 1, 1) |
+| 38 | 1 | the highest league open, 0 .. 3 (0) |
+| 39 | 1 | tracks opened beyond the first three, 0 .. 4 (0) |
+| 40 | 8 | reserved, 0; a later field takes one of these bytes if its 0 is a valid value (or clamps to one): no new version |
+| 48 | 400 | per team (4 x 100): the fifth (bonus) car won (1 byte, 0), the set-ups (4 cars x Custom 1 .. 4 x 6 numbers, `int8` -1 .. 4, each set `2 2 0 2 2 2`: HANDLING, TIRE PRESSURE, TIRE TYPE, FRONT SUSPENSIONS, REAR SUSPENSIONS, BRAKES), 3 bytes unused |
+| 448 | 18,900 | the best times: 105 lists of 15 rows of 12 bytes |
+
+A **row**: `float time` in seconds (+0; 3599.999 for a row nobody has driven, as the game's file has it), `char name[4]` (+4, three characters and 0), `u8 team` 1 .. 4 (+8),
+`u8 car` 1 .. 5 (+9), `u16 replay` (+10; 0 for none). An empty row is `3599.999`, `MIL`, team (row & 3) + 1, car 1, 0, as the game starts them. A **list** is the quickest 15 times of
+one kind of game, track and thing timed; list number `(kind * 7 + track - 1) * 5 + list`: kind 0 league (CHAMPIONSHIP), 1 arcade, 2 time attack (the game's numbering), track 1 .. 7,
+list 0 .. 3 the total time of a race of 1, 3, 5 or 10 laps (the NUMBER OF LAPS values), list 4 the best single lap. Time attack has only the 3-lap totals: a total list asked for with
+kind 2 is list 1.
+
+**Loading** (`s2save_load()`; one log line, `save: CHOICE.DAT <how> (<bytes> bytes)`): at most 19,348 bytes of the file are read, whatever its size is (a longer file is read to the layout's end;
+a size that is not a multiple of 4 loses its last bytes). Then: no file or under 4 bytes, a failed read, a file that is not ours (marker missing and not 1,120 bytes), or another version or
+size field give the defaults for everything. A file of the right marker and version is checked **part by part**: the main part must be whole, match its CRC-32 and hold only values in range (and a
+printable name); the times must be whole, match theirs and hold only times 0 .. 3599.999, printable names and teams and cars in range. A part that fails is replaced by its defaults and the other is
+kept (a short file keeps the main part if it reaches byte 448). A file of exactly 1,120 bytes without the marker is the **old layout**, Screamer 1's block whose unused fields held the start menu's choices
+(`track`, `intro` = team, `car`, `laps`, `difficulty`, and `failed` = `0x5332xxxx | gearbox`): with the marker `0x5332` in the high half of `failed` the six choices are taken over (clamped), everything else is the
+defaults; without it the defaults. The next quit writes the new layout, so this happens once. After `s2save_load()` every getter answers within its range; before it, the lowest value.
+
+**The interface** (`s2save.h`; every setter clamps, seals and ignores a wrong number):
+
+| Call | |
+|---|---|
+| `s2save_get(key)`, `s2save_set(key, v)`, `s2save_count(key)` | the numbers `S2S_TRANS .. S2S_MUSIC` (the GAME SETTINGS rows in the page's order), `S2S_VIEW`, `S2S_VOL_FX / CD / FM`, `S2S_TRACK / TEAM / CAR`, `S2S_LEAGUE_OPEN`, `S2S_TRACKS_OPEN`; `count` is how many values the row steps through |
+| `s2save_name()`, `s2save_set_name(n)` | the name (three characters; shorter is padded with spaces, other characters become `?`) |
+| `s2save_track_at(pos)`, `s2save_track_open(t)`, `s2save_league_open(l)`, `s2save_car5_open(team)`, `s2save_set_car5(team, won)` | the unlocks as data: the tracks open in the original's order (England, Egypt, California, Finland, Switzerland, Columbia, The Tunnel): three at the start, one more for each league won, the last when league 4 is won with all four teams. **`s2save_unlock_all`** (build default `S2SAVE_UNLOCK_ALL`, 1; `tools/fw.sh EXTRA_CFLAGS=-DS2SAVE_UNLOCK_ALL=0 TAG=x`) opens everything whatever the save says; it is a plain variable, not saved. No page asks these yet: the start menu still shows all seven tracks and all five cars |
+| `s2save_setup(team, car, slot)`, `s2save_set_setup(team, car, slot, six)` | a car's set-up (team 1 .. 4, car 1 .. 4, Custom 1 .. 4 as slot 0 .. 3) |
+| `s2save_row(kind, track, list, row)`, `s2save_row_empty(r)` | a row of a list, read-only, good until the next `s2save_add_time` |
+| `s2save_add_time(kind, track, list, time, name, team, car, replay)` | the rank (0 .. 14) the time took, or -1 (slower than the fifteenth, not a time, wrong number). A time goes ahead of the first it is not slower than: an equal time goes ahead of the old one (`STARTL.EXE` 0x354cf: `fcomp`, `ja`; the rows below move down, the fifteenth falls out). The caller adds the total time to list 0 .. 3 and the best lap to list 4, as the original does for every finished human car (not for a race left or out of time). `name` 0 is the player's name |
+| `s2save_set_replay(kind, track, list, row, n)` | the replay number of a row, when the replay of that run is kept |
+| `s2save_load()`, `s2save_reset()` | boot; all defaults (the tests) |
+
+The start menu (`s2menu_load()` / `s2menu_store()`) uses `S2S_TRACK / TEAM / CAR / LAPS / SKILL / TRANS`. Screamer 1's choice block (`champ.h`) is plain RAM now, only its unreached code reads it; `main.c`'s
+`volumes()` takes the three volumes from the save.
+
+**The original's file, for the steps to come** (decoded from `CONFIG/CHOICE.DAT` of the game: 0x2077 words, word *i* stored as `(v + i * 0x1050c) ^ i`; OpenScreamer's `docs/NOTES2.md` S2-5zk to S2-5zn and
+`port/src/s2_hooks.c` name the fields; the offsets below are in the file, checked on a real one, 105 lists of 300 bytes end exactly at 0x81dc):
++0x00 the player's team 0 .. 3; +0x08 and +0x0c the names of players 1 and 2; +0x24 the league in hand and +0x30 races done (not kept across a sitting by the game; not kept here); +0x28 extra tracks open,
++0x2c next league open; +0x3c .. +0x58 the eight GAME SETTINGS rows; +0x5c .. +0x68 the HI SCORES page's own four choices (not kept here); +0x6c the attract race's track counter (not kept); +0x70 CD, +0x74 MIDI, +0x78 effects volume
+(0x7FFF, 0x7FFF, 0x5FFF); +0x7c the view; +0x88 the standings of the league in progress; +0xb0 four team records of 0x188 bytes (chosen car, fifth car won, 4 cars x 4 set-ups x 6 words, set-up start `2 2 0 2 2 2`);
++0x6d0 the 105 lists, each 300 bytes in columns (15 times, 15 names, 15 replay numbers, 15 teams 0 .. 3, 15 car models 0 .. 4): first [kind][track][laps option] for the totals, then [kind][track] for the best laps.
+The BEST TIME / BEST LAP of the LOADING screen are the first rows of the total list of the chosen length and of the lap list (time attack: the 3-lap list).
+
+**What differs from the original**: our lists are rows of 12 bytes (not columns of words), teams and cars are counted from 1, the file has a CRC-32 per part in place of the original's word-by-word scrambling, the volumes use
+the firmware's scale (0x6000 nominal) so that nothing sounds different, and the HI SCORES page's choices, the attract counter and the league in progress are not kept. The original's file is not read (no conversion of
+the game's files; a `CHOICE.DAT` of the game put into the slot is a foreign file and gives the defaults). **Not checked on the Pocket**: the write-back of the longer file (the first quit after the new firmware turns the owner's 1,120-byte file
+into 19,348 bytes), and the migration with the owner's real file.
 
 ## 8. Open
 
