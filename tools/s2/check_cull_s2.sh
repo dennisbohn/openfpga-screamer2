@@ -17,7 +17,7 @@ tracks=${*:-1 2 3 4 5 6 7}
 cd "$root"
 old=build/ref_tree
 rm -rf "$old"
-mkdir -p "$old/build/stats/out" "$old/build/s2"
+mkdir -p "$old/build/stats/out" "$old/build/s2" build/stats/out
 git archive "$ref" | tar -x -C "$old"
 # the reference tree is counted with this tree's tools (its own perf_patch.py is the one of its time)
 cp tools/s2/perf.h tools/s2/perf.c tools/s2/perf_patch.py tools/s2/framestats.sh tools/s2/racestats.c tools/s2/framestats.c "$old/tools/s2/"
