@@ -212,7 +212,7 @@ size field give the defaults for everything. A file of the right marker and vers
 printable name); the times must be whole, match theirs and hold only times 0 .. 3599.999, printable names and teams and cars in range. A part that fails is replaced by its defaults and the other is
 kept (a short file keeps the main part if it reaches byte 448). A file of exactly 1,120 bytes without the marker is the **old layout**, Screamer 1's block whose unused fields held the start menu's choices
 (`track`, `intro` = team, `car`, `laps`, `difficulty`, and `failed` = `0x5332xxxx | gearbox`): with the marker `0x5332` in the high half of `failed` the six choices are taken over (clamped), everything else is the
-defaults; without it the defaults. The next quit writes the new layout, so this happens once. After `s2save_load()` every getter answers within its range; before it, the lowest value.
+defaults; without it the defaults. The next quit writes the new layout, so this happens once. Every getter answers within its range, before `s2save_load()` too (whatever the SDRAM holds is clamped).
 
 **The interface** (`s2save.h`; every setter clamps, seals and ignores a wrong number):
 
@@ -237,6 +237,10 @@ The start menu (`s2menu_load()` / `s2menu_store()`) uses `S2S_TRACK / TEAM / CAR
 (0x7FFF, 0x7FFF, 0x5FFF); +0x7c the view; +0x88 the standings of the league in progress; +0xb0 four team records of 0x188 bytes (chosen car, fifth car won, 4 cars x 4 set-ups x 6 words, set-up start `2 2 0 2 2 2`);
 +0x6d0 the 105 lists, each 300 bytes in columns (15 times, 15 names, 15 replay numbers, 15 teams 0 .. 3, 15 car models 0 .. 4): first [kind][track][laps option] for the totals, then [kind][track] for the best laps.
 The BEST TIME / BEST LAP of the LOADING screen are the first rows of the total list of the chosen length and of the lap list (time attack: the 3-lap list).
+The routine that puts a finished race into the lists, `STARTL.EXE` 0x353cb (`tools/dis.sh -f 0x353cb 0x358c9`, read for this step): for every car that finished (time attack: only the player's) the total time goes into
+the total list (strides 0x20d0 a kind, 0x4b0 a track, 0x12c a length; time attack always +0x12c) and the best lap into the lap list (0x12f32c + 0x834 a kind + 0x12c a track); the
+place is the first row the new time is not slower than (`fcomp`, `ja`), the rows below move down one, the new row gets replay 0, the car's team, model and name; then the original names a replay for it
+(not in time attack): the smallest number from 1 not used in that list's replay numbers, `REP<length><level><track><letter>`.
 
 **What differs from the original**: our lists are rows of 12 bytes (not columns of words), teams and cars are counted from 1, the file has a CRC-32 per part in place of the original's word-by-word scrambling, the volumes use
 the firmware's scale (0x6000 nominal) so that nothing sounds different, and the HI SCORES page's choices, the attract counter and the league in progress are not kept. The original's file is not read (no conversion of

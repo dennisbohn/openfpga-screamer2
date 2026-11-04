@@ -10,7 +10,7 @@
  *
  * s2save_load() at boot reads the slot and starts from the defaults for anything that is missing, short, foreign or damaged (each
  * part on its own: a bad main part keeps the times); it also reads the old layout (Screamer 1's block with the start menu's
- * choices in its unused fields) once. Before it has run, the getters answer the lowest valid value.
+ * choices in its unused fields) once. Before it has run, the getters answer within their ranges all the same (whatever the SDRAM holds is clamped).
  */
 #pragma once
 #include <stdint.h>
