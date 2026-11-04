@@ -8,7 +8,7 @@
 #include "screen.h"
 #include "zip.h"
 #include "dat.h"
-#include "champ.h"
+#include "s2save.h"
 #include <string.h>
 
 const uint8_t s2_menu_laps[S2M_LAPS] = { 1, 3, 5, 10 };
@@ -102,36 +102,26 @@ void s2menu_defaults(struct s2_menu_cfg *c)
     *c = (struct s2_menu_cfg){ .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1, .manual = 0 };
 }
 
-/* CHOICE.DAT is Screamer 1's settings block (champ.h): its fields that the Screamer 2 viewer does not use hold the menu, and a
-   marker says that they do (a block from the other game, or the defaults, has none). All of them lie where champ.c's validity
-   check (save.c) accepts them. */
-#define MAGIC   0x53320000u             /* choice.failed: MAGIC | manual */
-
-static int clamp(int v, int lo, int hi)
-{
-    return v < lo ? lo : v > hi ? hi : v;
-}
-
+/* The choices are kept in the save (s2save.h): the track, team and car are its start-menu fields; the laps, the level and the gearbox
+   are the GAME SETTINGS rows of the same name. The save clamps what it is given and answers within the ranges. */
 void s2menu_load(struct s2_menu_cfg *c)
 {
-    s2menu_defaults(c);
-    if (((uint32_t)choice.failed & 0xFFFF0000u) != MAGIC) return;
-    c->track = clamp(choice.track + 1, 1, S2M_TRACKS);
-    c->team = clamp(choice.intro + 1, 1, S2M_TEAMS);
-    c->car = clamp(choice.car + 1, 1, S2M_CARS);
-    c->laps = clamp(choice.laps, 0, S2M_LAPS - 1);
-    c->skill = clamp(choice.difficulty, 0, S2M_SKILLS - 1);
-    c->manual = choice.failed & 1;
+    c->track = s2save_get(S2S_TRACK);
+    c->team = s2save_get(S2S_TEAM);
+    c->car = s2save_get(S2S_CAR);
+    c->laps = s2save_get(S2S_LAPS);
+    c->skill = s2save_get(S2S_SKILL);
+    c->manual = s2save_get(S2S_TRANS);
 }
 
 void s2menu_store(const struct s2_menu_cfg *c)
 {
-    choice.track = c->track - 1;
-    choice.intro = c->team - 1;
-    choice.car = c->car - 1;
-    choice.laps = c->laps;
-    choice.difficulty = c->skill;
-    choice.failed = (int32_t)(MAGIC | (uint32_t)(c->manual != 0));
+    s2save_set(S2S_TRACK, c->track);
+    s2save_set(S2S_TEAM, c->team);
+    s2save_set(S2S_CAR, c->car);
+    s2save_set(S2S_LAPS, c->laps);
+    s2save_set(S2S_SKILL, c->skill);
+    s2save_set(S2S_TRANS, c->manual != 0);
 }
 
 void s2menu_grid(const struct s2_menu_cfg *c, struct s2_pick grid[4])

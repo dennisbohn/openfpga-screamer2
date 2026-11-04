@@ -9,7 +9,9 @@
  * all won (stage 51, 0x29141), or LOSER!! (stage 52). The state is kept as the game's settings
  * file CONFIG\CHOICE.DAT has it (0x460 bytes read to 0x203c0 by 0x1bbb8, written by 0x1be5c
  * before and after every race and on quitting): the options, the championship and the
- * records; the core keeps it in the nonvolatile data slot CHOICE.DAT (save.h).
+ * records. This is Screamer 1's game, whose code is still in the tree and not reached by
+ * Screamer 2: the block is plain memory here now. Screamer 2's saved game is s2save.h; this
+ * layout is only the old CHOICE.DAT that s2save_load() migrates once.
  */
 #pragma once
 #include <stdint.h>
@@ -36,8 +38,8 @@ struct choice_dat {
     int32_t failed;                         /* +0x440 the last race: 1 time over, 2 out of reach */
     int32_t volume[3], unused1, level, level_shown, difficulties;   /* +0x444 .. +0x45c */
 };
-/* the copy in the SDRAM that the APF saves on exit (data slot 23, save.h) */
-#define choice (*(struct choice_dat *)(uintptr_t)SAVE_CHOICE_ADDR)
+/* the copy in RAM (not saved) */
+extern struct choice_dat choice;
 
 /* The settings as the game has them without the file (0x1bbb8) */
 void choice_defaults(void);

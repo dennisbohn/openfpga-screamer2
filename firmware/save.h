@@ -1,7 +1,7 @@
 /*
  * What the game keeps between runs, as nonvolatile data slots (core/data.json) in the SDRAM:
- * CHOICE.DAT (slot 23, the game's CONFIG\CHOICE.DAT: options, championship, records,
- * unlocks; champ.h) and ATTACK.DAT (slot 24, the time attack's kept runs, ghost.h's
+ * CHOICE.DAT (slot 23, in Screamer 2's own layout: settings, unlocks, best times; s2save.h) and
+ * ATTACK.DAT (slot 24, the time attack's kept runs, ghost.h's
  * struct ghost_file for tracks 1..6 in turn, in place of the game's REPLAYS\MAPn.ATK; ghost.c
  * reads and writes them in place). save_load() reads them at boot
  * (deferload); from then on the CPU's writes there are the save: the APF reads both back over
@@ -11,7 +11,7 @@
 #include <stdint.h>
 
 #define SAVE_CHOICE_SLOT    23
-#define SAVE_CHOICE_ADDR    0x13F00000u     /* CHOICE_SIZE bytes (champ.h) */
+#define SAVE_CHOICE_ADDR    0x13F00000u     /* S2SAVE_SIZE bytes (s2save.h), 64 KB of window up to ATTACK.DAT */
 #define SAVE_ATTACK_SLOT    24
 #define SAVE_ATTACK_ADDR    0x13F10000u     /* past the program's 15 MB (link_prog.ld) */
 #define SAVE_ATTACK_BLOCK   60016u          /* a track's: sizeof(struct ghost_file) */
@@ -21,8 +21,7 @@
 #define SAVE_ATTACK(n)      ((uint8_t *)(uintptr_t)(SAVE_ATTACK_ADDR + ((n) - 1) * SAVE_ATTACK_BLOCK))
 
 /* Both slots from the SD card into the SDRAM; a missing file, a failed read or a CHOICE.DAT
-   that does not look like the game's is replaced by the game's defaults (zeros for
-   ATTACK.DAT). Then each slot's full size into the APF's slot table, so the APF saves it on
-   exit (it keeps a size only for a file it found). Early: until then, an exit would save
-   what lies in the SDRAM there. */
+   that is not ours is replaced by the defaults (s2save_load(); zeros for ATTACK.DAT). Then each
+   slot's full size into the APF's slot table, so the APF saves it on exit (it keeps a size only
+   for a file it found). Early: until then, an exit would save what lies in the SDRAM there. */
 void save_load(void);

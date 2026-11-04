@@ -11,7 +11,7 @@
  *   TRANSMISSION         automatic / manual
  *   START RACE, WATCH    the race, or the viewer's ride (for timing)
  *
- * The choices are kept in the nonvolatile CHOICE.DAT (champ.h's block, data slot 23): the Pocket writes it back when the core
+ * The choices are kept in the nonvolatile CHOICE.DAT (s2save.h, data slot 23): the Pocket writes it back when the core
  * exits, so they survive a power-up.
  */
 #pragma once
@@ -51,7 +51,7 @@ const char *s2menu_skill_name(int skill);       /* 0 .. 2 */
 
 /* Track 1, team 1 car 1, 3 laps, NORMAL, automatic: the first start */
 void s2menu_defaults(struct s2_menu_cfg *c);
-/* The last choices from CHOICE.DAT's block (defaults if there are none, or values out of range are clamped) / into it. */
+/* The last choices from the save (s2save.h: the defaults if there are none; values out of range are clamped) / into it. */
 void s2menu_load(struct s2_menu_cfg *c);
 void s2menu_store(const struct s2_menu_cfg *c);
 

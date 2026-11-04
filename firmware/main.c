@@ -34,6 +34,7 @@
 #include "speech.h"
 #include "champ.h"
 #include "save.h"
+#include "s2save.h"
 #include "intro.h"
 #include "frame.h"
 #include "viewer.h"
@@ -418,13 +419,13 @@ static void fade_out(const uint32_t *pal, int sound)
     }
 }
 
-/* The game's master volumes as CHOICE.DAT keeps them (0x2774d), to the effects and the music:
-   [0] digital (0x1d2b8), [1] CD (0x1d2bc), [2] MIDI (0x1d2c0), the FM music's */
+/* The master volumes of the save (s2save.h; the game's 0x2774d: digital, CD, MIDI) to the effects and the music: the digital
+   effects, the CD, the FM music's */
 static void volumes(void)
 {
-    snd_master(choice.volume[0]);
-    music_master(choice.volume[1]);
-    music_master_mu(choice.volume[2]);
+    snd_master(s2save_get(S2S_VOL_FX));
+    music_master(s2save_get(S2S_VOL_CD));
+    music_master_mu(s2save_get(S2S_VOL_FM));
 }
 
 #define CD_HOLD     25          /* a key held this many steps (0.5 s) repeats every step: the game

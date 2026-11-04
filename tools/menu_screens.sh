@@ -40,7 +40,7 @@ else
 fi
 set +e
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
-    cd /b/host/menu && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c s2menu.c champ.c console.c dlog.c zip.c dat.c crc32.c &&
+    cd /b/host/menu && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c &&
     cd /b/check/menu && /b/host/menu_screen /game/SCREAMER2.zip /b/check/menu/menu"
 status=$?
 for f in "$out"/*.rgb; do

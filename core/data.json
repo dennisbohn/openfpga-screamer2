@@ -76,7 +76,7 @@
                 "nonvolatile": true,
                 "filename": "CHOICE.DAT",
                 "extensions": ["dat"],
-                "size_maximum": 1120,
+                "size_maximum": 36864,
                 "address": "0x13F00000"
             },
             {

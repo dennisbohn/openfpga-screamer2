@@ -7,6 +7,8 @@
 
 _Static_assert(sizeof(struct choice_dat) == CHOICE_SIZE, "CHOICE.DAT's layout");
 
+struct choice_dat choice;
+
 static const int points[11] = { 24, 9, 7, 5, 0, 0, 0, 0, 0, 0, 0 };    /* per place (0x21ec) */
 
 void choice_defaults(void)

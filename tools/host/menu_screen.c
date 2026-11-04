@@ -8,7 +8,7 @@
  */
 #define _GNU_SOURCE
 #include "../s2menu.h"
-#include "../champ.h"
+#include "../s2save.h"
 #include "../dlog.h"
 #include "../hw.h"
 #include "../slot.h"
@@ -29,6 +29,13 @@ static int failures;
 uint32_t slot_size(uint32_t id)
 {
     return id == 3 ? zsize : 0;
+}
+
+/* (s2save.c links in for the choices; s2save_load() is not called here: tools/s2/check_save_s2.sh tests it) */
+void slot_set_size(uint32_t id, uint32_t size)
+{
+    (void)id;
+    (void)size;
 }
 
 /* zip.c's buffers (not in the SDRAM here): see files_screen.c */
@@ -102,7 +109,7 @@ int main(int argc, char **argv)
     /* the first start: the defaults, the cursor on the track */
     struct s2_menu_cfg c;
     int cursor = S2M_ROW_TRACK;
-    choice_defaults();
+    s2save_reset();
     s2menu_load(&c);
     CHECK(c.track == 1 && c.team == 1 && c.car == 1 && s2_menu_laps[c.laps] == 3 && c.skill == 1 && !c.manual, "defaults");
     shot(argv[2], "first", &c, cursor);
@@ -183,19 +190,21 @@ int main(int argc, char **argv)
         for (int k = 0; k < 4; k++) CHECK(grid[k].team == k + 1 && grid[k].car == k + 1, "default grid slot %d", k);
     }
 
-    /* kept: a round trip through CHOICE.DAT's block, and what is made of blocks that are not the menu's */
-    struct s2_menu_cfg w = { .track = 6, .team = 3, .car = 5, .laps = 3, .skill = 2, .manual = 1 }, rd;
-    choice_defaults();
+    /* kept: a round trip through the save (s2save.h; its own test is tools/s2/check_save_s2.sh), the ranges are the menu's */
+    CHECK(s2save_count(S2S_TRACK) == S2M_TRACKS && s2save_count(S2S_TEAM) == S2M_TEAMS && s2save_count(S2S_CAR) == S2M_CARS &&
+          s2save_count(S2S_LAPS) == S2M_LAPS && s2save_count(S2S_SKILL) == S2M_SKILLS && s2save_count(S2S_TRANS) == 2, "the save's ranges are the menu's");
+    struct s2_menu_cfg w = { .track = 6, .team = 3, .car = 5, .laps = 3, .skill = 2, .manual = 1 }, rd, dflt;
+    s2save_reset();
     s2menu_store(&w);
     s2menu_load(&rd);
     CHECK(!memcmp(&w, &rd, sizeof w), "round trip");
-    choice_defaults();
+    s2save_reset();
     s2menu_load(&rd);
-    CHECK(rd.track == 1 && rd.team == 1, "no marker: the defaults");
-    s2menu_store(&w);
-    choice.track = 99; choice.car = -4; choice.intro = 77; choice.laps = 12; choice.difficulty = -1;
+    s2menu_defaults(&dflt);
+    CHECK(!memcmp(&dflt, &rd, sizeof rd), "no choices kept: the defaults");
+    s2menu_store(&(struct s2_menu_cfg){ .track = 99, .team = 77, .car = -4, .laps = 12, .skill = -1, .manual = 5 });
     s2menu_load(&rd);
-    CHECK(rd.track == 7 && rd.car == 1 && rd.team == 4 && rd.laps == 3 && rd.skill == 0, "out of range values are clamped");
+    CHECK(rd.track == 7 && rd.car == 1 && rd.team == 4 && rd.laps == 3 && rd.skill == 0 && rd.manual == 1, "out of range values are clamped");
 
     printf("%s", (const char *)(uintptr_t)DLOG_BASE + DLOG_HEAD);
     printf(failures ? "menu: %d tests FAILED\n" : "menu: all tests passed\n", failures);
