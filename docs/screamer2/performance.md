@@ -205,8 +205,7 @@ Nothing else reads it (the other references are the menu, the attract race `0x3c
 
 **The LOD rule.** The object header's block table at `+0x18` has 44 entries: block b at level L is entry b + 13 L
 (0x34 bytes a level, `0x7f20f`...`0x7f239`), an offset from the object; 0 = no block at that level = **the block is
-not drawn**. Entry 41 (-1) and 43 (a sort bias read at `0x7e9a5`; our S2 build sets the class word 0, the real
-value is -700 to 6,000) are not blocks. Matrices, middle and sort key stay those of the level 0 block (c).
+not drawn**. Entry 41 (-1) and 43 (a sort bias read at `0x7e9a5`, -700 to 6,000; applied since 2026-11-04, `draw_distance.md`) are not blocks. Matrices, middle and sort key stay those of the level 0 block (c).
 
 | | Rule | Constants | Levels change at | Sure |
 |---|---|---|---|---|

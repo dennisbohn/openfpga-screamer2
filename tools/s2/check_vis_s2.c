@@ -1,10 +1,13 @@
 /*
- * Host test of the track's culling and class keys (firmware/track.c, #included so that its statics can be read), run by
+ * Host test of the track's culling and sort key (firmware/track.c, #included so that its statics can be read), run by
  * tools/s2/check_vis_s2.sh on a track image. Not part of the firmware.
  *
- *  1. The class key of every mesh (the object header's table entry 43, +0xC4, 0x7e9a5): track_class_key() equals minus
+ *  1. The drawing key (depth_key): -(round(sqrt(d^2 >> 3)) >> 2), as STARTL.EXE 0x7e8c0..0x7e97b computes it, against
+ *     an independent reading in double precision over a million distances (single precision may differ by 1 in a few
+ *     hundredths of a percent).
+ *  2. The class key of every mesh (the object header's table entry 43, +0xC4, 0x7e9a5): track_class_key() equals minus
  *     the 16-bit word read from the file bytes; the meshes with a bias are counted.
- *  2. The walk over the map (docs/screamer2/draw_distance.md): from cameras round the road (every road point, 7 places across,
+ *  3. The walk over the map (docs/screamer2/draw_distance.md): from cameras round the road (every road point, 7 places across,
  *     3 headings, 1,300 units behind the point), every piece that the whole-window walk takes (all cells, within reach,
  *     in view: the cull's own tests) within NEAR_UNITS of the camera must also be taken by the walk over the camera cell's
  *     list. NEAR_UNITS is the range of the placed meshes' full detail (6,000: docs/screamer2/performance.md section 6),
@@ -35,6 +38,9 @@ static void map(void)
         exit(1);
     }
 }
+
+static uint32_t rng = 12345u;
+static uint32_t rnd(void) { rng = rng * 1664525u + 1013904223u; return rng >> 8; }
 
 /* the cull's tests of draw() for a piece (without the cell's box and the list): 1 if the piece is taken */
 static int taken(int i, const float c[3], const float f[3], const float r[3], const float u[3], float *dist)
@@ -68,7 +74,23 @@ int main(int argc, char **argv)
     if(!np) { fprintf(stderr, "track_init failed\n"); return 2; }
     int bad = 0;
 
-    /* 1. the class keys */
+    /* 1. the key */
+    int mism = 0, maxdiff = 0;
+    for(int k = 0; k < 1000000; k++) {
+        uint32_t D = rnd() % 60000u;                          /* a distance in whole units */
+        float d2 = (float)D * (float)D;
+        int32_t ref = -((int32_t)llrint(sqrt((double)d2 * 0.125)) >> 2);
+        int diff = abs((int)(depth_key(d2) - ref));
+        mism += diff != 0;
+        if(diff > maxdiff) maxdiff = diff;
+    }
+    int ends = depth_key(0.0f) == 0 && depth_key(8388608.0f) == -256;     /* d^2 >> 3 = 1024^2 */
+    /* (single precision: where the square root lies within a hair of a half, the float rounds the other way) */
+    int key_ok = mism <= 500 && maxdiff <= 1 && ends;
+    printf("depth key: %d of 1,000,000 distances differ by %d from the double reading%s\n", mism, maxdiff, key_ok ? "" : " FAIL");
+    if(!key_ok) bad++;
+
+    /* 2. the class keys */
     int biased = 0, minb = 0, maxb = 0, wrong = 0;
     for(int k = 0; k < unr_count; k++) {
         const uint8_t *o;
@@ -82,7 +104,7 @@ int main(int argc, char **argv)
     printf("class keys: %d meshes, %d with a bias (%d .. %d)%s\n", unr_count, biased, minb, maxb, wrong ? " FAIL" : "");
     if(wrong) bad++;
 
-    /* 2. the walks */
+    /* 3. the walks */
     static int piece_cell[MAX_PIECES];
     for(int g = 0; g < ncells; g++)
         for(int i = cells[g].first; i < cells[g].first + cells[g].count; i++) piece_cell[i] = g;

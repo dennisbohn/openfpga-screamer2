@@ -119,7 +119,7 @@ since that table was made; both columns here are from one run.) Not measured on 
 ## Not found
 
 - A per-piece flag or sort class (+0x3C of the record, the sort bias at `0x7e9a5`): not involved in which pieces are
-  drawn; the sort bias only orders them (unchanged, `track_class_key()` stays 0 for Screamer 2).
+  drawn; the sort bias only orders them (done 2026-11-04, next section).
 - The five distance tests cannot be what removed the palms: they all use the same K (reach 58,192 at HIGH), and
   the palms are at 47,000 to 49,300 units.
 
@@ -128,3 +128,48 @@ since that table was made; both columns here are from one run.) Not measured on 
 `python -I tools/s2/make_track_s2.py <Screamer 2 folder> 3 build/s2/track3.bin`, `tools/s2/render_s2.sh
 build/s2/track3.bin build/pics/x_ v653400,4` (`NOVIS=1` for the old picture), the reads
 `GAME_DIR=<folder> tools/dis.sh -f 0x76b38 0x77130`, the sweeps `tools/s2/drawdist_sweeps.sh` (40 s).
+
+## Track-side gaps and the sort key (2026-11-04, branch `trackside`)
+
+Two Pocket screenshots, track 1: (B) at 21 s the stone wall between the grass strip and the brown field on the left of the
+road is missing for a stretch and shows up late; (C) at the start line the crowd on the left is painted over the "Muller"
+board, the barrier. Both are the sort order, not the walk: **the original sorts by the piece's place plus the mesh's bias,
+and ours had the bias at 0 (and S1's scale)**.
+
+**The rule** (c, `STARTL.EXE 0x7e8c0`..`0x7e9b7`): the walk stores d^2 >> 3 of every record it takes (`0x76f46`, 64-bit square
+of the whole-number distance to the camera); the key loop makes `key = -(round(sqrt(d^2 >> 3)) >> 2)`, adds 300 for a
+moving object (`0x7e991`, flag bit 30 of the list entry) and takes the 16-bit word of the mesh's header entry 43
+(`[obj + 0xc4]`, `0x7e9a5`) off it; the entries are sorted as `key << 16 | number` (`0x77130`). Ours had S1's d^2 >> 2 (a key
+of distance / 8 instead of / 11.3), +800 for objects (6,400 units against 3,394) and no bias. Entry 43 of the seven tracks'
+meshes (`tools/s2/check_vis_s2.sh` prints the counts): `a)NN...` (crowds, galleries, the big backdrop panels `a)03.tcp` of
+14,000 units radius) N x 100, `a(NN...` (stands, columns) -N x 100, `akk...` (lawns, squares, carpets under the road,
+tracks 3 and 4) 6,000, everything else, the cars included, 0. Track 1: 38 meshes with 100 to 400. A bias of 200 is 2,263
+units of distance, 6,000 is 67,900.
+
+**C (people before the barrier)** needs the bias alone (353 of 64,000 pixels with it only, 354 with the scale and the +300 as well):
+the crowd (`a)02...`, +200) now sorts 2,263 units behind its place and the "Muller" board is whole (`render_s2.sh
+build/s2/track1.bin x g1`). The seven
+tracks' start lines differ by 0 to 444 pixels (board and gantry edges). Not compared with a DOS picture of S2 (there is none).
+
+**B (the missing wall)** was found by sweeping cameras round the race robot's line (`RACE_ROBOT=1`, steps 600 to 900, 6 places
+across, 5 headings): the best match to the screenshot is the pose (-23207, -80135, 6037, yaw 5.775, pitch -0.274): it draws the screenshot's picture (same bank, same
+missing stone course). Everything the original's walk gives is there: the camera cell's list (52 cells) includes every piece of
+the wall chain (`a2c6s2s`, 6 pieces); the view test, the level of detail and the back-face test change nothing there (each
+switched off in turn). What hides the wall is the backdrop panel `a)031tcp` (radius 14,471, centre 12,674
+units away): without its bias it is painted after the wall pieces 12,700 to 16,100 units away and covers their facade. Along the robot's line (51 frames, every 6th step from 600 to 900) the picture changes in 45 frames, up to 294 pixels, mostly
+in the wall and the field on the left (1 to 58 elsewhere); at step 720 (camera -26695, -83911, 6471) the panel owns 304 pixels of the wall's stretch before, 54 after, the
+wall piece 18 before, 249 after. The late pop-up is the order flipping as the camera nears: the wall piece's key crosses the
+panel's. At the pose of the screenshot itself the two keys are 3 units apart (wall piece 486: 16,101 units, the panel's key
+equals 16,068): the original's whole-number camera may lie a few units off ours and flip them, so a stretch of this wall can
+still be hidden there in the original too.
+
+**Checked** (`tools/s2/check_vis_s2.sh`, 7 tracks): the key against a double-precision reading (117 of 1,000,000 differ by 1,
+single precision), the class keys against the file bytes, and the walk: from 216,000 cameras round the roads (every road point,
+7 places across, 3 headings) no piece the whole walk takes within 6,000 units is left out by the camera cell's list. Further
+out the lists do drop pieces (the original's own): within 9,000 units on 9 and 17 cameras of tracks 2 and 4, within
+12,000 on 132, 77, 316, 20 and 21 of tracks 2, 3, 4, 6 and 7; tracks 1 and 5 none. Frame cost: none expected (the cull is untouched: the pieces, faces, triangles and vertices of the 51 route
+frames are identical, the key is the same arithmetic with other constants); not measured on the Pocket.
+
+**Open**: the S1 backlog "building drawn through the side barrier" was not looked at on S2's pictures beyond the start lines;
+no DOS picture of S2 to compare the order with; the bias of an object (car) mesh is read through `track_class_key()` (0 for the
+four car meshes of the image).

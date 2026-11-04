@@ -1,7 +1,8 @@
 #!/bin/sh
-# Host test of the track's class keys and walks (firmware/track.c), tools/s2/check_vis_s2.c, natively in Docker on the images
-# tools/s2/make_track_s2.py builds: the meshes' class keys, and that the walk over the camera cell's list leaves out no piece
-# within 6,000 units of a camera round the road that the whole walk takes (docs/screamer2/draw_distance.md).
+# Host test of the track's drawing key and walks (firmware/track.c), tools/s2/check_vis_s2.c, natively in Docker on the images
+# tools/s2/make_track_s2.py builds: the key against an independent reading, the meshes' class keys, and that the walk over the
+# camera cell's list leaves out no piece within 6,000 units of a camera round the road that the whole walk takes
+# (docs/screamer2/draw_distance.md).
 # Usage: tools/s2/check_vis_s2.sh [game folder] [tracks, default "1 2 3 4 5 6 7"]
 #   game folder   the original game (unzipped), default $GAME_DIR or "C:/GOG Games/Screamer 2"
 # Everything it writes stays in build/s2/ and build/s2vis/ (game data, never committed).
@@ -47,4 +48,4 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -e S
     cd /b/s2vis/src && gcc -O2 -w -o ../check_vis_s2 check_vis_s2.c $LIST -lm &&
     cd /b/s2vis && fail=0; $runs exit \$fail
 "
-echo "class keys and walks: ok"
+echo "sort key and walks: ok"
