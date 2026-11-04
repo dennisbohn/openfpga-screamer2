@@ -5,6 +5,7 @@
 # tools/package.sh puts them on the SD card.
 # Usage: tools/fw.sh                 the firmware, copied to build/assets/
 #        tools/fw.sh FAULT=IFETCH    a fault test for sim/soc in build/firmware-IFETCH/, not copied
+#        tools/fw.sh EXTRA_CFLAGS=-DX=1 TAG=x   other defines, in build/firmware-x/, not copied (e.g. -DHW_FULL_CYCLES=100: the computers' steps run in the scene at once)
 #        tools/fw.sh PROF=1          with the cycle counters of firmware/prof.h, for the simulation, in build/firmware-prof/, not copied
 # Output: build/firmware/{firmware,program}.elf, .bin, .lst (disassembly), .map
 set -e
@@ -30,7 +31,7 @@ fi
 fault=""
 prof=""
 for arg in "$@"; do
-    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; PROF=*) prof=-prof ;; CODE_PAD=*) prof=$prof-pad${arg#CODE_PAD=} ;; CODE_PAD2=*) prof=$prof-padb${arg#CODE_PAD2=} ;; esac
+    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; PROF=*) prof=-prof ;; CODE_PAD=*) prof=$prof-pad${arg#CODE_PAD=} ;; CODE_PAD2=*) prof=$prof-padb${arg#CODE_PAD2=} ;; TAG=*) prof=$prof-${arg#TAG=} ;; esac
 done
 out=firmware${fault:+-$fault}$prof
 

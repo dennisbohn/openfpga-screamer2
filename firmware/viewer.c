@@ -253,16 +253,6 @@ static void stats_text(char *p, int n, int cars, const struct stats *s, int full
     q = fmt_ms(q, s->n ? (uint32_t)(s->sum / s->n) : 0);
     q = fmt_ms(fmt_str(q, " max"), s->max);
     if (full && cars >= 0) q = fmt_str(fmt_udec(fmt_str(q, "@"), (uint32_t)(s->worst_s / 1000.0f)), "k");
-    if (s->n) {                                         /* the longest frame: its parts in ms, its faces and pieces, where the player was */
-        q = fmt_ms(fmt_str(q, " | a"), s->w_pre);
-        q = fmt_ms(fmt_str(q, " c"), s->w_cull);
-        q = fmt_ms(fmt_str(q, " s"), s->w_scene);
-        q = fmt_ms(fmt_str(q, " o"), s->w_others);
-        q = fmt_ms(fmt_str(q, " w"), s->w_wait);
-        q = fmt_udec(fmt_str(q, " f"), s->w_faces);
-        q = fmt_udec(fmt_str(q, " p"), s->w_pieces);
-        if (cars < 0) q = fmt_udec(fmt_str(q, " n"), (uint32_t)s->worst_s);
-    }
     q = fmt_udec(fmt_str(q, " late"), s->over);
     q = fmt_udec(fmt_str(q, full ? " " : " fps"), fps10 / 10);
     *q++ = '.';
@@ -275,9 +265,20 @@ static void stats_text(char *p, int n, int cars, const struct stats *s, int full
             q = fmt_ms(fmt_str(q, " ph"), s->n ? (uint32_t)(s->phys / s->n) : 0);
             q = fmt_ms(fmt_str(q, "/"), s->phys_max);
             q = fmt_ms(fmt_str(q, " o"), s->n ? (uint32_t)(s->others / s->n) : 0);
-            fmt_ms(fmt_str(q, "/"), s->others_max);
+            q = fmt_ms(fmt_str(q, "/"), s->others_max);
         }
     }
+    if (s->n) {                                         /* the longest frame: its parts in ms, its faces and pieces, where the player was */
+        q = fmt_ms(fmt_str(q, " | a"), s->w_pre);
+        q = fmt_ms(fmt_str(q, " c"), s->w_cull);
+        q = fmt_ms(fmt_str(q, " s"), s->w_scene);
+        q = fmt_ms(fmt_str(q, " o"), s->w_others);
+        q = fmt_ms(fmt_str(q, " w"), s->w_wait);
+        q = fmt_udec(fmt_str(q, " f"), s->w_faces);
+        q = fmt_udec(fmt_str(q, " p"), s->w_pieces);
+        if (cars < 0) q = fmt_udec(fmt_str(q, " n"), (uint32_t)s->worst_s);
+    }
+    *q = 0;
 }
 
 /* a line into the log: track, cars (or drv), frames, mean and worst ms (@ where on the road, in thousand units),

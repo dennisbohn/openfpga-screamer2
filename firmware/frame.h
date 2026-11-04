@@ -22,7 +22,9 @@ extern uint32_t back_clocks, back_cycles;
    waits happen early in a frame, when the geometry unit is waiting for the CPU, and there the work would hold it up */
 void hw_piece(const struct gu_piece *g);
 extern void (*hw_idle)(void);
+#ifndef HW_FULL_CYCLES
 #define HW_FULL_CYCLES  1200
+#endif
 void hw_blit(const struct blit_list *l);
 /* The projection into the setup unit's registers */
 void su_view_regs(const struct su_view *v);

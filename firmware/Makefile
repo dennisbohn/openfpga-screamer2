@@ -4,7 +4,7 @@
 # well where riscv64-unknown-elf-gcc and picolibc are installed.
 # Output in $(OUT): firmware.elf/.bin/.lst/.map and program.elf/.bin/.lst/.map
 CROSS   ?= riscv64-unknown-elf-
-OUT     ?= ../build/firmware$(if $(FAULT),-$(FAULT))$(if $(PROF),-prof)$(if $(CODE_PAD),-pad$(CODE_PAD))$(if $(CODE_PAD2),-padb$(CODE_PAD2))
+OUT     ?= ../build/firmware$(if $(FAULT),-$(FAULT))$(if $(PROF),-prof)$(if $(CODE_PAD),-pad$(CODE_PAD))$(if $(CODE_PAD2),-padb$(CODE_PAD2))$(if $(TAG),-$(TAG))
 CC       = $(CROSS)gcc
 OBJCOPY  = $(CROSS)objcopy
 OBJDUMP  = $(CROSS)objdump
@@ -29,6 +29,9 @@ endif
 
 comma := ,
 PADFLAG = $(if $(CODE_PAD),-Wl$(comma)--defsym=CODE_PAD=$(CODE_PAD)) $(if $(CODE_PAD2),-Wl$(comma)--defsym=CODE_PAD2=$(CODE_PAD2))
+
+# EXTRA_CFLAGS=... TAG=name: a build with other defines in build/firmware-name (tools/fw.sh), not copied
+CFLAGS  += $(EXTRA_CFLAGS)
 
 # PROF=1: cycle counters for the simulation (prof.h), in build/firmware-prof
 ifneq ($(PROF),)

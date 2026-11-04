@@ -12,6 +12,9 @@ and in the answer is recomputed with it (changes: mean -0.1 to -0.4 ms, track 4 
 **With the original's LOD, which it uses at every detail, all seven tracks hold 50 pictures/s in the 4-car
 case** (section 6); the tables below are the picture without it.
 
+Section 7 (2026-11-04, branch `perf2`) is about the race as the Pocket ran it (mean 14.5 and worst 19.6 ms on track 4): where the
+frame's cycles go in the simulation, what was changed (the cull, the code layout, the car physics' trigonometry) and a forecast.
+
 Later (2026-11-04, `draw_distance.md`): the original also takes only the cells that the camera cell's visibility
 list names; the firmware does that now, which removes 0.9 to 1.7 ms more from the model's mean (placements tested
 521 -> 238 on track 1) and never costs a frame time. Every table here is without it ("every placement in reach").
@@ -296,6 +299,142 @@ rasterizer, whose cost comes from its own counters (+-5 %), and the worst frame 
 limit. Before the picture is called identical, compare one frame with a DOSBox screenshot. Reproduce:
 `tools/s2/lod_sweeps.sh` (1.5 minutes, then `tools/s2/lod_report.py`), the data `python -I tools/s2/s2_lod_scan.py
 <Screamer 2 folder>`, the code `GAME_DIR=<Screamer 2 folder> tools/dis.sh -f 0x7f148 0x7f25d`.
+
+## 7. The race on the Pocket: where a frame goes, and what was changed (2026-11-04, branch `perf2`, from `main` 3533968)
+
+The Pocket's race on track 4 (the player and three computers, ROOKIE, team 1 car 1; 18,201 frames): mean 14.5 ms, worst 19.6 ms,
+none over 20 ms. The study's ride forecast for the same scene was 11.0 / 14.7: the race costs 3.5 to 5 ms more than the model said,
+because the model has neither the car physics (the player's step, the three computers') nor the cull of a camera cell with no
+visibility list. Labels: **(M)** measured in the simulation (cycles, the whole SoC with the firmware as on the Pocket), **(D)**
+derived, **(A)** assumed.
+
+**How it was measured.** The viewer's race on each track in the Verilator simulation (150 frames on the grid, 70 after GO, the
+player on the gas: `docs/development.md`, "Driving mode"); the log has the frame timeline of the last frame, the visit line and,
+with `tools/fw.sh PROF=1`, cycle counters per stretch of code (`firmware/prof.h`; that build is 10 to 15 % slower, so it tells
+proportions only). Every build gives the same numbers every time. The scene is the same for all builds: four cars in view, and on
+tracks 1, 4, 5 a camera cell with no visibility list. On the PC: `tools/s2/framestats.sh race` (the game's driver drives all
+four cars through a lap, counters per frame, `PIECES=` also per piece), `tools/s2/check_cull_s2.sh` (see below).
+
+### Where a frame went (M, track 4's grid frame, the firmware of `main`; cycles at 74.25 MHz)
+
+| Stretch | cycles | ms |
+|---|---|---|
+| the player's step (60,000), the scene, the sound, the line | 85,500 | 1.15 |
+| backdrop, palette | 10,400 | 0.14 |
+| **cull and sort** (843 cells walked, 429 placements tested, 184 in view) | **194,000** | **2.61** |
+| pieces handed on (218: 181 static, 37 blocks of the four cars), of it 121,700 waiting for the geometry unit's buffer | 544,500 | 7.33 |
+| the computers' three steps (74,300 each + cars touching), after the last piece | 238,000 | 3.2 |
+| wait for the rasterizer | 18,000 | 0.24 |
+| **frame** | **1,090,300** | **14.7** |
+| race text (after the frame's end, before the swap) | 29,200 | 0.39 |
+
+The geometry unit was busy 522,000 and the rasterizer 411,000 cycles. Three things follow. (1) The frame is the CPU's path:
+the computers' steps start when the last piece is handed on, and the geometry unit has 28,000 cycles left then, nothing to hide
+them behind (the earlier simulation of this race with the steps before the scene, `RACE_OVERLAP` 0, was not slower: 13.8 / 14.6 ms;
+the study's "the rasterizer is the bound" did not hold here). (2) Everything
+before the first piece (here 289,900 cycles = 3.9 ms) adds one to one to every frame whose hardware is the bound: the geometry
+unit starts when the first piece arrives. (3) The model's cull (24,198 + 150 per placement tested + 110 per piece in view) has
+no term for the cells: with no visibility list the 843 cells of the map are all looked at (about 106 cycles each), which is
+1.2 ms the model did not have.
+
+Cycles by stretch of code (the profile build, so proportions: a car's step comes out at 74,000 there, 77,000 and 70,000 in the real
+frames before and after the sine and cosine memo): tyres 47 % (four `tyre` 19 %, angles 8 %, corners 3.5 %, the road under the car 3.4 %,
+the rest of it the prologue and a 604-byte copy that picolibc does by bytes), four looks at the ground 10 %, the ground step 16 %, the driver 15 %,
+outputs 4.5 %. The library's sine, cosine and arctangent are called 40, 46 and 60 times for the four cars of a frame (picolibc's
+sine and cosine compute in double precision, which this CPU does in software); the counters timed them at 17 % of a step,
+with their own overhead in it.
+
+### What was changed (all firmware; the track image and `make_track_s2.py` are untouched, `check_track_build_s2.sh` passes 22)
+
+| Change | Measured (track 4's grid frame unless said) | Picture |
+|---|---|---|
+| **Cull by cells** (`track.c`): a cell carries the height range of its placements and its largest mesh reach; one whose sphere lies wholly outside a plane of the view (every placement in it would be refused by that test) is not walked; without a visibility list the cells of the camera's rows are found by their keys (two binary searches), the others by column; the nearest-placement statistic is gone | cull 194,000 -> 112,100 cycles (-82,000 = -1.1 ms); cells looked at 843 -> 252; placements tested 410 -> 231. On the six other tracks' grids the cull falls 0.05 to 0.76 ms (tracks 1 and 5: 0.6 and 0.8). Over a lap of each track (robot race, `check_cull_s2.sh`): placements tested -40 to -46 % on all seven tracks | **identical**: the sorted list of pieces (a hash) equal in all 5,300 frames of the seven tracks' races and road sweeps, and 35 poses (race robot and ride) equal byte for byte (`tools/s2/check_cull_s2.sh <commit>`) |
+| **The hot code of the piece loop together** (`link_prog.ld`): tl_mark, hw_piece, face_eye, block_piece and draw, 7.7 KB one behind the other at the start of the program, checked under 8 KB at link time | 12.4 -> 10.8 ms mean (-1.6 ms) with the same code: the I-cache is 8 KB and direct mapped, and hw_piece, placed a multiple of 8 KB from the draw loop, threw its lines out on every piece. Padding of 32, 1000, 4000 bytes in front of all code: 12.4, 12.4, 12.8 ms; between main.c's code and the rest: 11.4 to 11.5 ms for 64, 160, 400, 2000 bytes | none |
+| **Sine and cosine remembered** (`trigmemo.h`, in `s2car.c`): the last answers by the angle's bits; the same floats | `ph` 1.0 -> 0.9, `o` 3.2 -> 2.9 ms (a car step about 77,000 -> 70,000 cycles) | `check_car.sh`: output equal to the digit (only the library-call counts differ) |
+| Smaller, exact: the 604-byte copy of the last state by words (picolibc copies by bytes); a car's blocks placed after the level-of-detail test (a car beyond 6,000 units is its body alone); `pal_faded` without the multiplications when not faded | palette 10,400 -> 5,800 cycles; the others a few thousand a frame | identical (35 poses) |
+| **The computers' steps in slices** (`race_others_slice`, `RACE_OVERLAP` 2): one car's step, or the cars touching, whenever handing a piece to the geometry unit had to wait 1,200 cycles for room in its buffer (107 pieces), the rest after the last piece | in this frame no push waited that long (4 of 218 over 150 cycles), so nothing moves; with the trigger at 100 cycles the steps ran early, starved the geometry unit and the frame took 12.2 ms instead of 10.8: the trigger is "buffer full", not "waited a little" | the player's run is identical (speed, heading, place after 200 frames equal in the simulation); a computer's car is drawn from the step before or the one just taken |
+| `debug.txt`: the first line (128 bytes now) and the visit line end with the longest frame's parts: ` | a1.3 c1.4 s7.1 o3.4 w0.0 f873 p219 n77` (ms before the scene, in the cull, in the pieces' loop, in the computers' steps, waiting for the rasterizer; faces, pieces, node of the line the player was at) | | |
+
+Tried and left out: the car physics compiled with `-Os` (7 KB less code, 0.7 ms **slower**), the slices triggered by any wait over
+300 cycles (+1.4 ms, above), a build with the counters (the instrumented firmware is 10 to 15 % slower and also shifts the
+hardware's timing: compare builds without them).
+
+### Track by track (M, the simulation's grid frame of each track, old firmware -> new)
+
+| Track | mean ms | worst ms | last frame ms | time to the first piece ms | cull ms | `ph` ms | `o` ms |
+|---|---|---|---|---|---|---|---|
+| 1 | 13.3 -> 10.4 | 13.9 -> 11.2 | 13.8 -> 10.8 | 3.2 -> 2.4 | 1.93 -> 1.30 | 1.0 -> 0.9 | 2.7 -> 2.5 |
+| 2 | 12.3 -> 10.0 | 12.8 -> 10.8 | 12.6 -> 10.5 | 2.3 -> 2.0 | 0.99 -> 0.89 | 1.1 -> 0.9 | 3.3 -> 2.8 |
+| 3 | 12.0 -> 9.7 | 12.9 -> 10.8 | 12.6 -> 10.4 | 2.4 -> 2.1 | 1.06 -> 0.98 | 1.0 -> 0.9 | 2.9 -> 2.5 |
+| 4 | 14.3 -> 10.8 | 15.0 -> 11.6 | 14.7 -> 11.5 | 3.9 -> 2.6 | 2.61 -> 1.51 | 1.0 -> 0.9 | 3.2 -> 2.9 |
+| 5 | 12.7 -> 9.9 | 13.3 -> 10.6 | 13.1 -> 10.5 | 3.2 -> 2.2 | 1.83 -> 1.07 | 1.0 -> 0.9 | 3.1 -> 2.9 |
+| 6 | 11.5 -> 9.6 | 12.3 -> 10.4 | 12.2 -> 10.3 | 2.4 -> 2.1 | 0.93 -> 0.88 | 1.1 -> 0.9 | 3.2 -> 3.0 |
+| 7 | 11.8 -> 10.3 | 12.4 -> 11.1 | 12.0 -> 10.8 | 2.0 -> 1.8 | 0.80 -> 0.69 | 1.0 -> 0.9 | 3.0 -> 2.7 |
+
+(220 frames, 150 of them on the grid; the grid frame has four cars in view and is, on track 1, as heavy as the Pocket's worst
+frames of the earlier tests: 13.3 against 13.6 to 15.0.)
+
+### Forecast for the Pocket (D, with its limits)
+
+The grid frame is CPU-bound, which is why it gains 1.2 to 3.5 ms. A frame bound by the hardware (the geometry unit or the
+rasterizer: a wide view with 2,000 faces and 150,000 pixels) gains only what comes before its first piece: 0.2 to 1.3 ms
+(the column "time to the first piece"), since the computers' steps are hidden behind the hardware there (slices, or the backlog).
+The Pocket's worst frame on track 4 is of one of these two kinds, and the earlier tests do not say which; the new first line
+will (below). So per track, the worst frame of a race:
+
+| Track | worst now (Pocket M, else the model D) | new, if the worst frame is CPU-bound | new, if it is hardware-bound |
+|---|---|---|---|
+| 1 | 13.6 to 15.0 (M) | 10.6 to 12.0 | 12.8 to 14.2 |
+| 2 | 11.3 to 15.1 (D) | 9.2 to 13.0 | 11.0 to 14.8 |
+| 3 | 14.3 to 18.1 (D) | 12.1 to 15.9 | 14.0 to 17.8 |
+| 4 | **19.6 (M)** | **16.4** | **18.3** |
+| 5 | 13.4 to 17.2 (D) | 10.8 to 14.6 | 12.4 to 16.2 |
+| 6 | 14.9 to 18.7 (D) | 13.0 to 16.8 | 14.6 to 18.4 |
+| 7 | 13.5 to 17.3 (D) | 12.3 to 16.1 | 13.3 to 17.1 |
+
+(D: the model's worst frame of a road sweep with the four cars in view, `tools/s2/perf_race.py ... pack` (13.4 to 14.9; track 2
+11.3), to that plus 3.8 ms, the difference the Pocket showed on track 4 and not on track 1, where the model's 14.7 agrees with the
+Pocket's 13.6 to 15.0. The Pocket's own numbers for tracks 2 to 7 are not known.) **On track 4 the target of 16 ms is not
+reached by this change alone, in either case.** The mean falls from 14.5 to about 11 to 12 ms there.
+
+### Open
+
+- **Firmware, not done.** (1) The geometry unit starts at the first piece, 2.6 ms into the frame; emitting the farthest cells' pieces
+  after a first, partial sort (cells carry a key range) would start it about 0.7 ms earlier in hardware-bound frames; the order of
+  the pieces must stay the same (a bound per cell, checkable with `check_cull_s2.sh`). (2) The computers' steps by phase for all
+  three cars (tyres of the three, then the looks...) instead of car by car: a step runs through some 40 KB of code with an 8 KB
+  I-cache, so a car's step pays for most of it again; estimate 0.2 to 0.4 ms. (3) A cheaper step for computers far from the player
+  and out of view (half the rate, the game's `DT` is a constant of the physics in 100 places): up to 0.7 ms on average, but it changes
+  the cars' laps; it would need a lap-time comparison on the PC first. (4) The 12 trigonometric calls of a drawn car (`draw_model`)
+  could share the memo with the physics: 0.1 ms.
+- **Hardware (RTL, not built).** (a) A status bit or the fill level of the geometry unit's buffer (a register, a few ALMs): the
+  slices could then run exactly when the buffer is deep, not after a long wait: 0.3 to 1 ms in frames between the two kinds.
+  (b) A two-way I-cache (VexRiscv `wayCount = 2`, no more block RAM): the 0.9 ms of the layout above is what one conflict costs; the
+  physics and the cull have more of them. Estimate 0.3 to 1 ms. (c) A CFU instruction for sine and cosine (the CPU has the
+  interface): the library's calls are 8 to 17 % of a car step, at most 0.5 ms a frame for four cars; the numbers would no longer be
+  libm's, so `check_car.sh` would have to be re-run against the reference. (d) The geometry unit's read cache 4 KB -> 16 KB
+  and a queue between it and the clipper (section 5) lower the hardware's path, which the worst frames follow.
+
+### What to read in `debug.txt` after the test
+
+The first line (the last state when the core is quit) ends with the longest frame: ` | a.. c.. s.. o.. w.. f.. p.. n..`.
+Expected on track 4 in the race: `avg` 11 to 11.5, `max` 16.4 to 18.3, `late0`, `fps50.0`; `o` of the visit line (` ph0.9/1.1 o2.9/3.4`) 2.9
+and 0.9 ms. If the longest frame has `w` (the wait for the rasterizer) over 1.5 ms and `o` near 3, the hardware is its bound: the
+computers' steps were hidden (slices) and only the cull and the time to the first piece can still be cut. If `w` is near 0 and
+`a + c + s + o` is the frame, the CPU is: `s` (the pieces' loop; with cars it is 5 to 8 ms) is then the next thing to look at.
+`n` is where on the line it happened (the player's node; the line of track 4 has 100 nodes). `f` and `p` say how big the scene was:
+faces looked at (the model's 2,000 faces are its hardware-bound frames) and pieces handed on. Also check the race text: a computer's
+car may now be drawn 20 ms newer than before, not visible. `RACE_OVERLAP` 1 (all computers' steps after the last piece, as the
+earlier build) and 0 (before the scene) remain as compile-time switches if the slices misbehave.
+
+### Reproduce
+
+`tools/fw.sh` (zero warnings); `tools/fw.sh PROF=1` (cycle counters, `build/firmware-prof`); `tools/fw.sh CODE_PAD=n` / `CODE_PAD2=n`
+(layout tests); `tools/s2/framestats.sh build`, then `race <image> <label> <out.csv> 12000 10 <track>` and `sweep s2 ...`;
+`tools/s2/check_cull_s2.sh <reference commit>`; `python -I tools/s2/perf_race.py <old stats dir> <new stats dir> build pack`; the
+simulations: `tools/s2/sim_race.sh <dir with firmware.bin and program.bin> <image> <track> 220 <name>` (about 9 minutes
+each, 6 at a time are fine; `build/gamedata/` as `tools/simcheck.sh` has it); the S2START_ROAD of the image builder does not move the
+race's grid.
 
 ## Caveats
 

@@ -276,6 +276,11 @@ player's part and the scene set-up, and of the computers' part) after the frame'
 the overlap works. If it does not (the CPU and the units contend for the SDRAM), `-DRACE_OVERLAP=0` or a cheaper computer car (the
 physics step is the cost: its four ground looks and about 20 `atanf`) are the next steps; the lap and driver code is about 0.1 ms a car.
 
+**Later (2026-11-04, `performance.md` section 7).** The simulation of the version with the steps after the scene (`RACE_OVERLAP` 1) showed, on track 4's grid frame, that the geometry
+unit has 0.4 ms of work left when the last piece is handed on: the steps (3.2 ms) are not hidden, and the frame took 14.7 ms (the
+Pocket: 14.5 ms mean, 19.6 worst; 13.8 mean in the earlier run with the steps before the scene). The steps now run in slices, whenever the geometry unit's buffer is full
+(`RACE_OVERLAP` 2), and cost 2.9 ms since the physics remembers its sines and cosines (`firmware/trigmemo.h`; `check_car.sh` output equal).
+
 ## Open points
 
 - The deviations above are chaotic: a wall, a jump or the creep of a nearly stopped car amplifies a last-bit difference, so
