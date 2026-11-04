@@ -76,9 +76,12 @@ const uint32_t *s2load_show(int track, int laps)
     draw_loading(l);
     s2gfx_end(pal, 0x8000);
     up = 1;
-    dlog_str("ui: loading screen up after ");
-    dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
-    dlog_str(" ms\n");
+    static int logged;
+    if (!logged++) {                    /* (the log has 4 KB: the first one tells how long the picture takes) */
+        dlog_str("ui: loading screen up after ");
+        dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
+        dlog_str(" ms\n");
+    }
     return pal;
 }
 
