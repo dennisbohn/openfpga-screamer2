@@ -9,8 +9,10 @@
 #pragma once
 #include <stdint.h>
 #include "s2car.h"
+#include "s2teams.h"
 
 #define RACE_CARS   4
+_Static_assert(RACE_CARS <= S2_CARS, "the track image holds one car model per grid slot");
 #define RACE_LAPS   3                   /* the arcade race's default (the options' 1, 3, 5, 10) */
 
 /* what the screen shows of the race */
@@ -21,6 +23,12 @@ struct race_hud {
     int finished;                       /* the player has done his laps */
     float time, lap_time, best_lap;     /* seconds since the start; best_lap < 0: no lap done yet */
 };
+
+/* Who is on the grid: team 1..4 and car 1..5 as the files number them, slot 0 the player's (s2teams.h). Default team 1 car 1
+   (the player), team 2 car 2, team 3 car 3, team 4 car 4. The track image holds these four cars, one model per slot in
+   this order (the viewer loads them with s2_cars_load()), so a menu sets it before the track is loaded; race_init()
+   takes the cars' physics and numbers from it. */
+extern struct s2_pick race_grid[RACE_CARS];
 
 /* Track 1 .. 7: the line read (once per track) and the four cars put on the grid, the player's car 0 last, the
    countdown at 0. 1 if it worked. floor_z: a car lower than this is put back on the line. */

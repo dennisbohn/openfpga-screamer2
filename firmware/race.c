@@ -214,6 +214,8 @@ static struct {
     int team[RACE_CARS], model[RACE_CARS];
 } R;
 
+struct s2_pick race_grid[RACE_CARS] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } };
+
 struct s2car_state *race_car(int i) { return &R.car[i]; }
 int race_cars(void) { return R.n; }
 uint32_t race_steps(void) { return R.steps; }
@@ -550,8 +552,8 @@ int race_init(int track, float floor_z)
     memset(R.off, 0, sizeof R.off);
     memset(R.still, 0, sizeof R.still);
     for(int i = 0; i < RACE_CARS; i++) {
-        R.team[i] = i;                                  /* the player's team and car, then the next ones in turn */
-        R.model[i] = i;
+        R.team[i] = race_grid[i].team - 1;              /* the player's team and car, then the computers' (the physics counts from 0) */
+        R.model[i] = race_grid[i].car - 1;
         const int grid = RACE_CARS - 1 - i;             /* the player starts last */
         if(!s2car_init_grid(&R.car[i], R.team[i], R.model[i], track, grid, i > 0)) return 0;
         R.car[i].hold = 1;

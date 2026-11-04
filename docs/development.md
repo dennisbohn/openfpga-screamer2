@@ -39,15 +39,15 @@ ZIP with `firmware/zip.c` (the central directory only: Windows writes sizes 0 in
 names are matched on the end of the path, ignoring case, so a folder in front does not matter).
 `tools/check_zip.sh` tests the reader natively against the real ZIP and broken ones.
 
-The core reads the container files inside the ZIP unchanged. The firmware reads four containers whole
-with `zip_read` (`GFX/MAPnH01.DAT`, `GFX/CARS101.DAT`, `DATA/MAPn.DAT`, `GFX/ENVPn01.DAT`), unpacks their entries with
+The core reads the container files inside the ZIP unchanged. The firmware reads three containers whole
+with `zip_read` (`GFX/MAPnH01.DAT`, `DATA/MAPn.DAT`, `GFX/ENVPn01.DAT`), unpacks their entries with
 `firmware/dat.c` and builds each track's image at load time (`track_build_s2()` in
 `firmware/track_build.c`): the placements, the palette, the drivable parts per grid cell, the road points
-and walls, the background and TRACK_DATA's far plane, and the cars AUTO1..5 of team 1 with their material
+and walls, the background and TRACK_DATA's far plane, and the cars of the race with their material
 libraries merged after the track's (the face's material is a signed 16-bit offset from the MLB's start, so the
 cars' material records are collected in a section in front of the MLB and the cars' faces point there; the
 texture records and pixels stay in the cars' own `.MLB` files, appended after the track's), and the picture of
-the cars' windows (below). The image is 3.7 to 5.5 MB of the 7 MB window at `0x1210_0000`. There is no camera path, no markers file (Screamer 2 counts the laps on
+the cars' windows (below). The cars are the four of the grid, each its own team's ("Teams" below). The image is 3.5 to 5.4 MB of the 7 MB window at `0x1210_0000`. There is no camera path, no markers file (Screamer 2 counts the laps on
 the line of `MAPnOPP.SPL`, which the firmware reads from `DATA/MAPn.DAT` itself, `firmware/race.c`) and no menu. Nothing is converted on the PC.
 
 `tools/s2/make_track_s2.py <game folder> <n> <out.bin>` builds the same image on the PC. It only serves
@@ -92,8 +92,8 @@ two rows of two, 2,000 units apart, as the game's `0x2f519` places them), holds 
 (`core/input.json`, README "Controls": B accelerate, Y brake, d-pad steering, L / R the gears), the camera is
 the car physics' chase camera. The physics steps 20 ms at a time by real elapsed time (a video
 frame is 20 ms; at most 4 steps per frame, as Screamer 1's race), so a slow frame makes the picture slower, not
-the cars. The four cars are the same model (`firmware/s2car.c`): the player's AUTO01, the computers' AUTO02 to AUTO04
-(teams 2 to 4: their car numbers are the game's; the models are team 1's, the image holds only those). Speed in mph, gear and the gearbox (AUTO / MAN) are drawn top right, below it
+the cars. The four cars (`firmware/s2car.c`) each wear their own team's model and paint: the player's is team 1's car 1
+(CONDOR), the computers' are team 2's car 2, team 3's car 3 and team 4's car 4 ("Teams" below). Speed in mph, gear and the gearbox (AUTO / MAN) are drawn top right, below it
 `LAP 1/3` and `POS 1/4`, top left under the timing overlay `TIME`, `LAP` (this lap's clock) and `BEST`
 (mm:ss:hundredths). After his third lap the player's car is the game's driver's (it slows to a stop) and `FINISH`, his place and total
 time are on the screen.
@@ -144,7 +144,8 @@ vertical blanking, so 10 ms still shows 50 pictures a second; the camera advance
 `debug.txt` (4 KB, not a ring: when it is full later lines are lost, so the lines are short): its first line is the
 live statistics of the current visit (`Screamer Pocket T1 c4 fr1234 avg10.4 max12.8 late0 fps49.9`: track, cars or `drv`
 in the driving mode, frames, mean and worst ms, frames over 20 ms, pictures a second); one line per track load (`T1 load
-5100 ms: read 2973 KB ... ms, build 4494 KB ... ms (unpack ...), road 1440 pts ... ms, 2000 pl`); one line when a visit
+5100 ms: read 2973 KB ... ms, build 4494 KB ... ms (unpack ...), road 1440 pts ... ms, 2000 pl`; on the first load `read` is 255 KB
+and the ms of the cars' unpacking more than later ones, the cars staying unpacked); one line when a visit
 ends (another track, the cars or the mode changed; a visit of under 50 frames leaves none), `T1 c4 249fr avg10.4
 max12.8@512k late0 50.0/s f1180 p95` (track, cars or drv, frames, mean and worst ms and where on the road in thousand
 units (not in drv), frames over 20 ms, pictures a second, faces and pieces a frame); the frame timeline (`tl_*`: cycles and
@@ -168,9 +169,43 @@ texel each, as `firmware/geom.c`). So the builder stores each frame tiled 2 x 2 
 libraries, inside the MLB section, with a texture record of its own, and the records of the cars' routine-160
 materials point to it (`track_build_s2()`, `make_track_s2.py`; image version stays 7: no new section). That costs
 64 KB a frame in the image (tracks 1, 2, 5: one frame, 64.3 KB; tracks 4, 6, 7: two, 128.3 KB; track 3: three,
-192.3 KB; the largest image, track 6, is 5.5 MB), and 6 to 20 KB read from the ZIP at the load (`GFX/ENVPn01.DAT`, at
+192.3 KB), and 6 to 20 KB read from the ZIP at the load (`GFX/ENVPn01.DAT`, at
 `0x12D4_0000`). `tools/s2/check_env_s2.py` (run by `check_track_build_s2.sh`) compares every texel the reflection can
 address (u, v in -512 to 511) with the original's wrap-128 read.
+
+Teams: the game loads one car per car of the race (`STARTL.EXE` 0x2f519: `GFX/CARS<team>0<look>.DAT`, its `AUTO<1 + model>`:
+`.MLB` with the paint and the sponsors' textures, `.3DX` with the meshes of body and wheels), so a race of four needs four
+cars and none of the 16 others of the four teams (CONDOR, ANGELS, WASP, ZEUS: 1 to 4). The image holds those four, car
+model k of the image being grid slot k (`race_grid` in `firmware/race.h`: team and car per slot as the files number them,
+default team 1 car 1 for the player, team 2 car 2, team 3 car 3, team 4 car 4; the race draws slot k with model k, `road.c`
+unchanged), each with its own material library: the material records of all four in the section in front of the MLB, their
+libraries after the track's, the faces moved onto the records. The cars section has a row for each model with the car's
+name in its livery word (team x 256 + car), by which `firmware/s2car.c` finds the car's wheel places in its own mesh (the
+four teams' cars differ by a few units to 40 in the wheels' places). Colours 0 to 119 are the same in every car's `.COL` and in the tracks',
+and the cars' textures use only those, so the track's palette serves (`check_cars_s2.py`). The image format stays version 7; an
+older image (one stand-in row, the five cars of team 1) draws and drives as before.
+`firmware/s2teams.c` reads the cars at the first track load and keeps them unpacked (4 x up to 224 KB at `0x12D6_0000`) for all
+tracks: from a stored ZIP only the container's last 4 KB (its directory) and the two entries of each car, 239 KB of entries
+and 255 KB read in all instead of `CARS101.DAT` whole (762 KB); from a deflated ZIP the four containers whole (2.0 MB inflated, the
+slow path). Changing `race_grid` and loading a track again reads only the cars that changed. Sizes: a car (`.MLB` and
+`.3DX` unpacked, padded) is 152 to 193 KB (day) or 164 to 204 KB (night), so the image grows or shrinks by what the cars cost and
+no four cars of any team make it larger than 0.82 MB of cars (the five cars of team 1 were 0.87 MB):
+
+| Track | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| image before (team 1's five cars), bytes | 4,695,040 | 5,236,224 | 5,224,448 | 5,415,936 | 4,863,744 | 5,542,144 | 3,694,592 |
+| image now (the four teams' cars), bytes | 4,544,512 | 5,085,696 | 5,073,920 | 5,265,408 | 4,713,216 | 5,391,616 | 3,544,064 |
+| worst grid (four of the dearest cars), at most | 4.65 MB | 5.19 MB | 5.17 MB | 5.37 MB | 4.81 MB | 5.49 MB | 3.64 MB |
+
+All of them in the 7 MB window (7,340,032 bytes); the builder's scratch needs 0.25 to 0.57 MB (track 4), and sits above the cars'
+blobs from `0x12E4_0000` (1.75 MB). The load takes less time than before: the first track load reads 0.20 s of cars at the
+Pocket's 1.2 MB/s (before: 0.6 s for the whole `CARS101.DAT`) and unpacks 713 KB once, 0.23 s at 3 MB/s (before: 863 KB for every
+build, 0.27 s), so the first load is about 0.4 s faster and every later one 0.27 s faster; only a deflated ZIP reads more
+(1.2 MB more to inflate, once). Checks: `tools/s2/check_track_build_s2.sh` (the image of every track byte for byte against
+`make_track_s2.py` for three grids: the default, one out of order with a bonus car and a car twice, and team 1's five cars),
+`tools/s2/check_cars_s2.py` (every material and texture frame of the cars in the image equals the cars' own file, the mesh equals the
+`.3DX` but for the faces' material words, the palette), `tools/s2/check_cars_s2.sh` (the loader on a stored and a deflated ZIP made of
+the eight team containers, with the bytes it reads counted).
 
 What to expect: `docs/screamer2/performance.md`, section 6, forecasts for the four-car case with the level of
 detail, mean / worst ms of the game's frame including its physics (about 1.7 ms) and the race screen's
@@ -294,9 +329,10 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
-| `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py` | the Screamer 2 track image on the PC (the reference) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks, natively under the sanitizers; the windows' reflection picture in the image against the original's |
+| `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py`, `tools/s2/check_cars_s2.py` | the Screamer 2 track image on the PC (the reference; `S2CARS=team:car,...` chooses the grid's cars) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks and three grids, natively under the sanitizers; the windows' reflection picture and the cars' materials, textures and colours in the image against the original's |
+| `tools/s2/check_cars_s2.sh`, `tools/s2/check_cars_s2.c` | the cars' loader `firmware/s2teams.c` natively under the sanitizers on a stored and a deflated ZIP of the team containers: the cars equal the containers' own entries, the bytes read are counted, a repeated or partly changed grid reads nothing or only the changed cars |
 | `tools/s2/check_params.sh`, `tools/s2/check_params.py`, `tools/s2/check_params.c` | the car's numbers: `firmware/s2params.c` (CAR_PARAMS of `DATA/GAME.DAT`, TRACK_DATA with the road kinds of `DATA/MAPn.DAT`) natively against an independent reading in Python, every field of 20 cars and 7 tracks |
-| `tools/s2/check_car.sh`, `tools/s2/check_car.c`, `tools/s2/car_scenarios/` | the car physics `firmware/s2car.c` natively in float32 on the track images against the reference traces of OpenScreamer's routines (the folder `ref/` next to the repository, or `$REF_DIR`; scenarios in its `scn/`, traces in `traces*/`), the place cut as the game does and kept as a float; per quantity the largest and the mean difference; also the car alone from each track's grid place and the trigonometry and ground looks a step costs. `car_scenarios/` holds the scenarios heading towards the origin (`a_origin` ..., traces made with `tools/s2/ref_trace/ref_run.sh` into `ref/traces_benign/`) |
+| `tools/s2/check_car.sh`, `tools/s2/check_car.c`, `tools/s2/car_scenarios/` | the car physics `firmware/s2car.c` natively in float32 on the track images (built with the five cars of team 1, `S2CARS=1:1,1:2,1:3,1:4,1:5`: the wheels of every car number as the traces had them) against the reference traces of OpenScreamer's routines (the folder `ref/` next to the repository, or `$REF_DIR`; scenarios in its `scn/`, traces in `traces*/`), the place cut as the game does and kept as a float; per quantity the largest and the mean difference; also the car alone from each track's grid place and the trigonometry and ground looks a step costs. `car_scenarios/` holds the scenarios heading towards the origin (`a_origin` ..., traces made with `tools/s2/ref_trace/ref_run.sh` into `ref/traces_benign/`) |
 | `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene, the lone car and the race on the PC from the firmware's own code (`NOLOD=1`: no level of detail; `g<k>`: the race, laps and places of the four cars as a table) |
 | `tools/s2/framestats.sh`, `tools/s2/perf_patch.py`, `tools/s2/perf_model.py`, `tools/s2/lod_report.py` | the study's counting build (counters in copies of the firmware) and cost model, `docs/screamer2/performance.md` |
 | `tools/fmcheck.sh [song ...]`, `tools/fmsongs.py`, `tools/host/fmdump.c`, `tools/host/fmref.c` | the FM music on the PC: `fmsongs.py` reads the songs of `DATA/MUSIC.DAT` independently (tracks, messages, lengths); `fmdump.c` runs `firmware/fm.c` against a model of the hardware's write queue; `fmref.c` is openscreamer's driver with the chip replaced by a log; `fmcheck.sh` runs all of them (Docker) and compares the register writes tick by tick |

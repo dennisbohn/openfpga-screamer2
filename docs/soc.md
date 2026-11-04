@@ -84,8 +84,9 @@ the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
 | `0x11E0_0000` | music ring (256 KB, from the CD image, slot 22) |
 | `0x11F4_0000` | `MUSIC.DAT` (slot 25, up to 256 KB; 200 KB: the FM music's songs and instrument banks, read when the FM music is first needed) |
 | `0x1210_0000` | track image (built by the firmware, `track_build_s2()`: car materials, MLB with the cars' libraries, meshes, ...; up to 7 MB, 28 blocks of 256 KB) |
-| `0x1280_0000` | the viewer's containers, read whole from the ZIP: `GFX/MAPnH01.DAT` `0x1280_0000` (up to 4 MB, 2.2 to 2.6 MB used), `GFX/CARS101.DAT` `0x12C0_0000` (up to 1 MB, 0.76 MB), `DATA/MAPn.DAT` `0x12D0_0000` (up to 256 KB, 5 to 20 KB), `GFX/ENVPn01.DAT` `0x12D4_0000` (up to 128 KB, 6 to 20 KB: the windows' reflection picture; Screamer 1's `main.c` slot table, not reached, put `GEN.DAT` and `LOCAL.DAT` there) |
-| `0x12D6_0000` | working memory of the track build (up to the program: 2.75 MB, about 1.7 MB used); the directory scratch of `zip_open` (72 KB) |
+| `0x1280_0000` | the viewer's containers, read whole from the ZIP: `GFX/MAPnH01.DAT` `0x1280_0000` (up to 4 MB, 2.2 to 2.6 MB used), the cars' place `0x12C0_0000` (1 MB: the pieces of the team containers `GFX/CARS<t>01.DAT` that `firmware/s2teams.c` reads, one car at a time, 53 to 76 KB each from a stored ZIP, a whole container up to 0.84 MB from a deflated one), `DATA/MAPn.DAT` `0x12D0_0000` (up to 256 KB, 5 to 20 KB), `GFX/ENVPn01.DAT` `0x12D4_0000` (up to 128 KB, 6 to 20 KB: the windows' reflection picture; Screamer 1's `main.c` slot table, not reached, put `GEN.DAT` and `LOCAL.DAT` there) |
+| `0x12D6_0000` | the four cars of the grid, unpacked (`.MLB` and `.3DX` each, 4 x 224 KB = 0xE0000; kept for all tracks); the directory scratch of `zip_open` (72 KB, before the viewer) |
+| `0x12E4_0000` | working memory of the track build (up to the program: 1.75 MB, 0.25 to 0.57 MB used) |
 | `0x1300_0000` | the program (slot 2, at most 1 MB) |
 | `0x13F0_0000` | saved game `CHOICE.DAT` (slot 23, nonvolatile) |
 | `0x13F1_0000` | saved game `ATTACK.DAT` (slot 24, nonvolatile) |

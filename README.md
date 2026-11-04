@@ -29,7 +29,7 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
 - **Driving mode (a race):** Start in the viewer puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
   L / R gears), from the physics' chase camera, with speed, gear, lap, position and times on the screen. The computer cars
-  are the same car model driven by the game's own driver along its line (`firmware/race.c`); laps and places are counted on that line. The car is the game's own model in single precision (`firmware/s2car.c`, ported from
+  each wear their own team's model and paint (teams 2 to 4's cars 2 to 4; the player's is team 1's car 1; the image holds exactly those four, `race_grid`, docs/development.md "Teams") and are driven by the game's own driver along its line (`firmware/race.c`); laps and places are counted on that line. The car is the game's own model in single precision (`firmware/s2car.c`, ported from
   OpenScreamer's routines; the car's numbers read from the game's files, `firmware/s2params.c`), checked against traces of
   the original's routines (docs/screamer2/driving.md): equal on level ground, in the first wall hit and in a jump, the
   car's place kept as a float (the original's whole-number places hold a car back at 50 steps a second). The stand-in

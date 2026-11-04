@@ -47,8 +47,11 @@ a spring) but nothing shows it.
 - Walls and road points: the nearest of the nine cells round the point (the cell of a wall or road point is the cell of
   its middle on all seven tracks, checked; the lists in the image are in cell order, so the lookup is a binary search).
 - The wheels' places in the car are read from the car model's blocks named `flx`, `blx`, `frx`, `brx` (the game finds
-  them by name, 0x2f519). The image holds team 1's five cars; the models of cars 1 to 4 are the same in all four teams,
-  car 5 (the team's own) is not, so a car 5 of another team gets team 1's wheel places.
+  them by name, 0x2f519). The image holds the four cars of the race, each its own team's, and `image_model()` finds a
+  car's model by the livery word of the cars section's rows (team x 256 + car); a car not in the image takes a model of
+  the same car number, an older image (one stand-in row, team 1's five cars) the car's number as the index. The wheels'
+  places differ from team to team by a few units to 40 (car 3: rear axle at z 432 in team 1, 392 in the others), so the
+  race's cars have their own; `check_car.sh` runs on images of team 1's five cars (`S2CARS=1:1,1:2,1:3,1:4,1:5`), as before.
 - The car starts on the first node of the track's `MAPnOPP.SPL` (the grid place of the only car: 1000 units to the side),
   heading along the nearest road point's heading.
 
@@ -256,7 +259,7 @@ physics step is the cost: its four ground looks and about 20 `atanf`) are the ne
 - The race (section above): the game's swept solver for touching cars, sparks, sounds and damage from a touch; the split times and
   "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie are a constant, `LEVEL` in
   `race.c`) and the number of laps (`RACE_LAPS`) are not in a menu; the computers' cars are teams 2 to 4's cars 2 to 4 whatever the
-  player's car is; the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text; the other cars' models of
-  teams 2 to 4 are team 1's (the image holds those).
+  player's car is (`race_grid` in `race.h` takes any teams and cars; a menu has to set it before the track is loaded, docs/development.md,
+  "Teams"); the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text.
 - Not compared with a recording of the original's computer cars: the lap times above are the model's own (the original ran at 17
   pictures a second with whole-number places; its cars were slower).

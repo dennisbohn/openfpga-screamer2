@@ -29,9 +29,10 @@ ls "$ref"/traces*/*.dt20.csv > /dev/null 2>&1 || { echo "no reference traces in 
 py=python3
 "$py" -c "" 2>/dev/null || py=python     # Windows: python3 may be the Store's stub
 
-# the images (the car models, the ground, the walls and road points): one per track used
+# the images (the car models, the ground, the walls and road points): one per track used, with the five cars of team 1
+# (the physics reads a car's wheels from its model; the traces' team-1 meshes are the reference's)
 for n in 1 2 3 4 5 6 7; do
-    [ -f "$out/ref$n.bin" ] || "$py" -I "$root/tools/s2/make_track_s2.py" "$game" "$n" "$out/ref$n.bin" > /dev/null
+    [ -f "$out/car$n.bin" ] || S2CARS=1:1,1:2,1:3,1:4,1:5 "$py" -I "$root/tools/s2/make_track_s2.py" "$game" "$n" "$out/car$n.bin" > /dev/null
 done
 
 rm -rf "$src"
@@ -78,13 +79,13 @@ for name in $names; do
         flat=$(echo "$base" | sed -n 's/.*\.flat\([0-9]*\)\..*/\1/p'); [ -n "$flat" ] || flat=-1
         img=1; case $track in 3|4|7) img=$track;; esac
         for mode in whole float; do
-            echo "echo '== $base ($mode places)'; ./check_car_$mode /game ref$img.bin /b/s2/scn/$name.txt /ref/$rel $track $team $model $flat car_${mode}_$base.csv || echo FAILED" >> "$script"
+            echo "echo '== $base ($mode places)'; ./check_car_$mode /game car$img.bin /b/s2/scn/$name.txt /ref/$rel $track $team $model $flat car_${mode}_$base.csv || echo FAILED" >> "$script"
         done
     done
 done
 # and the car alone on every track from its grid place, 10 s of full throttle: where it goes (no reference)
 for n in 1 2 3 4 5 6 7; do
-    echo "echo '== grid place of track $n, full throttle (float places)'; ./check_car_float /game ref$n.bin scn/car_drive.txt - $n 0 1 -1" >> "$script"
+    echo "echo '== grid place of track $n, full throttle (float places)'; ./check_car_float /game car$n.bin scn/car_drive.txt - $n 0 1 -1" >> "$script"
 done
 
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -v "$ref_mount:/ref:ro" --entrypoint sh verilator/verilator:v5.050 -c "

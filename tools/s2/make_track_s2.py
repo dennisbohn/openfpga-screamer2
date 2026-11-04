@@ -9,13 +9,15 @@ What Screamer 2's files need beyond the names (each marked ADAPTER below):
     DATA/MAPn.DAT (S1: GFX/MAPnH.DAT)
   - no camera path, no markers, no opponents, no race screen, no start grid: the viewer needs none of
     them (empty sections; the player starts at road point 0, MMP array 2)
-  - one stand-in row for CARS_DATA (the cars' physics is new in Screamer 2)
+  - stand-in rows for CARS_DATA (the cars' physics is new in Screamer 2), one per car model, naming the car
   - TRACK_DATA of MAPnDAT.DTR: the far plane (header 0x70) and the background palette entry (0x7C)
-  - cars: AUTO1..5 of GFX/CARS1{look}1.DAT (team 1). Their material libraries are not in the track's: each
-    car's .MLB is appended after the track's, its material records (16 bytes) go into a section in front
-    of the track's MLB (the geometry unit reads a face's material at a signed 16-bit offset from the MLB's
-    start, so they have to lie within 32 KB of it, below), and the cars' faces point there
-    (docs/screamer2/comparison.md, "Cars' libraries")
+  - cars: the four cars of the grid, each its team's: AUTO<car>.3DX and .MLB of GFX/CARS<team>{look}1.DAT, in
+    grid order (the player's first; S2CARS below, default team 1 car 1, team 2 car 2, team 3 car 3, team 4
+    car 4). Their material libraries are not in the track's: each car's .MLB is appended after the track's,
+    its material records (16 bytes) go into a section in front of the track's MLB (the geometry unit reads a
+    face's material at a signed 16-bit offset from the MLB's start, so they have to lie within 32 KB of it,
+    below), and the cars' faces point there (docs/screamer2/comparison.md, "Cars' libraries"). A race draws
+    nothing but these four, so the other cars of the teams are not in the image
   - the cars' windows (routine 160): the game draws them with the first material of GFX/ENVP{n}{look}1.DAT's
     ENV.MLB (a 128 x 128 picture, 1 to 3 frames; its texel address is masked with 0x7f7f), not with the
     car's own placeholder. The hardware wraps routine 160's u, v at 256, so each frame is stored 2 x 2
@@ -24,21 +26,24 @@ What Screamer 2's files need beyond the names (each marked ADAPTER below):
     stays version 7: no new section, the MLB section only grows by 64 KB a frame
 
 Image layout, version 7 (the version 6 of tools/make_track.py with the car materials in front):
-  0x100  car materials (the records of AUTO1..5.MLB, texture records' offsets moved to the appended libraries;
-         the routine-160 records' texture record is the reflection's, below)
+  0x100  car materials (the records of the four cars' .MLB, texture records' offsets moved to the appended
+         libraries; the routine-160 records' texture record is the reflection's, below)
          then the track's MAPn.MLB, padded to 256 bytes, then AUTO1.MLB .. AUTO5.MLB each padded to 256,
          then the reflection picture: a texture record (frames, the ENV record's word +4, the frames' offsets)
          padded to 256 bytes and the frames, 64 KB each (256 x 256, rows of 256); the header's MLB offset
          (0x08) is the MLB, its size (0x0C) all of it
   then   UNR, palette, placements (and after them the cells' visibility table, visibility() below), camera path
-         (empty), ground index, markers (empty), cars (one row),
-         car models (5 .3DX, faces moved onto the car materials), road points, walls, race screen
+         (empty), ground index, markers (empty), cars (one stand-in row per car model, its livery word the car:
+         team * 256 + car),
+         car models (4 .3DX, one per grid slot, faces moved onto the car materials), road points, walls, race screen
          (empty), backdrop, opponents (empty), road kinds; header 0x5C the start (road point 0), 0x70 the far plane
          (positive units), 0x74 the offset of the road kinds (one byte a placement, the last section), 0x7C the background colour, as tools/make_track.py otherwise.
 
 Usage: python tools/s2/make_track_s2.py <Screamer 2 folder> <track 1..7> <out.bin> [H|L] [look 0|1]
   S2START_ROAD=k in the environment: the player's start place is road point k (MMP array 2) instead of
   point 0 (a chosen frame for the simulation)
+  S2CARS=team:car,... in the environment: the cars of the grid, 1 to 5 of them (a race has four), team 1..4 and
+  car 1..5 as the files number them (CARS<team>, AUTO<car>), the player's first; default 1:1,2:2,3:3,4:4
 """
 import os
 import struct
@@ -58,7 +63,7 @@ placements, ground_index, cell_arrays, car_model, pcx, cells = (
     ns[k] for k in ("placements", "ground_index", "cell_arrays", "car_model", "pcx", "cells"))
 BLOCK = ns["BLOCK"]
 FIRST = 0x100
-CARS = 5                                    # AUTO1..5 of a team
+GRID = "1:1,2:2,3:3,4:4"                    # the cars of the grid, team:car, the player's first
 i32 = lambda b, o: struct.unpack_from("<i", b, o)[0]
 u16 = lambda b, o: struct.unpack_from("<H", b, o)[0]
 i16 = lambda b, o: struct.unpack_from("<h", b, o)[0]
@@ -248,12 +253,17 @@ def main():
     pl, run0 = placements(mmp)
     ground, nground = ground_index(pl, run0)
     dirs, walls = cell_arrays(mmp)
-    cars = struct.pack("<12si4f2i7f", b"S2 STANDIN", 0, 150.0, 9000.0, 1.0, 1.0, 1, 4, 0, 3.0, 2.0, 1.5, 1.2, 1.0, 0.8)
 
-    # ADAPTER: team 1's cars, their libraries merged (see the header)
-    cg = datfile.read(os.path.join(root, "GFX", f"CARS1{look}1.DAT"))
-    car_mlb = [datfile.extract(cg, f"AUTO{k}.MLB") for k in range(1, CARS + 1)]
-    x3d = [datfile.extract(cg, f"AUTO{k}.3DX") for k in range(1, CARS + 1)]
+    # ADAPTER: the grid's cars, each its team's, their libraries merged (see the header)
+    pick = [tuple(int(v) for v in c.split(":")) for c in os.environ.get("S2CARS", GRID).split(",")]
+    assert 1 <= len(pick) <= 5 and all(1 <= t <= 4 and 1 <= c <= 5 for t, c in pick), f"S2CARS {pick}"
+    CARS = len(pick)
+    # one stand-in row per car model, its livery word the car: team * 256 + car (s2car.c finds the wheels by it)
+    cars = b"".join(struct.pack("<12si4f2i7f", b"S2 STANDIN", t << 8 | c, 150.0, 9000.0, 1.0, 1.0, 1, 4, 0, 3.0, 2.0, 1.5, 1.2, 1.0, 0.8)
+                    for t, c in pick)
+    teams = {t: datfile.read(os.path.join(root, "GFX", f"CARS{t}{look}1.DAT")) for t, _ in pick}
+    car_mlb = [datfile.extract(teams[t], f"AUTO{c}.MLB") for t, c in pick]
+    x3d = [datfile.extract(teams[t], f"AUTO{c}.3DX") for t, c in pick]
     nrec = [mlb_records(m) for m in car_mlb]
     cmat_size = 16 * sum(nrec)
     mlb_off = FIRST + pad256(cmat_size)
@@ -292,7 +302,7 @@ def main():
 
     sections = [cmat, mlbsec, unr, pal, b"".join(struct.pack("<5i", *p) for p in pl) + visibility(mmp), b"", ground, b"",
                 cars, models, b"".join(dirs), b"".join(walls), hud, back, opp, road_kinds(mmp)]
-    counts = [0, len(mlbsec), len(unr), 0, len(pl), 0, nground, 0, 1, CARS, len(dirs), len(walls), len(hud), 0, 0, len(pl)]
+    counts = [0, len(mlbsec), len(unr), 0, len(pl), 0, nground, 0, CARS, CARS, len(dirs), len(walls), len(hud), 0, 0, len(pl)]
     offs, pos = [], FIRST
     for s in sections:
         offs.append(pos)

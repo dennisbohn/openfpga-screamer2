@@ -45,6 +45,7 @@ and package versions pinned); the script builds the image on first use. The resu
 | `setup.c`, `geom.c`, `raster.c`, `blit.c` | C models of the hardware units and their drivers: setup, geometry, rasterizer, blitter. Each model is bit-exact with its Verilog. |
 | `mixer.c` | C model of the audio mixer (`audio.v`) |
 | `track.c`, `track_build.c`, `tb_gfx.c`, `tb_hud.c`, `tb_mmp.c`, `tb_spl.c` | the track: drawing it, and building its image from the game's own files |
+| `s2teams.c` | the cars of the race, each its own team's (`race_grid`): reads the two entries of each car from the team container in the ZIP and unpacks them for the track image |
 | `efx.c` | effects the game draws through lookup tables: glass, shadows, smoke |
 | `drive.c`, `car.c` | the player's car: engine, gearbox, brakes, steering, walls, crashes, cameras |
 | `opp.c`, `scenery.c`, `ghost.c` | opponents, props and moving scenery, the time-attack ghost |

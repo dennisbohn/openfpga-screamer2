@@ -1,19 +1,30 @@
 /*
  * Host test of the Screamer 2 track build (firmware/track_build.c, track_build_s2()), run by
- * tools/s2/check_track_build_s2.sh: the image built as the firmware builds it from the three containers a
- * track needs (the map, the team's cars, the track's data and the windows' reflection picture), compared byte for byte
- * with the image tools/s2/make_track_s2.py made from the same files.
- * The output buffer starts out filled with junk, as the SDRAM is.
+ * tools/s2/check_track_build_s2.sh: the image built as the firmware builds it from the containers a track needs
+ * (the map, the track's data and the windows' reflection picture) and the grid's cars (each from its team's
+ * container, unpacked by s2_car_unpack() as s2_cars_load() does), compared byte for byte with the image
+ * tools/s2/make_track_s2.py made from the same files.
+ * The output buffer starts out filled with junk, as the SDRAM is. The scratch is the viewer's (SCRATCH_MAX): the
+ * build must fit it.
  *
- * Usage: check_track_build_s2 <game folder> <reference image> <n>
+ * Usage: check_track_build_s2 <game folder> <reference image> <n> [grid, "1:1,2:2,3:3,4:4": team:car per slot]
  */
 #include "../../firmware/track_build.h"
+#include "../../firmware/s2teams.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define CAP         (7u << 20)      /* room for the image, as the viewer gives it */
-#define SCRATCH     0x2A0000u       /* and the scratch: BUILD_SCRATCH up to the program */
+#define SCRATCH     0x1C0000u       /* and the scratch: SCRATCH_MEM up to the program (viewer.c) */
+
+/* s2teams.c brings in the ZIP reader, which this test does not use */
+uint32_t slot_size(uint32_t id) { (void)id; return 0; }
+int slot_read(uint32_t id, uint32_t offset, uint32_t addr, uint32_t len)
+{
+    (void)id; (void)offset; (void)addr; (void)len;
+    return -1;
+}
 
 static uint8_t *slurp(const char *dir, const char *name, uint32_t *size)
 {
@@ -34,7 +45,7 @@ static uint8_t *slurp(const char *dir, const char *name, uint32_t *size)
 
 int main(int argc, char **argv)
 {
-    if(argc != 4) { fprintf(stderr, "usage: %s <game folder> <reference image> <n>\n", argv[0]); return 2; }
+    if(argc < 4 || argc > 5) { fprintf(stderr, "usage: %s <game folder> <reference image> <n> [grid]\n", argv[0]); return 2; }
     int track = atoi(argv[3]);
     char gfx[32], data[32], env[32];
     snprintf(gfx, sizeof gfx, "GFX/MAP%dH01.DAT", track);
@@ -42,9 +53,37 @@ int main(int argc, char **argv)
     snprintf(env, sizeof env, "GFX/ENVP%d01.DAT", track);
     struct s2_files f;
     f.gfx = slurp(argv[1], gfx, &f.gfx_size);
-    f.cars = slurp(argv[1], "GFX/CARS101.DAT", &f.cars_size);
     f.data = slurp(argv[1], data, &f.data_size);
     f.env = slurp(argv[1], env, &f.env_size);
+
+    /* the grid's cars: each team's container whole, the car's two entries unpacked into a blob of its own */
+    static uint32_t blobs[S2_CARS * S2_CAR_ROOM / 4];
+    struct s2_car cars[S2_CARS];
+    const char *g = argc == 5 ? argv[4] : "1:1,2:2,3:3,4:4";
+    f.ncars = 0;
+    while(*g && f.ncars < S2_CARS) {
+        int team = 0, car = 0, used = 0;
+        if(sscanf(g, "%d:%d%n", &team, &car, &used) != 2 || team < 1 || team > 4 || car < 1 || car > 5) {
+            fprintf(stderr, "bad grid\n");
+            return 2;
+        }
+        char cont[32];
+        snprintf(cont, sizeof cont, "GFX/CARS%d01.DAT", team);
+        uint32_t csize;
+        const uint8_t *file = slurp(argv[1], cont, &csize);
+        struct s2_car *c = &cars[f.ncars];
+        c->team = (uint8_t)team;
+        c->car = (uint8_t)car;
+        if(!s2_car_unpack(file, csize, car, (uint8_t *)blobs + f.ncars * S2_CAR_ROOM, S2_CAR_ROOM, c)) {
+            printf("FAIL: team %d car %d is not in %s\n", team, car, cont);
+            return 1;
+        }
+        printf("slot %d: team %d car %d: .MLB %u, .3DX %u bytes\n", f.ncars, team, car, c->mlb_size, c->x3d_size);
+        f.ncars++;
+        g += used;
+        if(*g == ',') g++;
+    }
+    f.car = cars;
     uint32_t ref_size;
     uint8_t *ref = slurp(".", argv[2], &ref_size);
 
@@ -54,7 +93,7 @@ int main(int argc, char **argv)
     struct track_build_info info;
     uint32_t size = track_build_s2(&f, track, out, CAP, scratch, SCRATCH, &info);
     if(!size) { printf("FAIL: track_build_s2 stopped at \"%s\"\n", info.fail); return 1; }
-    printf("built: %u bytes, reference: %u bytes\n", size, ref_size);
+    printf("built: %u bytes, reference: %u bytes, scratch used %u of %u\n", size, ref_size, info.scratch, SCRATCH);
 
     /* the first difference, named by the reference's section that holds it (the car materials lie in front of the MLB) */
     static const char *const names[] = { "MLB", "UNR", "palette", "placements", "camera path",
