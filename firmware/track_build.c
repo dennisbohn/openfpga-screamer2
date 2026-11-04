@@ -445,6 +445,10 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
        !section(&b, tb_palette(col, col_n, at(&b), room(&b)), 0, "palette")) return 0;
     if(!(mmp = unpack(&b, f->gfx, f->gfx_size, name(&b, ".MMP", buf), &mmp_n))) return 0;
     len = tb_mmp_placements(mmp, mmp_n, at(&b), room(&b), &count);
+    if(len) {                                   /* the cells' visibility table follows the placements in their section */
+        uint32_t vis = tb_mmp_vis(mmp, mmp_n, at(&b) + len, room(&b) - len);
+        len = vis ? len + vis : 0;
+    }
     if(!section(&b, len, count, "placements")) return 0;
     empty(&b);                                  /* the camera path */
     len = tb_mmp_ground(mmp, mmp_n, at(&b), room(&b), &count);

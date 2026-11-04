@@ -37,9 +37,9 @@ static int fits(uint32_t size, uint32_t off, uint32_t n, uint32_t len)
     return off <= size && n <= (size - off) / len;
 }
 
-/* a cell that holds something: its records (from rec, n0 of run 0, then n1 of run 1) and its
-   arrays 2 and 3 (offset, entries) */
-struct cell { uint32_t rec, n0, n1, dirs, ndirs, walls, nwalls; };
+/* a cell that holds something: its records (from rec, n0 of run 0, then n1 of run 1), its
+   arrays 2 and 3 (offset, entries) and its visibility list (run 4: offset, entries of 4 bytes) */
+struct cell { uint32_t rec, n0, n1, dirs, ndirs, walls, nwalls, vis, nvis; };
 
 /* the header of the cell at a into c, checked against the file: 1, or 0 if malformed */
 static int read_cell(const uint8_t *p, uint32_t size, uint32_t a, struct cell *c)
@@ -51,11 +51,14 @@ static int read_cell(const uint8_t *p, uint32_t size, uint32_t a, struct cell *c
     int32_t n1 = rd32(p, size, a + 0x18, &bad);
     int32_t ndirs = rd32(p, size, a + 0x1C, &bad);
     int32_t nwalls = rd32(p, size, a + 0x20, &bad);
+    int32_t vis = rd32(p, size, a + 0x10, &bad);
+    int32_t nvis = rd32(p, size, a + 0x24, &bad);
     if(bad || n0 < 0 || n1 < 0 || ndirs < 0 || nwalls < 0) return 0;
     /* an empty array's offset is never read (0 in the game's files) */
     if((n0 || n1) && !fits(size, a + 0x28, (uint32_t)n0 + (uint32_t)n1, REC)) return 0;
     if(ndirs && (dirs < 0 || !fits(size, (uint32_t)dirs, (uint32_t)ndirs, DIR_LEN))) return 0;
     if(nwalls && (walls < 0 || !fits(size, (uint32_t)walls, (uint32_t)nwalls, WALL_LEN))) return 0;
+    if(nvis > 0 && (vis < 0 || !fits(size, (uint32_t)vis, (uint32_t)nvis, 4))) return 0;     /* (<= 0: no list) */
     c->rec = a + 0x28;
     c->n0 = (uint32_t)n0;
     c->n1 = (uint32_t)n1;
@@ -63,6 +66,8 @@ static int read_cell(const uint8_t *p, uint32_t size, uint32_t a, struct cell *c
     c->ndirs = (uint32_t)ndirs;
     c->walls = nwalls ? (uint32_t)walls : 0;
     c->nwalls = (uint32_t)nwalls;
+    c->vis = nvis > 0 ? (uint32_t)vis : 0;
+    c->nvis = nvis > 0 ? (uint32_t)nvis : 0;
     return 1;
 }
 
@@ -154,6 +159,61 @@ uint32_t tb_mmp_placements(const uint8_t *mmp, uint32_t size, uint8_t *out, uint
     if(w.bad) return 0;
     *count = n;
     return PL_LEN * n;
+}
+
+#define VIS_CELL    10                  /* a cell of the visibility table: five u16 */
+#define VIS_HEAD    12
+
+/* the visibility table (tb_mmp.h): two walks over the cells, the first writes each cell's key, first
+   placement and count, the second resolves each list's entries to cell numbers (a binary search over the keys,
+   which the walk's order sorted) and writes them after the cells */
+uint32_t tb_mmp_vis(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t cap)
+{
+    struct walk w = { mmp, size, 0, 0, 0 };
+    struct cell c;
+    uint32_t ncells = 0, first = 0, entries = 0;
+    if(cap < VIS_HEAD) return 0;
+    while(next_cell(&w, &c)) {
+        if(cap - VIS_HEAD < VIS_CELL * (ncells + 1)) return 0;
+        if(c.n0 + c.n1 > 0xFFFF || first + c.n0 + c.n1 > 0xFFFF) return 0;
+        uint8_t *r = out + VIS_HEAD + VIS_CELL * ncells++;
+        put16(r, w.k - 1);                      /* (row << 8 | column): the walk's number of the cell */
+        put16(r + 2, first);
+        put16(r + 4, c.n0 + c.n1);
+        put16(r + 6, 0);
+        put16(r + 8, 0);
+        first += c.n0 + c.n1;
+    }
+    if(w.bad) return 0;
+    uint8_t *cells = out + VIS_HEAD, *list = cells + VIS_CELL * ncells;
+    struct walk v = { mmp, size, 0, 0, 0 };
+    uint32_t k = 0;
+    while(next_cell(&v, &c)) {
+        uint32_t n = 0;
+        for(uint32_t j = 0; j < c.nvis; j++) {
+            uint32_t e = get32(mmp + c.vis + 4 * j), key = (e >> 8 & 0xFF00) | (e & 0xFF);
+            if((e >> 16) > 255 || (e & 0xFFFF) > 255) continue;
+            uint32_t lo = 0, hi = ncells;       /* the first cell whose key is not below the entry's */
+            while(lo < hi) {
+                uint32_t mid = (lo + hi) / 2;
+                if(get16(cells + VIS_CELL * mid) < key) lo = mid + 1; else hi = mid;
+            }
+            if(lo == ncells || get16(cells + VIS_CELL * lo) != key) continue;   /* no such cell */
+            if(cap - VIS_HEAD - VIS_CELL * ncells < 2 * (entries + n + 1) || entries + n > 0xFFFE) return 0;
+            put16(list + 2 * (entries + n), lo);
+            n++;
+        }
+        put16(cells + VIS_CELL * k + 6, entries);
+        put16(cells + VIS_CELL * k + 8, n);
+        entries += n;
+        k++;
+    }
+    if(v.bad) return 0;
+    memcpy(out, "VIS1", 4);
+    memset(out + 4, 0, 8);
+    put16(out + 4, ncells);
+    put16(out + 8, entries);
+    return VIS_HEAD + VIS_CELL * ncells + 2 * entries;
 }
 
 /* Two walks over the placements: the first counts each grid cell's pieces into first[cell + 1]

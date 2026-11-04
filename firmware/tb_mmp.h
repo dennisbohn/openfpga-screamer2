@@ -4,8 +4,9 @@
  * make them, byte for byte.
  *
  * MAPn.MMP: 256 int32 row offsets (-1 an empty row), each row 256 int32 cell offsets (-1 an
- * empty cell); a cell: +0x08 offset of array 2, +0x0C of array 3, +0x14 records of run 0,
- * +0x18 of run 1, +0x1C entries of array 2, +0x20 of array 3; from +0x28 its 64-byte records,
+ * empty cell); a cell: +0x08 offset of array 2, +0x0C of array 3, +0x10 of array 4 (Screamer 2: the cells
+ * visible from this one, int32 row << 16 | column), +0x14 records of run 0, +0x18 of run 1, +0x1C entries
+ * of array 2, +0x20 of array 3, +0x24 of array 4; from +0x28 its 64-byte records,
  * run 0 then run 1 (record +0x00 object, +0x08 X, +0x0C height, +0x10 Y, +0x18 heading).
  *
  * Each function reads the whole MMP (mmp, size bytes), writes its section to out (at most cap
@@ -20,6 +21,15 @@
    each; the cells row by row, each cell's run 1 before its run 0 */
 uint32_t tb_mmp_placements(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t cap,
                            uint32_t *count);
+
+/* Screamer 2 only: the visibility table that follows the placements in their section (the cells' run 4,
+   STARTL.EXE's walk over the map at 0x76d80; tools/s2/make_track_s2.py visibility() is the reference):
+   u32 "VIS1", u32 cells, u32 entries; cells x { u16 key (row << 8 | column), first (the cell's first
+   placement, numbered as above), count, list (its first entry), entries }; entries x u16 cell numbers: the
+   cells that the cell's list names and that exist, in the list's order (sorted by row, column). Written to
+   out (at most cap bytes, 4-aligned); returns the bytes, 0 if the MMP is malformed or it does not fit. */
+#define TB_VIS_MAGIC    0x31534956u
+uint32_t tb_mmp_vis(const uint8_t *mmp, uint32_t size, uint8_t *out, uint32_t cap);
 
 /* The ground index (header 0x2C): u16 first[65537], then *count u16 placement numbers (as
    tb_mmp_placements() numbers them): the drivable pieces (run 0) by the grid cell of their

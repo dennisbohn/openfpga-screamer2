@@ -21,7 +21,8 @@ Image layout, version 7 (the version 6 of tools/make_track.py with the car mater
   0x100  car materials (the records of AUTO1..5.MLB, texture records' offsets moved to the appended libraries)
          then the track's MAPn.MLB, padded to 256 bytes, then AUTO1.MLB .. AUTO5.MLB each padded to 256;
          the header's MLB offset (0x08) is the MLB, its size (0x0C) all of it
-  then   UNR, palette, placements, camera path (empty), ground index, markers (empty), cars (one row),
+  then   UNR, palette, placements (and after them the cells' visibility table, visibility() below), camera path
+         (empty), ground index, markers (empty), cars (one row),
          car models (5 .3DX, faces moved onto the car materials), road points, walls, race screen
          (empty), backdrop, opponents (empty); header 0x5C the start (road point 0), 0x70 the far plane
          (positive units), 0x74 0, 0x7C the background colour, as tools/make_track.py otherwise.
@@ -53,6 +54,46 @@ i32 = lambda b, o: struct.unpack_from("<i", b, o)[0]
 u16 = lambda b, o: struct.unpack_from("<H", b, o)[0]
 i16 = lambda b, o: struct.unpack_from("<h", b, o)[0]
 pad256 = lambda n: (n + 255) & ~255
+
+
+VIS_MAGIC = 0x31534956                      # "VIS1"
+
+
+def visibility(mmp):
+    """ADAPTER: Screamer 2's cells carry a fifth array, run 4: the list of the cells that may be seen from
+    the cell (entries of 4 bytes, row << 16 | column, count at +0x24, offset at +0x10), sorted by row and
+    column. STARTL.EXE's walk over the map (0x76d80) takes the placements of those cells only (and then the
+    window and the distance), as long as the camera's cell has such a list (docs/screamer2/draw_distance.md).
+    The table that goes after the placements in their section (firmware/tb_mmp.h, tb_mmp_vis()):
+      u32 "VIS1", u32 cells, u32 list entries
+      cells x { u16 key (row << 8 | column), first (the cell's first placement, as the placements are
+                numbered), count, list (its first entry), entries }
+      entries x u16: cell numbers (as the cells are listed), the cells the list names that exist"""
+    i32 = lambda o: struct.unpack_from("<i", mmp, o)[0]
+    cs, first = [], 0
+    for gy in range(256):
+        row = i32(4 * gy)
+        if row == -1:
+            continue
+        for gx in range(256):
+            c = i32(row + 4 * gx)
+            if c != -1:
+                n = i32(c + 0x14) + i32(c + 0x18)
+                cs.append((gy << 8 | gx, c, first, n))
+                first += n
+    index = {key: k for k, (key, _, _, _) in enumerate(cs)}
+    cell_rec, entries = b"", []
+    for key, c, first, n in cs:
+        ids = []
+        for k in range(max(i32(c + 0x24), 0)):
+            e = struct.unpack_from("<I", mmp, i32(c + 0x10) + 4 * k)[0]
+            if (e >> 16) < 256 and (e & 0xFFFF) < 256 and ((e >> 16) << 8 | (e & 0xFFFF)) in index:
+                ids.append(index[(e >> 16) << 8 | (e & 0xFFFF)])
+        assert first + n < 65536 and len(entries) + len(ids) < 65536
+        cell_rec += struct.pack("<5H", key, first, n, len(entries), len(ids))
+        entries += ids
+    return (struct.pack("<3I", VIS_MAGIC, len(cs), len(entries)) + cell_rec +
+            struct.pack(f"<{len(entries)}H", *entries))
 
 
 def s2_track_data(dtr):
@@ -197,7 +238,7 @@ def main():
     hud = bytes(8 + 16 + 26 * 32)                                       # ADAPTER: no race screen (0 images, 0 fonts)
     opp = bytes(8)                                                      # ADAPTER: no opponents
 
-    sections = [cmat, mlbsec, unr, pal, b"".join(struct.pack("<5i", *p) for p in pl), b"", ground, b"",
+    sections = [cmat, mlbsec, unr, pal, b"".join(struct.pack("<5i", *p) for p in pl) + visibility(mmp), b"", ground, b"",
                 cars, models, b"".join(dirs), b"".join(walls), hud, back, opp]
     counts = [0, len(mlbsec), len(unr), 0, len(pl), 0, nground, 0, 1, CARS, len(dirs), len(walls), len(hud)]
     offs, pos = [], FIRST
