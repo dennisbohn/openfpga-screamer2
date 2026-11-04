@@ -175,12 +175,13 @@ int main(int argc, char **argv)
     CHECK(s2snd_tunnel(7) && s2snd_tunnel(13) && s2snd_tunnel(34) && s2snd_tunnel(43) && !s2snd_tunnel(36) && !s2snd_tunnel(27) &&
           !s2snd_tunnel(8) && !s2snd_tunnel(0), "tunnel kinds");
 
-    /* the registers: step is rate x 65536 / 48000 (a rate of 11025 Hz is 0.2297 of a sample a value), volume 127 at most
+    /* the registers: step is rate x 65536 / 48000 (a rate of 11025 Hz is 0.2297 of a sample a value), volume 63 at most
        (a full sample at the full volume, in the middle), the far side faded in a straight line */
     CHECK(s2snd_step(48000) == 65536 && s2snd_step(11025) == 15052 && s2snd_step(0) == 1 && s2snd_step(500000) == 262143, "step");
-    CHECK(s2snd_vol_reg(0x7FFF, 0x8000) == (127u | 127u << 8) && s2snd_vol_reg(0, 0x8000) == 0 &&
-          s2snd_vol_reg(0x7FFF, 0) == 127u && s2snd_vol_reg(0x7FFF, 0xFFFF) == (127u << 8) &&
-          s2snd_vol_reg(0x7FFF, 0xA000) == ((127u * 0x5FFFu / 0x7FFFu) | 127u << 8), "volume register %08x %08x",
+    const uint32_t full = (0x7FFFu * S2SND_FX_MASTER >> 15) * 0x7FFFu >> 22;      /* 63 at 0x2000 */
+    CHECK(s2snd_vol_reg(0x7FFF, 0x8000) == (full | full << 8) && s2snd_vol_reg(0, 0x8000) == 0 && full > 40 && full < 128 &&
+          s2snd_vol_reg(0x7FFF, 0) == full && s2snd_vol_reg(0x7FFF, 0xFFFF) == (full << 8) &&
+          s2snd_vol_reg(0x7FFF, 0xA000) == ((((0x7FFFu * S2SND_FX_MASTER >> 15) * 0x5FFFu) >> 22) | full << 8), "volume register %08x %08x",
           s2snd_vol_reg(0x7FFF, 0xA000), s2snd_vol_reg(0x7FFF, 0));
     free(dat);
     free(game);

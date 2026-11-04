@@ -290,13 +290,13 @@ static int race_start(int n, float floor_z)
     int ok = race_init(n, floor_z);
     race_car(0)->manual = manual;
     static int logged;                                  /* the log has 4 KB: the first start of the run tells how long it took */
-    if (ok) s2snd_race_start(n);
     if (!ok) dlog_str("viewer: race_init failed\n");
     else if (!logged++) {
         dlog_str("race init ");
         dlog_dec((int32_t)((rdcycle() - t0) / MS_CYCLES));
         dlog_str(" ms\n");
     }
+    if (ok) s2snd_race_start(n);                        /* (after the timing: the music's first fill takes 170 ms) */
     return ok;
 }
 

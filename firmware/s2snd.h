@@ -29,6 +29,10 @@ struct s2_road_kind;
 #define S2SND_GROUND    0x12
 #define S2SND_TUNNEL    0x19            /* added to an engine's sample number in a tunnel */
 #define S2SND_RANGE     50000.0f        /* how far an engine carries (0x1ff8e) */
+#define S2SND_FX_MASTER 0x2000          /* the effects' master volume, of 0x7fff: Screamer 1's two thirds of the game's 0x6000 (sound.h)
+                                           halved again, since four engines, a squeal and a knock clipped the sum in the simulation (the
+                                           music is at 0x4000, music.c). How the game balances them is not in its program (the CD's
+                                           analogue mix): to be set by ear */
 
 struct s2snd_sample {
     uint32_t addr;                      /* the first byte, as the mixer takes it: the SDRAM byte address */

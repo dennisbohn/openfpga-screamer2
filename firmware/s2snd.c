@@ -108,7 +108,7 @@ uint32_t s2snd_step(uint32_t rate)
 
 uint32_t s2snd_vol_reg(uint32_t vol, int32_t pan)
 {
-    uint32_t t = (vol > 0x7FFF ? 0x7FFFu : vol) * 0x4000u >> 15;    /* the effects' master volume, sound.c */
+    uint32_t t = (vol > 0x7FFF ? 0x7FFFu : vol) * S2SND_FX_MASTER >> 15;
     uint32_t fl = pan <= 0x8000 ? 0x7FFFu : (uint32_t)(0xFFFF - (pan > 0xFFFF ? 0xFFFF : pan));
     uint32_t fr = pan >= 0x8000 ? 0x7FFFu : (uint32_t)(pan < 0 ? 0 : pan);
     return (t * fl >> 22) | (t * fr >> 22) << 8;
