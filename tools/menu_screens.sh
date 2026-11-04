@@ -1,10 +1,11 @@
 #!/bin/sh
-# The start menu (firmware/s2menu.c) and the 2D toolkit (s2gfx.c, s2page.c, s2load.c, s2pause.c: loading screen, pause menu, page
-# runner) on the PC from the firmware's own code: tests of the menu's logic (keys, the grid, the kept choices, the texts read from
-# the real ZIP's DATA/LOCAL.DAT), of the toolkit against independent references made from the game's files (tools/ui_reference.py:
-# .BKK pictures, text and sprites, MENU.DTR), of the pages of menus row 3 (GAME SETTINGS, HI SCORES, the end of the race and the
-# best-time flow: s2pages.c, s2end.c) against references drawn from the game's files, and pictures of the screens in several states,
-# in build/check/menu/*.png (never committed). Exit code 0 if all tests passed.
+# The start menu (firmware/s2menu.c), the 2D toolkit (s2gfx.c, s2page.c, s2load.c, s2pause.c: loading screen, pause menu, page
+# runner), the arcade pages (s2arcade.c) and the pages of menus row 3 (s2pages.c: GAME SETTINGS, HI SCORES; s2end.c: the end of the race and
+# the best-time flow) on the PC from the firmware's own code: tests of the menu's logic (keys, the grid, the kept choices, the texts read from
+# the real ZIP's DATA/LOCAL.DAT), of the toolkit against independent references made from the game's files (tools/ui_reference.py: .BKK
+# pictures, text and sprites, MENU.DTR; and the pages of row 3 drawn from the game's files), of the arcade pages against a model of them
+# (tools/ui_arcade_ref.py: scripted buttons, frames pixel for pixel, the chain) and pictures of the screens in several states, in
+# build/check/menu/*.png (never committed). Exit code 0 if all tests passed.
 # Usage: tools/menu_screens.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2"
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -44,7 +45,7 @@ else
 fi
 set +e
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
-    cd /b/host/menu && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c host/ui_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c s2gfx.c s2page.c s2load.c s2pause.c s2pages.c s2end.c s2snd.c s2params.c blit.c -lm &&
+    cd /b/host/menu && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c host/ui_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c s2gfx.c s2page.c s2load.c s2pause.c s2arcade.c s2pages.c s2end.c s2snd.c s2params.c blit.c -lm &&
     cd /b/check/menu && /b/host/menu_screen /game/SCREAMER2.zip /b/check/menu/menu /b/check/menu/ref /b/check/menu/ref/graf_deflated.zip"
 status=$?
 for f in "$out"/*.rgb; do

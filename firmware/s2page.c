@@ -36,7 +36,7 @@ int s2page_run(const struct s2_page *p, void *self)
         uint32_t press = s2page_press(&keys);
         if (p->frame) p->frame(self, tick);
         if (!leaving && (result = p->key(self, press)) != 0) {
-            if (!p->fade_out) return result;
+            if (!p->fade_out || result < 0) return result;      /* (a negative result leaves at once: the original's ESC is a cut) */
             leaving = 1;
         }
         if (p->picture) s2gfx_picture(l, p->picture);

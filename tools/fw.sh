@@ -6,6 +6,7 @@
 # Usage: tools/fw.sh                 the firmware, copied to build/assets/
 #        tools/fw.sh FAULT=IFETCH    a fault test for sim/soc in build/firmware-IFETCH/, not copied
 #        tools/fw.sh EXTRA_CFLAGS=-DX=1 TAG=x   other defines, in build/firmware-x/, not copied (e.g. -DHW_FULL_CYCLES=100: the computers' steps run in the scene at once)
+#        tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_END=1 TAG=simend   the end of the race drawn over frames 2 to 9 of the simulated race, with its cost in the log ("end screen frame 3: 3341 us")
 #        tools/fw.sh PROF=1          with the cycle counters of firmware/prof.h, for the simulation, in build/firmware-prof/, not copied
 # Output: build/firmware/{firmware,program}.elf, .bin, .lst (disassembly), .map
 set -e

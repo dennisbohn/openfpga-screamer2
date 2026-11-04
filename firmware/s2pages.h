@@ -3,7 +3,7 @@
  * (s2gfx.h, s2page.h). Each runs until the player leaves it and returns; the start menu opens them from its two last rows.
  *
  * GAME SETTINGS (BKG_7L picture): the eight settings of the save (s2save.h) and VIEW HIGH SCORES. d-pad up / down move the cursor,
- * B or Start step the row's value round (the original's ENTER; left / right do the same, back and on), A or Select leave. The value
+ * B or Start step the row's value round (the original's ENTER; left / right do the same, back and on), A or Select leave at once (VIEW HIGH SCORES fades out). The value
  * under the cursor blinks. Changes go into the save at once. Of the eight, TRANSMISSION, NUMBER OF LAPS, ARCADE ENEMIES SKILL, DAMAGES and
  * MUSIC act in the race (the viewer takes them from the save when a race starts); DETAIL LEVEL, MULTIPLAYER ENEMIES and TIME ATTACK GHOST
  * CAR are kept and nothing more yet.

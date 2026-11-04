@@ -11,7 +11,7 @@
 #include "hw.h"
 #include <string.h>
 
-#define FADE_OUT    25                  /* 0.5 s: the original's fade to black adds 2.0 a second */
+#define FADE_OUT    25                  /* 0.5 s: the original's fade to black adds 2.0 a second (VIEW HIGH SCORES fades; ESC is a cut) */
 #define SMALL       S2G_FONT_SMALL      /* the original's fonts 2 and 3 of the menu (12 pixels) */
 #define SMALL_HOT   S2G_FONT_SMALL2
 #define WHITE       1
@@ -35,7 +35,7 @@ static const uint8_t value_first[8] = { 0, 2, 5, 9, 12, 14, 16, 18 };       /* w
 
 struct settings { int cursor; uint32_t blink; };
 
-enum { LEAVE = 1, SCORES };
+enum { LEAVE = -1, SCORES = 1 };           /* (a negative result leaves at once, without the fade out) */
 
 static void set_frame(void *self, uint32_t tick)
 {

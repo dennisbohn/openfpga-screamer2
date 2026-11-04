@@ -14,6 +14,7 @@ Writes into <out dir> (never committed):
   settings_<k>.idx, hs_<k>.idx, end_<k>.idx   the GAME SETTINGS, HI SCORES and end-of-race screens in the states the tests drive them to
                        (320 x 200 palette indices); .dk the passes of darkening each pixel is to get (0 .. 3: the tests apply the firmware's
                        own table, which they check on its own against a search in double precision); end_<k>.pal the race's palette
+  arcade.txt, arc_*    the arcade pages' scripted runs and the frames they must draw (tools/ui_arcade_ref.py)
 The readers here (LZW, the S2 .SPR / .FNT layout, the text routine) are written from the file formats and the original's routines, not
 from the firmware.
 """
@@ -91,7 +92,9 @@ class Canvas:
                     self.put(x + sx + c, y + sy + r, px[r * w + c], self.clip_spr)
 
     def text_boxed(self, font, colour, space, x0, width, y, s):
-        self.text(font, colour, space, x0 + ((width - self.text_width(font, space, s)) >> 1), y, s)
+        w = self.text_width(font, space, s)
+        w -= space if w else 0                  # the original's measure (0xc6c88) has no gap after the last character
+        self.text(font, colour, space, x0 + ((width - w) >> 1), y, s)
 
     def text_width(self, font, space, s):
         f, cell, fixed, x = font, font["widest"] + space, 0, 0
@@ -408,6 +411,7 @@ def main():
         elif kind == "ctext":
             f, col, sp, y, txt = s.split(" ", 5)[1:]
             tw = c.text_width(fnt[int(f)], int(sp), txt)
+            tw -= int(sp) if tw else 0                  # the original's measure (0xc6c88) has no gap after the last character
             c.text(fnt[int(f)], int(col), int(sp), (320 - tw) >> 1, int(y), txt)
         elif kind == "spr":
             n, x, y = [int(v) for v in s.split()[1:]]
@@ -444,7 +448,10 @@ def main():
         z.write(os.path.join(game, "GFX", "GRAF1.DAT"), "GFX/GRAF1.DAT")
         z.write(os.path.join(game, "DATA", "LOCAL.DAT"), "DATA/LOCAL.DAT")
         z.write(os.path.join(game, "GFX", "GAME1.DAT"), "GFX/GAME1.DAT")
-    print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames -> {out}")
+    import ui_arcade_ref
+    n_runs, n_frames = ui_arcade_ref.build(game, graf, spr, fnt, out, {"bkk": bkk, "container": container, "datfile": datfile, "Canvas": Canvas})
+    print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames, {n_runs} arcade page runs with {n_frames} frames -> {out}")
 
 
-main()
+if __name__ == "__main__":
+    main()

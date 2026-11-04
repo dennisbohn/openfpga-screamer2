@@ -14,8 +14,9 @@
 #define S2PAGE_ESC      (KEY_A | KEY_SELECT)
 
 /* The menu samples of SOUND.DAT's MENU.DTR (s2sound.h). What the original plays differs from page to page; these are the ones read
-   from its pages' code (STARTL.EXE 0x41d3c .. 0x41dc1, 0x4228a .. 0x42718): the TRANSMISSION page's cursor moves and its ENTER, the
-   GAME SETTINGS page's cursor moves (S2PAGE_SND_CURSOR), a value stepped (S2PAGE_SND_ROW) and VIEW HIGH SCORES (S2PAGE_SND_BACK). */
+   from its pages' code (STARTL.EXE 0x41d3c .. 0x41dc1, 0x4228a .. 0x42718): the TRACK page's cursor moves and its ENTER, the
+   GAME SETTINGS page's cursor moves (S2PAGE_SND_CURSOR), a value stepped (S2PAGE_SND_ROW) and VIEW HIGH SCORES (S2PAGE_SND_BACK). The arcade
+   pages' own are in s2arcade.c. */
 enum { S2PAGE_SND_MOVE = 0, S2PAGE_SND_SELECT = 2, S2PAGE_SND_CURSOR = 10, S2PAGE_SND_ROW = 12, S2PAGE_SND_BACK = 13 };
 
 struct s2_page {
@@ -25,7 +26,7 @@ struct s2_page {
     /* once a frame, before the keys: the page's sound, clocks (tick: frames since the page began, 50 a second); may be 0 */
     void (*frame)(void *self, uint32_t tick);
     /* a press: the buttons that went down in this frame, the d-pad's again while held (after 0.5 s, every 6th frame). Not 0: the page
-       ends with that result (after the fade out) */
+       ends with that result (after the fade out; a negative result at once, without it: the original's ESC leaves with a cut) */
     int (*key)(void *self, uint32_t press);
     /* the page's commands over the picture (s2gfx.h); may be 0 */
     void (*draw)(void *self, struct blit_list *l, uint32_t tick);

@@ -1,18 +1,17 @@
 /*
- * The start menu of Screamer 2 (docs/screamer2/menus.md has the plan for the rest of the original's screens): a list in the
- * console's text style, shown after the files screen and whenever the race or the ride is left with Select + B. Everything is
- * open from the start (all seven tracks, all four teams and their five cars, no championship gating).
+ * The start menu of Screamer 2 (docs/screamer2/menus.md has the plan for the rest of the original's screens): a list in the console's
+ * text style, shown after the files screen and whenever the race or the ride is left with Select + B. It stands in for the original's
+ * options room, whose choices are pages of their own as they get built:
  *
- *   TRACK                the seven tracks (names from DATA/LOCAL.DAT's STRINGS.TXT)
- *   TEAM, CAR            the player's team (CONDOR, ANGELS, WASP, ZEUS) and car 1 .. 5: slot 0 of race_grid (race.h); the three
- *                        computers get the three other teams
- *   NUMBER OF LAPS       the original's options, 1 / 3 / 5 / 10
- *   ARCADE ENEMIES SKILL ROOKIE / NORMAL / PRO
- *   TRANSMISSION         automatic / manual
- *   START RACE, WATCH    the race, or the viewer's ride (for timing)
+ *   ARCADE               the original's arcade pages, 2D (s2arcade.h): title, TRACK, CAR (a stand-in for the 3D page), TRANSMISSION,
+ *                        and then the race; ESC goes back
+ *   NUMBER OF LAPS       the original's options, 1 / 3 / 5 / 10 (a GAME SETTINGS row)
+ *   ARCADE ENEMIES SKILL ROOKIE / NORMAL / PRO (a GAME SETTINGS row)
+ *   START RACE           the race with the choices as they are, at once (left / right: the track, T1 .. T7 in the files' numbering)
+ *   WATCH                the viewer's ride (for timing)
  *
  * The choices are kept in the nonvolatile CHOICE.DAT (s2save.h, data slot 23): the Pocket writes it back when the core
- * exits, so they survive a power-up.
+ * exits, so they survive a power-up. Everything is open from the start (all seven tracks, all four teams and their five cars).
  */
 #pragma once
 #include <stdint.h>
@@ -35,16 +34,16 @@ struct s2_menu_cfg {
 };
 extern const uint8_t s2_menu_laps[S2M_LAPS];
 
-/* what the menu ends with */
-enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_SETTINGS, S2M_SCORES };     /* (the last two: a page was asked for, s2menu_run() opens it itself) */
+/* what the menu ends with (S2M_ARCADE: a key press on the ARCADE row, which s2menu_run() answers by running the arcade pages; S2M_SETTINGS and
+   S2M_SCORES: the GAME SETTINGS and HI SCORES rows, which s2menu_run() answers by running the page) */
+enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES };
 
 /* The rows, top to bottom */
-enum { S2M_ROW_TRACK, S2M_ROW_TEAM, S2M_ROW_CAR, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_GEAR, S2M_ROW_RACE, S2M_ROW_WATCH,
-       S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROWS };
+enum { S2M_ROW_ARCADE, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROWS };
 
 /* The names and labels from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the
-   built-in English text, which is the same. Once, before the first menu. Returns how many of the 12 texts (the tracks, the teams, the
-   levels, nine labels) were read from the file. */
+   built-in English text, which is the same. Once, before the first menu. Returns how many of the 7 texts (the tracks, the teams, the
+   levels, four labels) were read from the file. */
 int s2menu_init(struct zip *z);
 const char *s2menu_track_name(int track);       /* track 1 .. 7 */
 const char *s2menu_team_name(int team);         /* team 1 .. 4 */
@@ -61,8 +60,9 @@ void s2menu_store(const struct s2_menu_cfg *c);
 void s2menu_grid(const struct s2_menu_cfg *c, struct s2_pick grid[4]);
 
 /* One press of buttons (KEY_* bits of hw.h, the ones that went down in this frame) on the list: moves *cursor, changes c, and
-   returns S2M_RACE or S2M_WATCH when the menu ends. d-pad up / down: row; left / right: the row's value (a ring); L / R: the
-   track three on either way from any row (any track is two moves away); A or Start: the race (the ride on the WATCH row); X: the ride. */
+   returns S2M_RACE, S2M_WATCH or S2M_ARCADE when the menu ends or goes on to the arcade pages. d-pad up / down: row; left / right:
+   the row's value (a ring; on START RACE the track); L / R: the track three on either way from any row (any track is two moves
+   away); A, B or Start: the row's action (the race on any row but ARCADE and WATCH); X: the ride. */
 int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press);
 
 /* The list into fb (palette of the back buffer too) */
