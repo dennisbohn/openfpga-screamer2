@@ -472,10 +472,12 @@ static void places_and_pace(void)
 
 /* ------------------------------------------------------------------------------------------------ cars touching */
 
+static float knock_max;                                 /* the hardest touch of the player's car since race_knock_take() */
+
 /* Two cars that overlap are pushed apart and swap the speed they close at along the line of least overlap. The game's
    solver (0x245a3) sweeps the cars' outlines (the wheel corners 1.4 times as wide) through the step for the first
-   touch and runs the rest of the step again; this is the same outline tested at the end of the step. No damage, sparks
-   or sound. */
+   touch and runs the rest of the step again; this is the same outline tested at the end of the step. No damage or sparks;
+   the player's touches are heard (race_knock_take). */
 static void collide(void)
 {
     for(int a = 0; a < R.n; a++)
@@ -511,6 +513,7 @@ static void collide(void)
             }
             const float vn = (va[0] - vb[0]) * n[0] + (va[1] - vb[1]) * n[1];
             if(vn <= 0.0f) continue;                    /* already parting */
+            if((a == 0 || b == 0) && vn > knock_max) knock_max = vn;    /* heard (s2sound.c) */
             for(int k = 0; k < 4; k++) {
                 F(A, 0x544 + 0xc * k) -= vn * n[0]; F(A, 0x54c + 0xc * k) -= vn * n[1];
                 F(B, 0x544 + 0xc * k) += vn * n[0]; F(B, 0x54c + 0xc * k) += vn * n[1];
@@ -611,6 +614,13 @@ void race_step_others(uint32_t count)
             if(R.off[i] >= OFF_STEPS || R.still[i] >= STILL_STEPS || c->pos[2] < R.floor_z) put_on_line(i);
         }
     }
+}
+
+float race_knock_take(void)
+{
+    float k = knock_max;
+    knock_max = 0.0f;
+    return k;
 }
 
 void race_step(const struct s2car_input *in)

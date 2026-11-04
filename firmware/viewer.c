@@ -18,6 +18,7 @@
 #include "s2car.h"
 #include "race.h"
 #include "s2teams.h"
+#include "s2sound.h"
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
    ZIP's entries read whole), the build's scratch up to the program */
@@ -275,6 +276,7 @@ static void log_stats(int n, int cars, const struct stats *s)
    being quit needs no line. */
 static void leave(int n, int cars, const struct stats *s)
 {
+    s2snd_stop();                       /* the race's sound, before a track's load takes the data slot */
     if (s->n >= 50) log_stats(n, cars, s);
 }
 
@@ -295,6 +297,7 @@ static int race_start(int n, float floor_z)
         dlog_dec((int32_t)((rdcycle() - t0) / MS_CYCLES));
         dlog_str(" ms\n");
     }
+    if (ok) s2snd_race_start(n);                        /* (after the timing: the music's first fill takes 170 ms) */
     return ok;
 }
 
@@ -473,6 +476,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             struct s2car_state *rc[RACE_CARS];
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
             nobj = road_race_scene(rc, race_cars(), &cam, objs);
+            s2snd_frame(&cam);                          /* the race's sound (s2sound.h) */
         } else {
             uint32_t steps = drawn ? (dvf > 10 ? 10 : dvf) : 1;
             s += (float)steps * STEP_S * SPEED;
@@ -620,6 +624,7 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     int n = sim && slot_size(TRACK_SLOT) ? (int)slot_size(TRACK_SLOT) : 1, cars = 4, overlay = 1;
     int drive = sim && (in_keys() & KEY_START);         /* in the simulation Start held (SIM_KEYS=8000): the driving mode */
     dlog_str("viewer: start\n");
+    s2snd_init(z);
     for (;;) {
         const char *what = "";
         screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);

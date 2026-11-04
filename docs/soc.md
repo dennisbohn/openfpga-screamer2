@@ -80,7 +80,7 @@ the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
 | `0x1060_0000` | parts of `GRAF.DAT` (slot 20); each at its place as in the file |
 | `0x10A0_0000` | images, sprites and fonts of the menu pages and of the track and car selection, the unpacked loading screen |
 | `0x1100_0000` | read test of the files screen (`files_load_check`, up to 8 MB) |
-| `0x11C0_0000` | sound effects `SOUND.DAT` (slot 8, up to 2 MB; the mixer plays them from there; the nine menu samples already at start, each at its place) |
+| `0x11C0_0000` | sound effects `DATA/SOUND.DAT` (Screamer 2: read whole from the ZIP once, 1.4 MB, by `firmware/s2sound.c`; the mixer plays the samples from there. Screamer 1's code in the tree reads it from slot 8, up to 2 MB, the nine menu samples at their places) |
 | `0x11E0_0000` | music ring (256 KB, from the CD image, slot 22) |
 | `0x11F4_0000` | `MUSIC.DAT` (slot 25, up to 256 KB; 200 KB: the FM music's songs and instrument banks, read when the FM music is first needed) |
 | `0x1210_0000` | track image (built by the firmware, `track_build_s2()`: car materials, MLB with the cars' libraries, meshes, ...; up to 7 MB, 28 blocks of 256 KB) |

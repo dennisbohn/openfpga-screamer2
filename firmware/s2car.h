@@ -47,6 +47,8 @@ struct s2car_state {
     int on_ground;                      /* wheels on the ground, 0 .. 4 */
     int skid_flags;                     /* bit w set: wheel w skids (smoke); bit 4: the tyres squeal */
     int hit_wall;                       /* 1 on a step on which the car touched a wall */
+    float hit_hard;                     /* the strongest wall knock (the game's 0x29571 `hard`, which its sound goes by) since the caller
+                                           last set it to 0; set by the physics only upwards */
     int braking;                        /* the brake lights: the brake is down */
     int off_track;                      /* 1 if the car's middle has no drivable ground under it (for a reset rule) */
     float cam[6];                       /* the game's chase camera (view 3): x, y, height, yaw, pitch, roll, as track_cam */
@@ -115,3 +117,8 @@ void s2car_put(struct s2car_state *s, int x, int y, float heading);
 
 /* The chase camera as a track_cam (the same as cam[]) */
 void s2car_camera(const struct s2car_state *s, struct track_cam *cam);
+
+/* The ROAD KINDS row of the track's kind id (its smoke[2] and smoke[3] number the tyres' rolling and squealing
+   sounds, s2snd.h); a row of zeros for any the track does not list */
+struct s2_road_kind;
+const struct s2_road_kind *s2car_road_kind(int id);

@@ -520,6 +520,7 @@ static void against_wall(car_t *c, const struct corner_ground q[4])
             else knock(c, 2, hit, fabsf(side + -HALF_PI_F) / 0.7853981852f, hard);
         }
     }
+    if(hard > c->hit_hard) c->hit_hard = hard;
     float into = -cosf(RF(0x508)) * (float)RI(0x15c) + sinf(RF(0x508)) * (float)RI(0x154);
     if(into <= 0.0f) {
         float mean = (((RF(0x574) + RF(0x5e4)) + RF(0x654)) + RF(0x6c4)) * 0.25f;
@@ -1119,6 +1120,11 @@ float s2car_ground_grip(const struct s2car_state *s)
     const car_t *c = s;
     const int ts = RI(0x50) < 0 || RI(0x50) > 2 ? 0 : RI(0x50);
     return ((kind_of(RI(0x6b0))->grip[ts] + kind_of(RI(0x5d0))->grip[ts]) + kind_of(RI(0x720))->grip[ts] + kind_of(RI(0x640))->grip[ts]) * 0.25f;
+}
+
+const struct s2_road_kind *s2car_road_kind(int id)
+{
+    return kind_of(id);
 }
 
 const uint8_t *s2car_map_dat(uint32_t *size)

@@ -180,7 +180,7 @@ int music_init(const uint8_t *gen, uint32_t gen_size)
             n += audio[i] && first[i] >= 0 && (uint32_t)first[i] < sectors;
     }
     cd_count = n;
-    if (!n) dlog_str("music: no audio tracks (SCREAM.gog, SCREAM.DAT)\n");     /* (the log has 4 KB) */
+    if (!n) dlog_str("music: no audio tracks (GAME.GOG, GAME.DAT)\n");     /* (the log has 4 KB) */
     dlog_str("music: Music Source option ");
     dlog_hex(OPT_MUSIC);
     dlog_str(OPT_MUSIC ? " (FM Synth)\n" : " (Auto)\n");
@@ -205,7 +205,7 @@ static void done(uint32_t len, int r)
     if (r) {
         AU_MUSIC = 0;
         playing = 0;
-        dlog_str("music: a read of SCREAM.gog failed (result ");
+        dlog_str("music: a read of GAME.GOG failed (result ");
         dlog_dec(r);
         dlog_str("), it stops\n");
         return;
