@@ -181,10 +181,23 @@ along it (equal masses, as the game's push does): the same outlines, tested once
 at speed from behind therefore takes that speed, as in the game. A step moves a car by 280 units at most (the top speed), a quarter of an
 outline's length (1,165), so the overlap found at the end of a step is shallow.
 
+**The computers' bodies on the Pocket** came apart (spinning and floating next to their wheels) because `car.c` took the wheels of a car
+model to be its blocks that sit off the middle of the car (Screamer 1's rule). In AUTO02 and AUTO03 the body blocks (`MV_m`, `faut`,
+`raut`) sit 1 to 4 units off, so they were turned by the wheels' spin like hubs; the ride's cars had no spin and AUTO01's body sits exactly
+on the middle, so nobody had seen it. The game finds the wheels by name (the table at 0x112f00: `flx fli blx rli frx fri brx rri`, hubs `x`
+turn and steer, tyres `i` only steer); `cmodel_build()` does that now when a model has the eight, and the old rule only for Screamer 1's
+models. The game's fourth body block `fai` leans with the body now too (it was taken as a wheel). The race's overlap was not the cause:
+`track_draw_cam()` makes every car's blocks and pushes the pieces into the geometry unit's registers (`hw_piece`) before it returns, the
+hardware reads only the image's meshes afterwards, and the computers' states are changed later.
+
 ### Checks of the race
 
 - `tools/s2/check_car.sh`: the player's car is unchanged by the additions (the output is the same line for line as before): the computer's
   rules are all behind `s2car_state.ai`, the hold behind `.hold`. `check_params.sh` and `check_track_build_s2.sh` pass.
+- **The cars as drawn** (`tools/s2/render_s2.c`, every run): each car model of the image is drawn with and without the wheels' spin and
+  steering, and exactly four blocks (the hubs) may change with the spin and four (the front wheels) with the steering; in a `g` run every
+  car's pose each step must be a number and a car's (tilt under 1.2 rad, body lean under 0.5, steering under 1). It failed for AUTO02 and
+  AUTO03 (7 and 6 blocks turned) before the wheels were found by name, see below. `RACE_CAM=<car>` puts the picture behind that car.
 - `tools/s2/render_s2.sh <image> <prefix> g<steps>[,<every>]` runs the race natively (the firmware's own `race.c` and `s2car.c`, the
   images of the seven tracks) and prints, every `every` steps, per car the laps done, place, mph and node along the line, a line
   per lap done, and at the end the player's lap, place and times and the number of cars put back on the line. `RACE_GAS=1` makes the
@@ -222,8 +235,12 @@ ms on the Pocket, and the physics comes before the first piece is handed on, so 
 would make about 19.6 ms there, too close to the 20 ms of a picture. So the computers' steps run after the scene is handed to the hardware,
 while the rasterizer finishes the picture (`race_step_others()`, `RACE_OVERLAP` in `viewer.c`): the CPU waited 1.7 ms for the rasterizer at
 the end of the simulated frame, and on the worst frames it waits several ms. By that estimate the worst frame of track 4 stays near 16 to 17 ms.
-**This version was not simulated or run on the Pocket**; the numbers above are of the same race with its steps before the scene
-(`-DRACE_OVERLAP=0`, identical results). `debug.txt` shows what happened: the visit's line ends `ph<mean>/<worst> o<mean>/<worst>` (ms of the
+**This version was not simulated**; the numbers above are of the same race with its steps before the scene
+(`-DRACE_OVERLAP=0`, identical results). On the Pocket (track 1, `RACE_OVERLAP` 1) the user measured 12.5 ms mean and 14.4 ms worst,
+50 pictures a second, `ph1.0/1.1 o3.0/3.5`: the computers' steps are 3.0 ms there. That frame is about 3.5 ms over the ride's forecast
+without physics (docs/development.md), about the cost of the steps, so on track 1 the overlap hides little: it can only hide what the
+rasterizer would have waited for, and track 1 is not rasterizer-bound. Tracks 4 and 7, the rasterizer-bound ones, were not measured; if
+nothing is hidden there the worst frame would be about 15.4 + 0.8 + 3.0 = 19.2 ms. `debug.txt` shows what happened: the visit's line ends `ph<mean>/<worst> o<mean>/<worst>` (ms of the
 player's part and the scene set-up, and of the computers' part) after the frame's own mean and worst; a worst frame under about 17 ms on tracks 4 and 7 means
 the overlap works. If it does not (the CPU and the units contend for the SDRAM), `-DRACE_OVERLAP=0` or a cheaper computer car (the
 physics step is the cost: its four ground looks and about 20 `atanf`) are the next steps; the lap and driver code is about 0.1 ms a car.

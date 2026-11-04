@@ -929,9 +929,24 @@ float car_speed_needle(void)
     return needle_speed;
 }
 
+/* the wheels' blocks of a Screamer 2 car are found by name (0x2f519, the table at 0x112f00): the hub that turns and steers
+   (x) and the tyre that only steers (i) of each of the four wheels */
+static int wheel_name(const uint8_t *n)
+{
+    static const char names[8][4] = { "flx", "fli", "blx", "rli", "frx", "fri", "brx", "rri" };
+    for(int k = 0; k < 8; k++)
+        if(n[0] == (uint8_t)names[k][0] && n[1] == (uint8_t)names[k][1] && n[2] == (uint8_t)names[k][2] && n[3] == 0) return 1;
+    return 0;
+}
+
 /* a car's mesh as car_draw takes it */
 static void cmodel_build(struct cmodel *m, const uint8_t *mesh)
 {
+    /* Which blocks are wheels: by name where the mesh has the eight of Screamer 2's (a body block there can sit a few units off
+       the origin and would be turned like a wheel: AUTO02 and AUTO03's), else the blocks that sit off-centre (Screamer 1's) */
+    int named_wheels = 0;
+    for(int b = 0; b < *(const int32_t *)(mesh + 0x14) && b < MAX_BLOCKS; b++)
+        named_wheels += wheel_name(mesh + *(const int32_t *)(mesh + 0x18 + 4 * b) + 0x68);
     /* the blocks: a name of three letters ending in i (a tyre, the arches' insides) counts
        4000 further off, one ending in x (a hub) 1000, unless it starts with A */
     m->mesh = mesh;
@@ -947,7 +962,7 @@ static void cmodel_build(struct cmodel *m, const uint8_t *mesh)
         q->back = named && nmz[2] == 'i' ? 4000 : named && nmz[2] == 'x' ? 1000 : 0;
         /* a wheel sits off-centre; only its hub disc (flags 0x800) turns, the tyre block is
            the lower half of the tread and stays; the front ones (local -z) steer */
-        q->wheel = q->t[0] != 0.0f;
+        q->wheel = named_wheels >= 8 ? wheel_name(nmz) : q->t[0] != 0.0f;
         q->spins = q->wheel && (*(const int32_t *)(q->blk + 0x18) & 0x800);
         q->steers = q->wheel && q->t[2] < 0.0f;
     }

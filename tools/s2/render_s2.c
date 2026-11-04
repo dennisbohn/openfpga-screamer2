@@ -29,6 +29,7 @@
 #include "road.h"
 #include "s2car.h"
 #include "race.h"
+#include "car.h"
 
 #define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as the viewer */
 
@@ -57,6 +58,49 @@ static void write_rgb(const char *path, const uint32_t *pal)
     fclose(f);
 }
 
+/* The cars as they are drawn must hold together. Each car model of the image is drawn with and without the wheels' turn and
+   steering: only the four hubs may change with the turn and only the four front wheel blocks with the steering (a body block
+   that turns with the wheels, as AUTO02's and AUTO03's did when wheels were taken to be the blocks off the middle, shows as a
+   changed block). Returns the number of failures. */
+static int check_models(void)
+{
+    int nm, bad = 0;
+    track_models(&nm);
+    const struct track_cam cam = { 0.0f, 600.0f, 300.0f, 0.0f, -0.2f, 0.0f };      /* close: every block at its level 0 */
+    for (int m = 0; m < nm; m++) {
+        static struct track_block base[CAR_BLOCKS], turned[CAR_BLOCKS], steered[CAR_BLOCKS];
+        struct track_object ob;
+        struct car_look lk = { 0, 0, 0, 0, 0.1f, 0.05f, 0.02f, 0.03f, 0.0f, 0.0f, 0 };
+        int nb = car_draw(m, &lk, &cam, base, &ob) ? ob.n : 0;
+        lk.spin = 1.1f;
+        int nt = car_draw(m, &lk, &cam, turned, &ob) ? ob.n : 0;
+        lk.spin = 0.0f;
+        lk.steer = 0.3f;
+        int ns = car_draw(m, &lk, &cam, steered, &ob) ? ob.n : 0;
+        int changed_spin = 0, changed_steer = 0;
+        for (int i = 0; i < nb; i++)
+            for (int j = 0; j < nt; j++)
+                if (turned[j].blk == base[i].blk && memcmp(turned[j].m, base[i].m, sizeof base[i].m)) changed_spin++;
+        for (int i = 0; i < nb; i++)
+            for (int j = 0; j < ns; j++)
+                if (steered[j].blk == base[i].blk && memcmp(steered[j].m, base[i].m, sizeof base[i].m)) changed_steer++;
+        printf("car model %d: %d blocks, %d turn with the wheels' spin, %d with the steering\n", m + 1, nb, changed_spin, changed_steer);
+        if (nb != nt || nb != ns || changed_spin != 4 || changed_steer != 4) { printf("  FAIL: expected 4 and 4\n"); bad++; }
+    }
+    return bad;
+}
+
+/* a pose that is not a car's: not a number, or tilted or leant further than a car can be */
+static int look_ok(const struct car_look *lk)
+{
+    const float v[10] = { lk->x, lk->y, lk->z, lk->yaw, lk->pitch, lk->roll, lk->body_pitch, lk->body_roll, lk->spin, lk->steer };
+    for (int k = 0; k < 10; k++) if (!isfinite(v[k])) return 0;
+    float steer = fmodf(lk->steer, 6.2831853f);             /* (the wheels' angle is kept in 0 .. 2 pi: -6.28 is straight) */
+    if (steer > 3.1415927f) steer -= 6.2831853f;
+    if (steer < -3.1415927f) steer += 6.2831853f;
+    return fabsf(lk->pitch) < 1.2f && fabsf(lk->roll) < 1.2f && fabsf(lk->body_pitch) < 0.5f && fabsf(lk->body_roll) < 0.5f && fabsf(steer) < 1.0f;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 4) { fprintf(stderr, "usage: render_s2 <image> <prefix> <v<s>[,<cars>]|r<i>|c<x>,<y>,<h>,<yaw>,<pitch>>...\n"); return 2; }
@@ -70,6 +114,7 @@ int main(int argc, char **argv)
     if (!pieces) { fprintf(stderr, "track_init: the image does not fit the limits (objects > MAX_OBJ or pieces > MAX_PIECES)\n"); return 1; }
     int loop = road_build();
     printf("image %zu bytes, %d placements, road loop %d points, %.0f units\n", n, pieces, loop, road_length());
+    int failures = check_models();
 
     for (int a = 3; a < argc; a++) {
         struct track_cam cam;
@@ -118,6 +163,11 @@ int main(int argc, char **argv)
                 race_step(&in);
                 for (int i = 0; i < race_cars(); i++) {
                     const struct s2car_state *c = race_car(i);
+                    struct car_look lk;
+                    s2car_look(c, &lk);
+                    if (!look_ok(&lk) && failures++ < 5)
+                        printf("  FAIL: car %d at step %d is drawn in a pose no car has (pitch %.2f roll %.2f lean %.2f %.2f steer %.2f)\n", i, k + 1,
+                               lk.pitch, lk.roll, lk.body_pitch, lk.body_roll, lk.steer);
                     int lap = (int)c->rec[0x4ac / 4];
                     if (lap != laps_seen[i]) {
                         float best; memcpy(&best, &c->rec[0xc40 / 4], 4);
@@ -144,6 +194,10 @@ int main(int argc, char **argv)
             struct s2car_state *rc[RACE_CARS];
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
             nobj = road_race_scene(rc, race_cars(), &cam, objs);
+            if (getenv("RACE_CAM")) {                   /* the view from behind car i (RACE_CAM=i), to look at a computer's car close */
+                const struct s2car_state *v = race_car(atoi(getenv("RACE_CAM")));
+                cam = (struct track_cam){ v->pos[0] - sinf(v->yaw) * 1000.0f, v->pos[1] + cosf(v->yaw) * 1000.0f, v->pos[2] + 350.0f, v->yaw, -0.2f, 0.0f };
+            }
         } else if (argv[a][0] == 'r') {
             int nd;
             const struct track_dir *d = track_dirs(&nd);
@@ -173,5 +227,6 @@ int main(int argc, char **argv)
         printf("camera %.0f %.0f %.0f yaw %.3f: %u pieces handed on, %u faces, %u triangles, %u vertices, %u see-through, %u objects; %s\n",
                cam.x, cam.y, cam.h, cam.yaw, ts.pieces, ts.faces, ts.triangles, ts.vertices, ts.see_through, ts.objects, name);
     }
+    if (failures) { printf("%d pose check failures\n", failures); return 3; }
     return 0;
 }
