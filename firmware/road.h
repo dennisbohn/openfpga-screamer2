@@ -19,6 +19,9 @@ int road_build(void);
 /* The loop's length in units */
 float road_length(void);
 
+/* The lowest height of any road point (the driving mode resets a car that falls far below it) */
+float road_floor(void);
+
 /* The place s units along the loop from road point 0 (any s: it wraps, also backwards): x, y, the
    height of the road there and its heading yaw (the car's: forward = (sin yaw, -cos yaw)), between
    the points linearly (the heading along the shorter way round) */
@@ -31,3 +34,9 @@ void road_at(float s, float *x, float *y, float *z, float *yaw);
    whose blocks are made when they come up in the drawing. Returns the objects. */
 #define ROAD_CARS   4
 int road_scene(float s, int ncars, struct track_cam *cam, struct track_object *objs);
+
+/* The driving mode's scene: the camera the physics gives (s2car.h) and the player's car as one object for
+   track_draw_cam(), model AUTO01 (the physics does not choose a car model yet) with the wheels as the physics
+   has them. The state must stay where it is until the frame is drawn (the car's blocks are made then). Returns 1. */
+struct s2car_state;
+int road_drive_scene(const struct s2car_state *s, struct track_cam *cam, struct track_object *obj);

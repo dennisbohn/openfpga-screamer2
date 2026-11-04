@@ -30,7 +30,10 @@ cp "$1" "$root/build/s2host/$img"
 prefix=$(basename "$2")
 outdir=$(dirname "$2")
 shift 2
-LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c"
+# the car physics behind firmware/s2car.h: the real s2car*.c when there is s2car.c, else the stand-in (firmware/Makefile)
+car=s2car_stub.c
+if [ -f "$root/firmware/s2car.c" ]; then car=$(cd "$root/firmware" && ls s2car*.c | grep -v '^s2car_stub.c$' | tr '\n' ' '); fi
+LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c $car"
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2host/src && gcc -O2 -w ${NOLOD:+-DTRACK_NO_LOD} -o ../render_s2 render_s2.c $LIST -lm &&
     cd /b/s2host && ./render_s2 $img $prefix $*"

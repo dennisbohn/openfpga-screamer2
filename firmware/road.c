@@ -3,6 +3,7 @@
  */
 #include "road.h"
 #include "car.h"
+#include "s2car.h"
 #include <math.h>
 #include <string.h>
 
@@ -70,6 +71,14 @@ int road_build(void)
 float road_length(void)
 {
     return cum[npts];
+}
+
+float road_floor(void)
+{
+    float low = npts ? pz[0] : 0.0f;
+    for(int k = 1; k < npts; k++)
+        if(pz[k] < low) low = pz[k];
+    return low;
 }
 
 void road_at(float s, float *x, float *y, float *z, float *yaw)
@@ -140,4 +149,24 @@ int road_scene(float s, int ncars, struct track_cam *cam, struct track_object *o
         n++;
     }
     return n;
+}
+
+/* the driving mode's car: its blocks are made when the drawing comes to it */
+static const struct s2car_state *drive_car;
+
+static int drive_make(int id, const struct track_cam *cam, struct track_object *ob)
+{
+    static struct track_block blocks[CAR_BLOCKS];
+    struct car_look lk;
+    (void)id;
+    s2car_look(drive_car, &lk);
+    return car_draw(0, &lk, cam, blocks, ob);
+}
+
+int road_drive_scene(const struct s2car_state *s, struct track_cam *cam, struct track_object *obj)
+{
+    drive_car = s;
+    s2car_camera(s, cam);
+    *obj = (struct track_object){ s->pos[0], s->pos[1], s->pos[2], 1200.0f, 0, 0, drive_make, 0, 0, 0, 0 };
+    return 1;
 }

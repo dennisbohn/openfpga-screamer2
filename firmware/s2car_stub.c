@@ -25,7 +25,7 @@
 #define WHEEL_R     120.0f              /* units */
 #define WHEEL_MAX   0.35f               /* radians */
 #define ACCEL       60.0f               /* km/h a second from a standstill, less towards the top speed */
-#define YAW_RATE    0.8f                /* radians a second at full lock, at speed */
+#define YAW_RATE    1.2f                /* radians a second at full lock, at speed */
 #define YAW_KNEE    40.0f               /* km/h at which the yaw rate is half of that */
 #define PI          3.14159265f
 
@@ -47,14 +47,17 @@ static void ground(struct s2car_state *s)
         s->pos[2] = h;
         track_under_tilt(sinf(s->yaw), -cosf(s->yaw), &s->pitch, &s->roll);
     }
-    float cy = cosf(s->yaw), sy = sinf(s->yaw), cp = cosf(s->pitch), sp = sinf(s->pitch);
-    float f[3] = { sy * cp, -cy * cp, sp }, r[3] = { cy, sy, 0.0f };
-    float u[3] = { f[1] * r[2] - f[2] * r[1], f[2] * r[0] - f[0] * r[2], f[0] * r[1] - f[1] * r[0] };   /* f x r */
-    float cr = cosf(s->roll), sr = sinf(s->roll);
-    for (int i = 0; i < 3; i++) {       /* rows x, y, up; columns right, up, forward; the roll tips right and up */
-        s->rot[3 * i] = r[i] * cr + u[i] * sr;
-        s->rot[3 * i + 1] = u[i] * cr - r[i] * sr;
-        s->rot[3 * i + 2] = f[i];
+    /* rot as track_block.m has it for the car (car.c block_point without wheels and lean): the images of the
+       block axes x, y (up), z in the world, the object's pitch and roll being the car's, negated */
+    float cy = cosf(s->yaw), sy = sinf(s->yaw), cp = cosf(-s->pitch), sp = sinf(-s->pitch);
+    float cr = cosf(-s->roll), sr = sinf(-s->roll);
+    const float e[3][3] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
+    for (int c = 0; c < 3; c++) {
+        float y3 = e[c][1] * cp + e[c][2] * sp, z3 = e[c][2] * cp - e[c][1] * sp;
+        float x3 = e[c][0] * cr - y3 * sr, y4 = y3 * cr + e[c][0] * sr;
+        s->rot[c] = x3 * cy - z3 * sy;
+        s->rot[3 + c] = x3 * sy + z3 * cy;
+        s->rot[6 + c] = y4;
     }
 }
 
@@ -105,7 +108,7 @@ void s2car_step(struct s2car_state *s, const struct s2car_input *in)
     if (s->rpm > 8000.0f) s->rpm = 8000.0f;
 
     s->wheel_steer += (in->steer * WHEEL_MAX - s->wheel_steer) * 0.25f;
-    s->yaw = wrap(s->yaw + s->wheel_steer / WHEEL_MAX * YAW_RATE * v / (v + YAW_KNEE) * DT);
+    s->yaw = wrap(s->yaw - s->wheel_steer / WHEEL_MAX * YAW_RATE * v / (v + YAW_KNEE) * DT);   /* yaw grows to the left */
     float u = v * UNITS_KMH, z0 = s->pos[2];
     s->vel[0] = sinf(s->yaw) * u;
     s->vel[1] = -cosf(s->yaw) * u;
