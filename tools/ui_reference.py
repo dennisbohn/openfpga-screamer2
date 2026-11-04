@@ -70,7 +70,7 @@ def fonts(fnt):
                 row = fnt[px + off + r * bw:px + off + (r + 1) * bw]
                 rows.append([(row[c >> 1] >> (0 if c & 1 else 4)) & 15 for c in range(w)])
             glyphs.append((w, rows))
-        out.append({"height": h[0], "first": h[1], "count": h[2], "glyphs": glyphs, "widest": max([g[0] for g in glyphs] + [1])})
+        out.append({"height": h[0], "first": h[1], "count": h[2], "glyphs": glyphs, "cell": h[3] - 2})
     return out
 
 
@@ -92,33 +92,43 @@ class Canvas:
                     self.put(x + sx + c, y + sy + r, px[r * w + c], self.clip_spr)
 
     def text_boxed(self, font, colour, space, x0, width, y, s):
-        w = self.text_width(font, space, s)
-        w -= space if w else 0                  # the original's measure (0xc6c88) has no gap after the last character
+        w = self.text_width(font, space, s)     # (the engine's measure, 0xc6c88: no gap after the last character)
         self.text(font, colour, space, x0 + ((width - w) >> 1), y, s)
 
-    def text_width(self, font, space, s):
-        f, cell, fixed, x = font, font["widest"] + space, 0, 0
+    @staticmethod
+    def layout(font, space, s):
+        """The engine's text routine (STARTL.EXE 0xc67f0 draws, 0xc6c88 measures), one step at a time as the machine code does it: the pointer
+        advances by the glyph's width, and by `space` more before every glyph but the first; after the control byte 1 a glyph sits in a cell of
+        (the font's fourth number - 2) pixels, centred by an arithmetic shift of the cell less the glyph's width, and the cell grows by `space`
+        once the first glyph is through. Returns [(char, glyph x offset)] and the width."""
+        f, cell, fixed, started, x, out = font, font["cell"], False, False, 0, []
         for ch in s.encode("latin-1"):
             if not f["first"] <= ch < f["first"] + f["count"]:
-                fixed = 1 if ch == 1 else 0 if ch == 2 else fixed
+                fixed = True if ch == 1 else False if ch == 2 else fixed
                 continue
             w = f["glyphs"][ch - f["first"]][0]
-            x += cell if fixed else w + space
-        return x
+            if fixed:
+                out.append((ch, x + ((cell - w) >> 1)))
+                x += cell
+            else:
+                at = x + space if started else x
+                out.append((ch, at))
+                x = at + w
+            if not started:
+                cell += space
+            started = True
+        return out, x
+
+    def text_width(self, font, space, s):
+        return self.layout(font, space, s)[1]
 
     def text(self, font, colour, space, x, y, s):
-        f, cell, fixed = font, font["widest"] + space, 0
-        for ch in s.encode("latin-1"):
-            if not f["first"] <= ch < f["first"] + f["count"]:
-                fixed = 1 if ch == 1 else 0 if ch == 2 else fixed
-                continue
-            w, rows = f["glyphs"][ch - f["first"]]
-            gx = x + ((cell - (w + 1)) // 2 if fixed else 0)
+        for ch, gx in self.layout(font, space, s)[0]:
+            w, rows = font["glyphs"][ch - font["first"]]
             for r, row in enumerate(rows):
                 for c, shade in enumerate(row):
                     if shade:
-                        self.put(gx + c, y + r, colour * 16 + shade, self.clip_text)
-            x += cell if fixed else w + space
+                        self.put(x + gx + c, y + r, colour * 16 + shade, self.clip_text)
 
 
 def read_png_rgb(path):
@@ -410,8 +420,7 @@ def main():
             c.text(fnt[int(f)], int(col), int(sp), int(x), int(y), txt)
         elif kind == "ctext":
             f, col, sp, y, txt = s.split(" ", 5)[1:]
-            tw = c.text_width(fnt[int(f)], int(sp), txt)
-            tw -= int(sp) if tw else 0                  # the original's measure (0xc6c88) has no gap after the last character
+            tw = c.text_width(fnt[int(f)], int(sp), txt)        # (the engine's measure, 0xc6c88: no gap after the last character)
             c.text(fnt[int(f)], int(col), int(sp), (320 - tw) >> 1, int(y), txt)
         elif kind == "spr":
             n, x, y = [int(v) for v in s.split()[1:]]

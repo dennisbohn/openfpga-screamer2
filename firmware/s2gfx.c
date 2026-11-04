@@ -24,12 +24,20 @@
 #define GAME_SPR    ((uint8_t *)(uintptr_t)(MEM + 0x100000))            /* GAMEL.SPR, unpacked (197,668 bytes) */
 #define GAME_MAX    0x40000u
 #define GAME_FIRST  0x27                        /* GAMEL.SPR's seven track banners: 0x27 .. 0x2d */
+/* the race screen's set (s2gfx_game_init): GAMEL.SPR as the file is (197,668 bytes), then its fonts' glyphs; GAME1.DAT of a deflated ZIP is
+   inflated whole at GWHOLE (after GRAF1.DAT's), only while the set is read */
+#define GMEM        ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0xC00000))
+#define GSPR_MAX    0x40000u
+#define GGLYPH_MAX  0x40000u
+#define GWHOLE      ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x1500000))
+#define GDIR_MAX    1024u                       /* GAME1.DAT's directory: 20 records of 32 bytes and a size */
 
 #define BKK_BYTES   64792u                      /* "V652", 256, 320, 200, 64000, 0; 768 palette bytes; the pixels */
 #define BKK_MAGIC   0x32353656u
 #define TAIL_MAX    4096u                       /* the end of GRAF1.DAT: its directory (60 records of 32 bytes) and size */
 #define IMAGES      1024
-#define FONTS       8
+#define GIMAGES     768                         /* GAMEL's: 115 sprites and 578 glyphs */
+#define FONTS       12                          /* (MENUL.FNT has 6, GAMEL.FNT 9) */
 #define LINES       400
 
 static struct zip *zip;
@@ -38,10 +46,17 @@ static uint32_t dir_buf[TAIL_MAX / 4 + 4];
 static const uint8_t *dir;                      /* what dat_find reads: the container's end, or all of it when it is deflated */
 static uint32_t dir_len;
 static struct blit_list list;
-static struct blit_image img[IMAGES];           /* MENUL.SPR's sprites, then the fonts' glyphs, then the race banners */
-static struct blit_font font[FONTS];
-static uint32_t nsprites, nfonts;
-static int banner_img;                          /* the image number of the first race banner, 0: none */
+/* a set of sprites and fonts: images 0 .. nsprites - 1 are the sprites, then each font's glyphs in turn; an image's pixels are at base + off */
+struct set {
+    struct blit_image *img;
+    struct blit_font *font;
+    const uint8_t *base;
+    uint32_t nsprites, nfonts, max_img;
+};
+static struct blit_image img[IMAGES], gimg[GIMAGES];            /* MENUL.SPR's sprites, then the fonts' glyphs; GAMEL's the same */
+static struct blit_font font[FONTS], gfont[FONTS];
+static struct set menu = { img, font, 0, 0, 0, IMAGES }, game = { gimg, gfont, 0, 0, 0, GIMAGES };
+static int banner_img;                          /* the image number of the first race banner (after the menu's fonts), 0: none */
 static int clip_text_y0, clip_text_y1 = FB_H, clip_spr_y0, clip_spr_y1 = FB_H;
 static struct { int x, y, w, h, passes; const uint8_t *table; } later[4];
 static int nlater;
@@ -144,28 +159,28 @@ const char *s2gfx_line(const char *key, int k, const char *fallback)
 
 /* MENUL.SPR (count, size; per sprite x, y, width, height, offset; the pixels) stays as it is at the start of the section: a
    sprite's image is its pixels in the file. MENUL.FNT is unpacked into the glyphs' bytes after it (see s2gfx_init). */
-static int build_sprites(const uint8_t *spr, uint32_t size)
+static int build_sprites(struct set *s, const uint8_t *spr, uint32_t size)
 {
     if (size < 8) return 0;
     uint32_t n = rd32(spr), head = 8 + 20 * n;
-    if (n > 256 || head > size) return 0;
+    if (n > 256 || head > size || n > s->max_img) return 0;
     for (uint32_t i = 0; i < n; i++) {
         const uint8_t *r = spr + 8 + 20 * i;
         uint32_t w = rd32(r + 8), h = rd32(r + 12), at = rd32(r + 16);
         if (w > 0x7FFF || h > 0x7FFF || head + at > size || w * h > size - head - at) return 0;
-        img[i] = (struct blit_image){ head + at, (uint16_t)w, (uint16_t)h, (int16_t)rd32(r), (int16_t)rd32(r + 4) };
+        s->img[i] = (struct blit_image){ head + at, (uint16_t)w, (uint16_t)h, (int16_t)rd32(r), (int16_t)rd32(r + 4) };
     }
-    nsprites = n;
+    s->nsprites = n;
     return 1;
 }
 
 /* MENUL.FNT of Screamer 2: u8 fonts; per font i32 height, first character, count, a fourth number, the picture's name (16 bytes); per
    font count x (i32 width, i32 offset); i32 size; the pixels, two a byte (high half first), rows of (width + 1) / 2 bytes. Each
    glyph becomes an image of one byte a pixel (the shade 0..15) at `to`, its width x height bytes. Returns the bytes used, 0 if damaged. */
-static uint32_t build_fonts(const uint8_t *f, uint32_t size, uint8_t *to, uint32_t room, uint32_t room_off)
+static uint32_t build_fonts(struct set *s, const uint8_t *f, uint32_t size, uint8_t *to, uint32_t room, uint32_t room_off)
 {
     if (size < 5 || f[0] < 1 || f[0] > FONTS) return 0;
-    uint32_t nf = f[0], p = 1 + 32 * nf, pixels = p, used = 0, ni = nsprites;
+    uint32_t nf = f[0], p = 1 + 32 * nf, pixels = p, used = 0, ni = s->nsprites;
     for (uint32_t k = 0; k < nf; k++) {
         const uint8_t *h = f + 1 + 32 * k;
         pixels += 8 * rd32(h + 8);
@@ -176,8 +191,8 @@ static uint32_t build_fonts(const uint8_t *f, uint32_t size, uint8_t *to, uint32
     for (uint32_t k = 0; k < nf; k++) {
         const uint8_t *h = f + 1 + 32 * k;
         uint32_t height = rd32(h), count = rd32(h + 8), widest = 1;
-        if (height > 255 || count > 256 || ni + count > IMAGES) return 0;
-        font[k].first_image = ni;
+        if (height > 255 || count > 256 || ni + count > s->max_img) return 0;
+        s->font[k].first_image = ni;
         for (uint32_t i = 0; i < count; i++, p += 8, ni++) {
             uint32_t w = rd32(f + p), at = rd32(f + p + 4), bw = (w + 1) / 2;
             if (w > 255 || (w && height && (uint64_t)pixels + at + (uint64_t)(height - 1) * bw + (w - 1) / 2 >= size)) return 0;
@@ -187,16 +202,16 @@ static uint32_t build_fonts(const uint8_t *f, uint32_t size, uint8_t *to, uint32
                 const uint8_t *row = f + pixels + at + r * bw;
                 for (uint32_t c = 0; c < w; c++) *px++ = (uint8_t)(row[c >> 1] >> (c & 1 ? 0 : 4) & 15);
             }
-            img[ni] = (struct blit_image){ room_off + used, (uint16_t)w, (uint16_t)height, 0, 0 };
+            s->img[ni] = (struct blit_image){ room_off + used, (uint16_t)w, (uint16_t)height, 0, 0 };
             used += w * height;
             if (w > widest) widest = w;
         }
-        font[k].height = height;
-        font[k].first = rd32(h + 4);
-        font[k].count = count;
-        font[k].widest = widest;
+        s->font[k].height = height;
+        s->font[k].first = rd32(h + 4);
+        s->font[k].count = count;
+        s->font[k].widest = widest;
     }
-    nfonts = nf;
+    s->nfonts = nf;
     return used;
 }
 
@@ -263,13 +278,14 @@ int s2gfx_init(struct zip *z)
         dir = WHOLE;
         dir_len = graf->size;
     }
-    nsprites = nfonts = 0;
+    menu.base = SECT;
+    menu.nsprites = menu.nfonts = 0;
     nlines = 0;
     uint32_t spr = entry("MENUL.SPR", SECT, SECT_MAX), glyphs = (spr + 3) & ~3u, used;
-    if (!spr || !build_sprites(SECT, spr)) return dlog_str("ui: MENUL.SPR unusable\n"), 0;
+    if (!spr || !build_sprites(&menu, SECT, spr)) return dlog_str("ui: MENUL.SPR unusable\n"), 0;
     uint32_t fnt = entry("MENUL.FNT", UNPACK, UNPACK_MAX);
-    if (!fnt || !(used = build_fonts(UNPACK, fnt, SECT + glyphs, SECT_MAX - glyphs, glyphs))) return dlog_str("ui: MENUL.FNT unusable\n"), 0;
-    int banners = load_banners(z, (int)(font[nfonts - 1].first_image + font[nfonts - 1].count));
+    if (!fnt || !(used = build_fonts(&menu, UNPACK, fnt, SECT + glyphs, SECT_MAX - glyphs, glyphs))) return dlog_str("ui: MENUL.FNT unusable\n"), 0;
+    int banners = load_banners(z, (int)(menu.font[menu.nfonts - 1].first_image + menu.font[menu.nfonts - 1].count));
     nlater = 0;
     s2gfx_clip(0, FB_H, 0, FB_H);
     settle();
@@ -281,9 +297,9 @@ int s2gfx_init(struct zip *z)
         add_lines(STAGE, e->size, "STRINGS.TXT", &u);
     }
     dlog_str("ui: ");
-    dlog_dec((int32_t)nsprites);
+    dlog_dec((int32_t)menu.nsprites);
     dlog_str(" sprites, ");
-    dlog_dec((int32_t)nfonts);
+    dlog_dec((int32_t)menu.nfonts);
     dlog_str(" fonts (");
     dlog_dec((int32_t)((glyphs + used) / 1024));
     dlog_str(" KB), ");
@@ -292,6 +308,45 @@ int s2gfx_init(struct zip *z)
     dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
     dlog_str(" ms\n");
     return ready = 1;
+}
+
+/* GAMEL.SPR and GAMEL.FNT of GFX/GAME1.DAT, each into its own memory, apart from the menu's: its directory (the container's end, or all of it when the
+   ZIP is deflated), the sprites as the file is, the glyphs after them */
+int s2gfx_game_init(struct zip *z)
+{
+    static uint32_t gdir[GDIR_MAX / 4 + 4];
+    uint32_t t0 = rdcycle();
+    const struct zip_entry *c = zip_find(z, "GFX/GAME1.DAT");
+    if (!c) return dlog_str("ui: GFX/GAME1.DAT is not in the ZIP\n"), 0;
+    const uint8_t *dr;
+    uint32_t dr_len;
+    zip = z;
+    if (c->method == 0) {
+        dr_len = c->size < GDIR_MAX ? c->size : GDIR_MAX;
+        if (zip_read_range(z, c, c->size - dr_len, dr_len, (uint8_t *)gdir, sizeof gdir)) return dlog_str("ui: GAME1.DAT unreadable\n"), 0;
+        dr = (const uint8_t *)gdir;
+    } else {
+        if (c->size + ZIP_SLACK > WHOLE_MAX - 0x500000u || zip_read(z, c, GWHOLE, WHOLE_MAX - 0x500000u)) return dlog_str("ui: GAME1.DAT unreadable\n"), 0;
+        dr = GWHOLE;
+        dr_len = c->size;
+    }
+    game.base = GMEM;
+    game.nsprites = game.nfonts = 0;
+    uint32_t spr = entry_of(c, dr, dr_len, "GAMEL.SPR", GMEM, GSPR_MAX), glyphs = (spr + 3) & ~3u, used;
+    if (!spr || !build_sprites(&game, GMEM, spr)) return dlog_str("ui: GAMEL.SPR unusable\n"), 0;
+    uint32_t fnt = entry_of(c, dr, dr_len, "GAMEL.FNT", UNPACK, UNPACK_MAX);
+    if (!fnt || !(used = build_fonts(&game, UNPACK, fnt, GMEM + glyphs, GSPR_MAX + GGLYPH_MAX - glyphs, glyphs))) return dlog_str("ui: GAMEL.FNT unusable\n"), 0;
+    settle();
+    dlog_str("ui: game set ");
+    dlog_dec((int32_t)game.nsprites);
+    dlog_str(" sprites, ");
+    dlog_dec((int32_t)game.nfonts);
+    dlog_str(" fonts (");
+    dlog_dec((int32_t)((glyphs + used) / 1024));
+    dlog_str(" KB), ");
+    dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
+    dlog_str(" ms\n");
+    return 1;
 }
 
 /* ------------------------------------------------------------------------------------------------ a frame */
@@ -359,31 +414,34 @@ void s2gfx_picture(struct blit_list *l, const uint8_t *pic)
     blit_copy(l, pic, 320, 200, 320, 0, 0, BLIT_COPY | BLIT_OPAQUE, 0);
 }
 
-/* a sprite of MENUL.SPR, or one of the race banners that follow the fonts */
-static int sprite_ok(int n)
+/* a sprite of the set, or (menu set) one of the race banners that follow its fonts */
+static int sprite_ok(const struct set *set, int n)
 {
-    return n >= 0 && (n < (int)nsprites || (banner_img && n >= banner_img && n < banner_img + 7));
+    return n >= 0 && (n < (int)set->nsprites || (set == &menu && banner_img && n >= banner_img && n < banner_img + 7));
 }
 
-void s2gfx_sprite(struct blit_list *l, int n, int x, int y)
+static void sprite_of(const struct set *set, struct blit_list *l, int n, int x, int y)
 {
-    if (!sprite_ok(n)) return;
-    const struct blit_image *s = &img[n];
-    copy_clipped(l, SECT + s->off, s->w, s->h, x + s->x, y + s->y, BLIT_COPY, 0, clip_spr_y0, clip_spr_y1);
+    if (!sprite_ok(set, n)) return;
+    const struct blit_image *s = &set->img[n];
+    copy_clipped(l, set->base + s->off, s->w, s->h, x + s->x, y + s->y, BLIT_COPY, 0, clip_spr_y0, clip_spr_y1);
 }
 
-void s2gfx_sprite_centred(struct blit_list *l, int n, int y)
+static void sprite_centred_of(const struct set *set, struct blit_list *l, int n, int y)
 {
-    if (!sprite_ok(n)) return;
-    const struct blit_image *s = &img[n];
-    s2gfx_sprite(l, n, (320 - (s->w + s->x)) / 2 - (s->x - (s->x >> 31)) / 2, y);
+    if (!sprite_ok(set, n)) return;
+    const struct blit_image *s = &set->img[n];
+    sprite_of(set, l, n, (320 - (s->w + s->x)) / 2 - (s->x - (s->x >> 31)) / 2, y);
 }
 
-int s2gfx_text(struct blit_list *l, int font_no, int colour, int space, int x, int y, const char *s)
+/* The original's text routine (the engine's 0xc67f0, its width 0xc6c88): between two characters `space` more pixels, none before the first or
+   after the last (a width has no trailing space). After the control byte 1 every character sits in a cell of the font's widest + space, centred
+   (the cell less the glyph's width, halved, the shift arithmetic), only the first character's cell is the widest without the space. */
+static int text_of(const struct set *set, struct blit_list *l, int font_no, int colour, int space, int x, int y, const char *s)
 {
-    if (font_no < 0 || font_no >= (int)nfonts) return 0;
-    const struct blit_font *f = &font[font_no];
-    int cell = (int)f->widest + space, fixed = 0, x0 = x;
+    if (font_no < 0 || font_no >= (int)set->nfonts) return 0;
+    const struct blit_font *f = &set->font[font_no];
+    int cell = (int)f->widest, fixed = 0, started = 0, x0 = x;
     for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
         int ch = *p;
         if (ch < (int)f->first || ch >= (int)(f->first + f->count)) {
@@ -391,27 +449,35 @@ int s2gfx_text(struct blit_list *l, int font_no, int colour, int space, int x, i
             else if (ch == 2) fixed = 0;
             continue;
         }
-        const struct blit_image *g = &img[f->first_image + (uint32_t)(ch - (int)f->first)];
-        int w = g->w;
-        if (l) copy_clipped(l, SECT + g->off, w, g->h, x + (fixed ? (cell - (w + 1)) / 2 : 0), y, BLIT_FONT, colour, clip_text_y0, clip_text_y1);
-        x += fixed ? cell : w + space;
+        const struct blit_image *g = &set->img[f->first_image + (uint32_t)(ch - (int)f->first)];
+        int w = g->w, at = fixed ? x + ((cell - w) >> 1) : started ? x + space : x;
+        if (l && ch != ' ') copy_clipped(l, set->base + g->off, w, g->h, at, y, BLIT_FONT, colour, clip_text_y0, clip_text_y1);   /* (the space has no pixels) */
+        x = fixed ? x + cell : at + w;
+        if (!started) cell += space;
+        started = 1;
     }
     return x - x0;
 }
 
-void s2gfx_text_centred(struct blit_list *l, int font_no, int colour, int space, int y, const char *s)
+static void text_centred_of(const struct set *set, struct blit_list *l, int font_no, int colour, int space, int y, const char *s)
 {
-    int w = s2gfx_text(0, font_no, colour, space, 0, 0, s);
-    if (w > 0) w -= space;                                  /* (the original's measure, 0xc6c88, leaves the gap after the last character out) */
-    s2gfx_text(l, font_no, colour, space, (320 - w) >> 1, y, s);
+    text_of(set, l, font_no, colour, space, (320 - text_of(set, 0, font_no, colour, space, 0, 0, s)) >> 1, y, s);
 }
+
+void s2gfx_sprite(struct blit_list *l, int n, int x, int y) { sprite_of(&menu, l, n, x, y); }
+void s2gfx_sprite_centred(struct blit_list *l, int n, int y) { sprite_centred_of(&menu, l, n, y); }
+int s2gfx_text(struct blit_list *l, int font_no, int colour, int space, int x, int y, const char *s) { return text_of(&menu, l, font_no, colour, space, x, y, s); }
+void s2gfx_text_centred(struct blit_list *l, int font_no, int colour, int space, int y, const char *s) { text_centred_of(&menu, l, font_no, colour, space, y, s); }
 
 void s2gfx_text_boxed(struct blit_list *l, int font_no, int colour, int space, int x0, int width, int y, const char *s)
 {
-    int w = s2gfx_text(0, font_no, colour, space, 0, 0, s);
-    if (w > 0) w -= space;                                  /* (the original's measure has no gap after the last character, as for s2gfx_text_centred) */
-    s2gfx_text(l, font_no, colour, space, x0 + ((width - w) >> 1), y, s);
+    text_of(&menu, l, font_no, colour, space, x0 + ((width - text_of(&menu, 0, font_no, colour, space, 0, 0, s)) >> 1), y, s);
 }
+
+void s2gfx_game_sprite(struct blit_list *l, int n, int x, int y) { sprite_of(&game, l, n, x, y); }
+void s2gfx_game_sprite_centred(struct blit_list *l, int n, int y) { sprite_centred_of(&game, l, n, y); }
+int s2gfx_game_text(struct blit_list *l, int font_no, int colour, int space, int x, int y, const char *s) { return text_of(&game, l, font_no, colour, space, x, y, s); }
+void s2gfx_game_text_centred(struct blit_list *l, int font_no, int colour, int space, int y, const char *s) { text_centred_of(&game, l, font_no, colour, space, y, s); }
 
 /* ------------------------------------------------------------------------------------------------ the darkening */
 

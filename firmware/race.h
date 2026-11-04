@@ -70,5 +70,6 @@ uint32_t race_steps(void);
 /* How many times a car has been put back on the line since race_init (a test counter, also in the log) */
 uint32_t race_respawns(void);
 
-/* The length of the line in units (a lap) */
+/* The length of the line in units (a lap), and its nodes (the race screen's checkpoints are the fifths of a lap) */
 int race_line_length(void);
+int race_line_nodes(void);

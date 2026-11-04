@@ -184,7 +184,7 @@ and league) are row 5.
 
 | Module | What it does |
 |---|---|
-| `s2gfx.c` | `.BKK` pictures (`s2gfx_bkk`: 24-byte header, palette x4, 64,000 pixels, read from `GFX/GRAF1.DAT` of the ZIP by range, about 40 KB and 50 ms for a picture), `MENUL.SPR` sprites and `MENUL.FNT` fonts as the blitter's image tables, text with the original's spacing (`s2gfx_text`, 0x50f45), sprites (also centred, 0x333d9), the `LOCAL.DAT` lines, the original's darkening table and a darkened still of the screen; one frame = `s2gfx_begin()` (blitter list for the back buffer), the page's commands, `s2gfx_end(pal, fade)` (palette faded, swap) |
+| `s2gfx.c` | `.BKK` pictures (`s2gfx_bkk`: 24-byte header, palette x4, 64,000 pixels, read from `GFX/GRAF1.DAT` of the ZIP by range, about 40 KB and 50 ms for a picture), `MENUL.SPR` sprites and `MENUL.FNT` fonts as the blitter's image tables, text with the original's spacing (`s2gfx_text`: the engine's 0xc67f0 and 0xc6c88, docs/screamer2/hud.md section 2), sprites (also centred, 0x333d9), the `LOCAL.DAT` lines, the original's darkening table and a darkened still of the screen; one frame = `s2gfx_begin()` (blitter list for the back buffer), the page's commands, `s2gfx_end(pal, fade)` (palette faded, swap) |
 | `s2page.c` | the page runner: `struct s2_page` (picture, palette, fade in / out frames, and a frame, key and draw function) and `s2page_run()`, the loop of the original's pages (keys with repeat as the start menu has them, fade, draw, swap); the Pocket's buttons are Screamer 1's: B or Start = ENTER, A or Select = ESC (`S2PAGE_ENTER`, `S2PAGE_ESC`) |
 | `s2load.c` | the LOADING screen; `s2_best_get` gives it the track's best total time and best lap, the first rows of the save's arcade lists (`--:--:-- MIL` for a track nobody has driven); `s2_time_text` is the original's time text (0x37e1e) |
 | `s2pause.c` | the pause menu |
@@ -372,8 +372,10 @@ into 19,348 bytes), and the migration with the owner's real file.
 - The room's face count and the frame cost of a room, a scene and the heaviest map (measure when step 5 or 8 starts; the budget is the race's 20 ms).
 - The menu sounds: the 15 samples are read (section 6); which one each page plays is known for the arcade title, TRACK, CAR, TRANSMISSION and GAME SETTINGS pages (the code of the others calls
   the sound manager with ids 0 to 14 at 60 places, `STARTL.EXE` 0x307e3 .. 0x436fd). The menu's music (CD track 2 while in the menu) is not played.
-- The loading screen's, the pause screen's, the end screen's and the two pages' pixels were not compared with the original running (their positions, fonts, spacing and colours are read from its code, and the
-  tests compare the firmware with an independent drawing of the same reading: `tools/menu_screens.sh`); the race screen's own text is still the console's, not `GAMEL.FNT`'s.
+- The loading screen's, the pause screen's, the end screen's and the two pages' pixels were not compared with the original running (their positions, fonts,
+  spacing and colours are read from its code, and the tests compare the firmware with an independent drawing of the same reading: `tools/menu_screens.sh`). The race
+  screen is built (`firmware/s2hud.c`, docs/screamer2/hud.md): `GAMEL.SPR` / `.FNT` through `s2gfx_game_*`; the toolkit's text now follows the engine's routine (a width has no
+  trailing space, fixed-pitch cells), which moved centred texts by up to half a space.
 - The pages' fade in (a cut, as read: nothing in the pages' code fades them in; VIEW HIGH SCORES fades out in 0.5 s, ESC is a cut), the end screen's sound fade of the effects (0xaee60 in its code) and the CD / menu music are not done.
 - The end screen's cost on the Pocket is not measured; in the simulation (docs/development.md "End of the race and the two pages") the first frame takes 70 ms (the darkening table) and then 3.3 ms a frame, and
   the race on track 4 before the finish took 10.9 ms mean and 11.8 ms worst against 10.7 / 11.5 before row 3 (cache layout).

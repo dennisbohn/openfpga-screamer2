@@ -51,8 +51,7 @@ class Ref:
         return c
 
     def centred(self, c, font, colour, space, y, txt):
-        w = c.text_width(self.fnt[font], space, txt)
-        w -= space if w else 0                      # the original's measure (0xc6c88) has no gap after the last character
+        w = c.text_width(self.fnt[font], space, txt)    # (the engine's measure, 0xc6c88: no gap after the last character)
         c.text(self.fnt[font], colour, space, (320 - w) >> 1, y, txt)
 
     # --- the pages: an object with key(tick, buttons that went down) -> result and draw(tick, canvas)
