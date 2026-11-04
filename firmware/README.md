@@ -17,8 +17,8 @@ reads the game's ZIP from its data slot (`zip.c`) and shows the list of the game
 green where they are, red where a needed one is missing, grey for the optional ones, and in plain words
 what is wrong with the ZIP. When nothing is missing it says "ready" and reads the first race's small
 files whole as a test, logging the time of each (`zip: <name> method <m> <bytes> bytes in <ms> ms`).
-That screen is all of Screamer 2 so far; the Screamer 1 game code is still in the tree and not
-reached. A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
+When the files are all there the start menu (`s2menu.c`) follows and then the viewer and the race (`viewer.c`); the Screamer 1 game code
+is still in the tree and not reached. A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
 
 ## Building
 
@@ -52,6 +52,7 @@ and package versions pinned); the script builds the image on first use. The resu
 | `champ.c`, `save.c` | the championship, saved data (nonvolatile data slots) |
 | `menu.c`, `hud.c`, `intro.c` | menus, the race screen, the intro |
 | `sound.c`, `speech.c`, `music.c` | sound effects, the race commentary, the music: streamed from the CD image, or the MIDI songs on the FM chip |
+| `s2menu.c` | Screamer 2's start menu: track, team, car, laps, level, gearbox, START RACE / WATCH in the console's text style; the names from `DATA/LOCAL.DAT`, the choices kept in `CHOICE.DAT`; the keys, the grid and the kept choices are tested on the PC (`tools/menu_screens.sh`) |
 | `s2snd.c`, `s2sound.c` | Screamer 2's race sound: `s2snd.c` the rules without hardware (the samples of `DATA/SOUND.DAT`, `CD_TRACKS`, an engine's rate, volume and pan, the tyres, the knocks; `tools/s2/check_sound.sh`), `s2sound.c` the voices, the music's start and fade, called from `viewer.c` |
 | `fm.c` | the FM music: HMI's song player and OPL2 driver, queueing the chip's register writes with their times |
 | `files.c` | the files screen: the ZIP's state, every file green/red/grey, the notice for a compressed ZIP, the read test |

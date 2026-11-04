@@ -2,9 +2,10 @@
  * The viewer: milestone 2 of Screamer 2 on the Pocket. A track of the game, built by the firmware from
  * the ZIP (track_build_s2) and drawn through the hardware path (geometry unit, setup unit, rasterizer,
  * blitter) with the original's level of detail at DETAIL HIGH, from the chase camera over a car that
- * drives the road at 150 km/h in a loop (road.h), with the player's car and three more ahead of it.
- * No menu, physics, race screen, sound or music: it shows what the renderer does with the game's own
- * data, and how long a frame takes (docs/screamer2/performance.md has the forecast).
+ * drives the road at 150 km/h in a loop (road.h), with the player's car and three more ahead of it,
+ * or, from the start menu (s2menu.h), a race on the car physics against three computer cars (race.h). It shows what the renderer
+ * does with the game's own data, and how long a frame takes (docs/screamer2/performance.md has the forecast).
+ * Select + B in the race or the ride returns to the menu; docs/development.md, "Viewer", has all the buttons.
  *
  *   d-pad left / right   the previous / next track (1 to 7; the track is loaded again)
  *   A                    the cars: 4 (the realistic field), 0, 1 (the player's) in turn
@@ -18,7 +19,7 @@
 #pragma once
 #include <stdint.h>
 
-/* Start at track 1 (in the simulation: the track the testbench names) and never return. results: the
+/* Show the start menu and go on from there, for ever (in the simulation: no menu, the track the testbench names). results: the
    boot loader's results, for the simulation's end. Needs the ZIP opened by files_check() and the read
    test passed (files_ready()). */
 void __attribute__((noreturn)) viewer_run(uint32_t results);

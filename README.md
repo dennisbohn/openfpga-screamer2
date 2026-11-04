@@ -25,11 +25,16 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   path with the original's level of detail at DETAIL HIGH (placed meshes 6,000 / 9,000 units, cars 2,000 /
   6,000; far plane from TRACK_DATA). A timing overlay (B) and `debug.txt` give the frame times to hold against the
   forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
-  gaps: the cars' windows show the original's environment picture but it does not slide, no shadows, smoke, props, fade, night, mirror, menus; the ride is silent (the race has sound, next bullet).
-- **Driving mode (a race):** Start in the viewer puts you and three computer cars on the game's start grid, holds them for
+  gaps: the cars' windows show the original's environment picture but it does not slide, no shadows, smoke, props, fade, night, mirror, the original's menus (a plain start menu below, docs/screamer2/menus.md has the plan for the rest); the ride is silent (the race has sound, next bullet).
+- **Start menu:** after the files screen a list in the console's text style (`firmware/s2menu.c`): track 1 to 7 (the names from the
+  game's `STRINGS.TXT`), your team (CONDOR, ANGELS, WASP, ZEUS) and car 1 to 5, laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL,
+  PRO), the gearbox, START RACE and WATCH (the ride). Everything is open from the start. d-pad up/down row, left/right value, L / R three
+  tracks on or back, A or Start go; Select + B in the race returns to it, and after a finished race A races again, B goes to the menu. The choices
+  are kept across power-ups. Docs: docs/development.md, "Start menu".
+- **Driving mode (a race):** the race of the start menu (or Start in the ride) puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
   L / R gears), from the physics' chase camera, with speed, gear, lap, position and times on the screen. The computer cars
-  each wear their own team's model and paint (teams 2 to 4's cars 2 to 4; the player's is team 1's car 1; the image holds exactly those four, `race_grid`, docs/development.md "Teams") and are driven by the game's own driver along its line (`firmware/race.c`); laps and places are counted on that line. The car is the game's own model in single precision (`firmware/s2car.c`, ported from
+  each wear their own team's model and paint (by default teams 2 to 4's cars 2 to 4, the player's is team 1's car 1; the menu changes the player's and the computers get the other teams; the image holds exactly those four, `race_grid`, docs/development.md "Teams") and are driven by the game's own driver along its line (`firmware/race.c`); laps and places are counted on that line. The car is the game's own model in single precision (`firmware/s2car.c`, ported from
   OpenScreamer's routines; the car's numbers read from the game's files, `firmware/s2params.c`), checked against traces of
   the original's routines (docs/screamer2/driving.md): equal on level ground, in the first wall hit and in a jump, the
   car's place kept as a float (the original's whole-number places hold a car back at 50 steps a second). The stand-in

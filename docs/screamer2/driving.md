@@ -285,9 +285,8 @@ physics step is the cost: its four ground looks and about 20 `atanf`) are the ne
   of view 3 only in the numbers.
 - Not done: the road kind's effects on the look, the dust, the camera's other views, damage from a car against a car and the DAMAGES option.
 - The race (section above): the game's swept solver for touching cars, sparks, sounds and damage from a touch; the split times and
-  "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie are a constant, `LEVEL` in
-  `race.c`) and the number of laps (`RACE_LAPS`) are not in a menu; the computers' cars are teams 2 to 4's cars 2 to 4 whatever the
-  player's car is (`race_grid` in `race.h` takes any teams and cars; a menu has to set it before the track is loaded, docs/development.md,
-  "Teams"); the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text.
+  "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie, `race_level`) and the number of laps (`race_laps`) and the player's team and car
+  (`race_grid`) are set by the start menu (`firmware/s2menu.c`, docs/development.md "Start menu"); the computers' cars are the other three
+  teams' cars of their own numbers; the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text.
 - Not compared with a recording of the original's computer cars: the lap times above are the model's own (the original ran at 17
   pictures a second with whole-number places; its cars were slower).

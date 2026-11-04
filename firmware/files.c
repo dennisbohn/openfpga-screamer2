@@ -315,7 +315,7 @@ void files_draw(volatile uint8_t *fb, int failed)
     } else if (req_deflated && load_state != 2) {
         for (int i = 0; i < 3; i++) con_text(fb, 1, 22 + i, slow_text[i], WHITE, BLACK);
     } else if (load_state == 1) {
-        con_text(fb, 1, 23, "Starting the viewer (A or B: now)", WHITE, BLACK);
+        con_text(fb, 1, 23, "Starting the menu (A, B or Start: now)", WHITE, BLACK);
     }
 }
 

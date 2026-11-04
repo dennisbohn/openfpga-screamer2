@@ -30,6 +30,12 @@ struct race_hud {
    takes the cars' physics and numbers from it. */
 extern struct s2_pick race_grid[RACE_CARS];
 
+/* The laps of a race (RACE_LAPS unless a menu says otherwise; the game's options are 1, 3, 5, 10) and the computers' level, the
+   row of MISC.DTR's SKILLS: 0 pro, 1 normal (default), 2 rookie (the game's level = 2 - ARCADE ENEMIES SKILL). Set before
+   race_init(). */
+extern int race_laps;
+extern int race_level;
+
 /* Track 1 .. 7: the line read (once per track) and the four cars put on the grid, the player's car 0 last, the
    countdown at 0. 1 if it worked. floor_z: a car lower than this is put back on the line. */
 int race_init(int track, float floor_z);

@@ -19,7 +19,6 @@
 #define TWO_PI_F    6.28318548f
 #define HALF_PI_F   1.57079637f
 #define DT          0.02f
-#define LEVEL       1               /* the arcade race's level: 0 pro, 1 normal, 2 rookie (the SKILLS row) */
 #define LINE_MAX    64              /* nodes of a line: 36 to 48 */
 #define OFF_STEPS   150             /* a car with no ground under it for 3 s is put back on the line */
 #define STILL_STEPS 300             /* a computer's car that has not moved for 6 s too */
@@ -215,6 +214,8 @@ static struct {
 } R;
 
 struct s2_pick race_grid[RACE_CARS] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } };
+int race_laps = RACE_LAPS;
+int race_level = 1;
 
 struct s2car_state *race_car(int i) { return &R.car[i]; }
 int race_cars(void) { return R.n; }
@@ -246,7 +247,7 @@ static void lap_done(int i, int by)
     if(I(c, 0x4a8) <= I(c, 0x4ac)) return;
     I(c, 0x4ac) = I(c, 0x4a8);
     if(!(F(c, 0xc3c) >= F(c, 0xc40))) F(c, 0xc40) = F(c, 0xc3c);
-    if(I(c, 0x4a8) == RACE_LAPS) {
+    if(I(c, 0x4a8) == race_laps) {
         I(c, 0x4c) |= 3;
         F(c, 4) = (float)(R.n - I(c, 0xc30)) * 0.2f;
     }
@@ -465,7 +466,7 @@ static void places_and_pace(void)
         float x = (F(a, 0x4bc) - mean) * 3.0f / 200000.0f + 3.0f;
         x = !(x > 0.01f) ? 0.01f : x >= 5.99f ? 5.99f : x;
         const int k = (int)x;
-        const float f = x - (float)k, v = (1.0f - f) * R.skills[LEVEL][k] + R.skills[LEVEL][k + 1] * f;
+        const float f = x - (float)k, v = (1.0f - f) * R.skills[race_level][k] + R.skills[race_level][k + 1] * f;
         F(a, 0x48) = !(0.0f > v) ? v : 0.0f;
     }
 }
@@ -545,6 +546,8 @@ static void put_on_line(int i)
 int race_init(int track, float floor_z)
 {
     if(track < 1 || track > 7) return 0;
+    if(race_level < 0 || race_level > 2) race_level = 1;
+    if(race_laps < 1) race_laps = RACE_LAPS;
     R.n = 0;
     R.track = track;
     R.floor_z = floor_z;
@@ -634,8 +637,8 @@ void race_get_hud(struct race_hud *h)
     const struct s2car_state *c = &R.car[0];
     int lap = I(c, 0x4ac) + 1;
     h->count = R.clock < 4.0f ? 3 - (int)R.clock : -1;
-    h->laps = RACE_LAPS;
-    h->lap = lap > RACE_LAPS ? RACE_LAPS : lap;
+    h->laps = race_laps;
+    h->lap = lap > race_laps ? race_laps : lap;
     h->place = I(c, 0xc30);
     h->cars = R.n;
     h->finished = (I(c, 0x4c) & 2) != 0;

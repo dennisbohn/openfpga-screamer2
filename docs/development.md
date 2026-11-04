@@ -48,7 +48,7 @@ libraries merged after the track's (the face's material is a signed 16-bit offse
 cars' material records are collected in a section in front of the MLB and the cars' faces point there; the
 texture records and pixels stay in the cars' own `.MLB` files, appended after the track's), and the picture of
 the cars' windows (below). The cars are the four of the grid, each its own team's ("Teams" below). The image is 3.5 to 5.4 MB of the 7 MB window at `0x1210_0000`. There is no camera path, no markers file (Screamer 2 counts the laps on
-the line of `MAPnOPP.SPL`, which the firmware reads from `DATA/MAPn.DAT` itself, `firmware/race.c`) and no menu. Nothing is converted on the PC.
+the line of `MAPnOPP.SPL`, which the firmware reads from `DATA/MAPn.DAT` itself, `firmware/race.c`) and none of the original's menus (a plain start menu, "Start menu" below). Nothing is converted on the PC.
 
 `tools/s2/make_track_s2.py <game folder> <n> <out.bin>` builds the same image on the PC. It only serves
 as the reference for `tools/s2/check_track_build_s2.sh [game folder]`, which compiles the firmware's
@@ -69,31 +69,66 @@ PC (`build/check/screens/*.png`).
 
 ## Viewer (milestone 2)
 
-After the files screen (A, B or START, or 5 s once the read test passed) the core loads track 1 and shows
-it from the game's near chase camera over a car that drives the road at 150 km/h in a loop, with the
-player's car and three more ahead (`firmware/viewer.c`, `firmware/road.c`). Frames go through the
+After the files screen (A, B or START, or 5 s once the read test passed) the core shows the start menu
+(next section); WATCH there loads the chosen track and shows it from the game's near chase camera over a car that drives
+the road at 150 km/h in a loop, with the player's car and three more ahead (`firmware/viewer.c`, `firmware/road.c`). Frames go through the
 hardware path (geometry unit, setup unit, rasterizer, blitter) with the original's level of detail at
 DETAIL HIGH (`track_lod_level()`: placed meshes switch at 6,000 and 9,000 units, cars at 2,000 and 6,000;
-far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). No menu or race screen, and the
-ride is silent (the race has sound and music, "Sound" below). Start switches between this ride and the driving mode (next section).
+far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). The ride is silent (the race has sound and music,
+"Sound" below). Start switches between this ride and the driving mode ("Driving mode" below).
+
+### Start menu
+
+A list in the console's text style (`firmware/s2menu.c`, 40 x 25 characters; the originals' own menu screens are in
+docs/screamer2/menus.md). Everything is open from the start: all seven tracks, all four teams and their five cars, no championship.
+
+| Row | Values |
+|---|---|
+| TRACK SELECTION | 1 ENGLAND, 2 COLUMBIA, 3 EGYPT, 4 CALIFORNIA, 5 FINLAND, 6 SWITZERLAND, 7 THE TUNNEL (the names are read from `STRINGS.TXT` in `DATA/LOCAL.DAT` of the ZIP; the built-in text is the same, so a ZIP without it still works) |
+| TEAM SELECTION, CAR SELECTION | the player's team (CONDOR, ANGELS, WASP, ZEUS) and car 1 to 5 (5 is the team's bonus car): slot 0 of `race_grid` (`race.h`); the three computers get the three other teams, each with the car of its own number (team 1 car 1 gives the old default grid) |
+| NUMBER OF LAPS | 1, 3, 5, 10 (the original's options; `race_laps`) |
+| ARCADE ENEMIES SKILL | ROOKIE, NORMAL, PRO (the original's levels; `race_level = 2 - skill`, the row of `SKILLS` the computers' pace is read from) |
+| TRANSMISSION | AUTOMATIC, MANUAL |
+| START RACE / WATCH | the race (driving mode), or the viewer's ride (for timing) |
+
+| Button (menu) | |
+|---|---|
+| d-pad up / down | row (wraps) |
+| d-pad left / right | the row's value (wraps); a docked controller's stick works as the d-pad |
+| L / R | the track three back / on, from any row: every track is at most two moves from every other, so with Start at most three presses (track 4 from track 1: R, then A or Start) |
+| A or Start | START RACE (WATCH on its row); X: WATCH |
+
+The choices are kept: in the session, and across power-ups in the nonvolatile `CHOICE.DAT` (data slot 23, the block `champ.h` defines for
+Screamer 1, whose unused fields hold them: track, car, laps, level, team and the gearbox with a marker; `s2menu_store()`), which the
+Pocket writes back when the core exits. After the files screen the menu shows the last choices, so the usual start is two presses (A on the
+files screen, Start). The grid is applied when the track image is built (`load_track()`), so every start from the menu loads the track again
+(3 to 5 s; the cars that did not change are not read again). The log gets one line per start: `menu: race T4 CONDOR 1 3L NORMAL AUTO`.
+`tools/menu_screens.sh` runs the menu's code on the PC: tests of the keys, the grid, the kept choices and the texts read from the real ZIP,
+and pictures of the list in `build/check/menu/`.
+
+Back to the menu: Select + B in the race and in the ride (the music stops), and after the player has finished a race (a second later,
+so that the gas held across the line does nothing) A starts the race again and B goes to the menu; the FINISH screen says so. The
+loading screen shows the buttons too. The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
 
 | Button (ride) | |
 |---|---|
 | d-pad left / right | previous / next track (1 to 7), the track is loaded again (about 5 to 10 s) |
 | A | the cars: 4 (the realistic field), 0, 1 (the player's) in turn |
 | B | timing overlay on / off (default on) |
+| Select + B | back to the menu |
 | Start | the driving mode |
 
 ### Driving mode (the race)
 
 Start puts the player and three computer cars on the game's start grid (the player's car last, the others in front of him,
 two rows of two, 2,000 units apart, as the game's `0x2f519` places them), holds them for 3 seconds with the start lights (3, 2,
-1, then GO!), and lets the player race three laps against them (`firmware/race.c`, docs/screamer2/driving.md, "The race"). The buttons are Screamer 1's
+1, then GO!), and lets the player race the laps of the menu (3 by default) against them (`firmware/race.c`, docs/screamer2/driving.md, "The race"). The buttons are Screamer 1's
 (`core/input.json`, README "Controls": B accelerate, Y brake, d-pad steering, L / R the gears), the camera is
 the car physics' chase camera. The physics steps 20 ms at a time by real elapsed time (a video
 frame is 20 ms; at most 4 steps per frame, as Screamer 1's race), so a slow frame makes the picture slower, not
-the cars. The four cars (`firmware/s2car.c`) each wear their own team's model and paint: the player's is team 1's car 1
-(CONDOR), the computers' are team 2's car 2, team 3's car 3 and team 4's car 4 ("Teams" below). Speed in mph, gear and the gearbox (AUTO / MAN) are drawn top right, below it
+the cars. The four cars (`firmware/s2car.c`) each wear their own team's model and paint: by default the player's is team 1's car 1
+(CONDOR), the computers' are team 2's car 2, team 3's car 3 and team 4's car 4; the start menu sets the player's team and car and the
+computers get the other three teams ("Teams" below). Speed in mph, gear and the gearbox (AUTO / MAN) are drawn top right, below it
 `LAP 1/3` and `POS 1/4`, top left under the timing overlay `TIME`, `LAP` (this lap's clock) and `BEST`
 (mm:ss:hundredths). After his third lap the player's car is the game's driver's (it slows to a stop) and `FINISH`, his place and total
 time are on the screen.
@@ -108,6 +143,8 @@ time are on the screen.
 | X | timing overlay on / off (B is the gas here; Screamer 1's X, the camera, has no use yet) |
 | Select + left / right | previous / next track (the track is loaded again, a new race) |
 | Select + Start | a new race from the grid |
+| Select + B | back to the menu (the music stops) |
+| A / B after the finish | the race again / back to the menu (from a second after the line) |
 | Start | back to the ride |
 
 A car (any of the four) with no drivable ground under it for 3 s (`off_track` of the state), or more than 3,000 units below the
@@ -311,7 +348,7 @@ restart of the race on the same track (Select + Start) keeps its song. A frame a
 What is open: the original's volume balance is not known (the CD drive's analogue mix is not in the program; the two thirds are
 Screamer 1's choice), the pan law of the effects is HMI's as Screamer 1's `sound.c` has it, the car against car knock is the
 firmware's closing speed, the cones' knock and the scenery's sounds (`ANIMATIONS` rows with a sound, `AMBIENT*.DTR`) are not
-done, no menu sounds (there is no menu), no pause.
+done, no menu sounds (the start menu is silent), no pause.
 
 ## PC renderer
 
@@ -386,6 +423,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/dat_sizes.py <file.DAT>...` | lists a game container with unpacked sizes (`-v`: every file) |
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
+| `tools/menu_screens.sh`, `tools/host/menu_screen.c` | the start menu `firmware/s2menu.c` on the PC with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py`, `tools/s2/check_cars_s2.py` | the Screamer 2 track image on the PC (the reference; `S2CARS=team:car,...` chooses the grid's cars) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks and three grids, natively under the sanitizers; the windows' reflection picture and the cars' materials, textures and colours in the image against the original's |
 | `tools/s2/check_cars_s2.sh`, `tools/s2/check_cars_s2.c` | the cars' loader `firmware/s2teams.c` natively under the sanitizers on a stored and a deflated ZIP of the team containers: the cars equal the containers' own entries, the bytes read are counted, a repeated or partly changed grid reads nothing or only the changed cars |

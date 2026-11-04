@@ -19,6 +19,7 @@
 #include "race.h"
 #include "s2teams.h"
 #include "s2sound.h"
+#include "s2menu.h"
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
    ZIP's entries read whole), the build's scratch up to the program */
@@ -60,6 +61,7 @@
 #define RACE_OVERLAP    1               /* the computers' cars step while the rasterizer finishes the picture (race.h); 0: before the scene */
 #endif
 #define FALL_UNITS      3000.0f
+#define OFFER_FRAMES    50              /* the finished race offers "A: race again, B: menu" a second after the line */
 
 static const struct rs_clip clip = { 0, 0, FB_W, FB_H };
 static struct blit_list back;
@@ -101,14 +103,15 @@ static void screen_text(int n, const char *l1, const char *l2, const char *l3, i
     if (l1) con_text(fb, 20 - (int)__builtin_strlen(l1) / 2, 12, l1, err ? RED : GREEN, BLACK);
     if (l2) con_text(fb, 20 - (int)__builtin_strlen(l2) / 2, 13, l2, WHITE, BLACK);
     if (l3) con_text(fb, 20 - (int)__builtin_strlen(l3) / 2, 14, l3, GREY, BLACK);
-    con_text(fb, 1, 16, "RIDE   d-pad left/right: track", GREY, BLACK);
-    con_text(fb, 1, 17, "       A: cars 4/0/1  B: timing", GREY, BLACK);
-    con_text(fb, 1, 18, "       Start: drive (and back)", GREY, BLACK);
-    con_text(fb, 1, 20, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
-    con_text(fb, 1, 21, "       A handbrake  L/R gears", GREY, BLACK);
-    con_text(fb, 1, 22, "       up: auto/manual  X: timing", GREY, BLACK);
-    con_text(fb, 1, 23, "       Select + left/right: track", GREY, BLACK);
-    con_text(fb, 1, 24, "       Select + Start: to the start", GREY, BLACK);
+    con_text(fb, 1, 15, "RIDE   d-pad left/right: track", GREY, BLACK);
+    con_text(fb, 1, 16, "       A: cars 4/0/1  B: timing", GREY, BLACK);
+    con_text(fb, 1, 17, "       Start: drive (and back)", GREY, BLACK);
+    con_text(fb, 1, 19, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
+    con_text(fb, 1, 20, "       A handbrake  L/R gears", GREY, BLACK);
+    con_text(fb, 1, 21, "       up: auto/manual  X: timing", GREY, BLACK);
+    con_text(fb, 1, 22, "       Select + left/right: track", GREY, BLACK);
+    con_text(fb, 1, 23, "       Select + Start: restart", GREY, BLACK);
+    con_text(fb, 1, 24, "BOTH   Select + B: back to the menu", GREY, BLACK);
     VID_SWAP = 1;
 }
 
@@ -332,8 +335,10 @@ static char *fmt_time(char *p, float seconds)
     return p;
 }
 
-/* the race's text over the picture: the start lights, laps, place and times; when the player has finished, the result */
-static void race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg)
+/* the race's text over the picture: the start lights, laps, place and times; when the player has finished, the result and,
+   once offer is set (a second after the finish, so that the gas button held across the line does nothing), the two buttons: A
+   the race again, B the menu. Returns 1 if the player has finished. */
+static int race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg, int offer)
 {
     struct race_hud h;
     char l[40], *p;
@@ -368,8 +373,9 @@ static void race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg)
         con_text(fb, 20 - (int)__builtin_strlen(l) / 2, 11, l, fg, bg);
         fmt_time(fmt_str(l, "TIME "), h.time);
         con_text(fb, 20 - (int)__builtin_strlen(l) / 2, 12, l, fg, bg);
-        con_text(fb, 6, 14, " Select+Start: race again ", fg, bg);
+        if (offer) con_text(fb, 20 - 12, 14, " A: race again   B: menu ", fg, bg);
     }
+    return h.finished;
 }
 
 static int other_track(int n, uint32_t press)
@@ -377,8 +383,8 @@ static int other_track(int n, uint32_t press)
     return (press & KEY_RIGHT) ? n % TRACKS + 1 : (n + TRACKS - 2) % TRACKS + 1;
 }
 
-/* A visit to track n until the player picks another (its number), or a button changes the cars, the mode or
-   the overlay (they stay: -n, the same track again). The image is set up (load_track).
+/* A visit to track n until the player picks another (its number), asks for the menu (0: Select + B, or B after the finish), or a
+   button changes the cars, the mode or the overlay (they stay: -n, the same track again). The image is set up (load_track).
    Ride mode (*drive 0): the camera rides the road at a constant speed, the player's stand-in car and up to
    three more ahead of it. Driving mode: a race (race.h): the player drives car 0 on the physics (s2car.h), three computer
    cars on the grid with him, the camera is the physics' chase camera. */
@@ -394,7 +400,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     RS_CTRL = 1;
     static float resume_s;                              /* where the road was left when only the cars changed */
     static int timeline_done;
-    uint32_t keys_before = in_keys(), last_vf = 0, drawn = 0, window_vf = 0;
+    uint32_t keys_before = in_keys(), last_vf = 0, drawn = 0, window_vf = 0, fin_frames = 0;    /* (frames the player has been finished) */
     struct stats st_all = { 0 };
     float s = resume_s, floor_z = road_floor() - FALL_UNITS;
     resume_s = 0.0f;
@@ -426,9 +432,24 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 leave(n, mode, &st_all);
                 return other_track(n, press);
             }
+            if (sel && (press & KEY_B)) {               /* Select + B: back to the menu */
+                leave(n, mode, &st_all);
+                return 0;
+            }
+            if (fin_frames > OFFER_FRAMES) {            /* after the finish: A the race again, B the menu */
+                if (press & KEY_B) {
+                    leave(n, mode, &st_all);
+                    return 0;
+                }
+                if (press & KEY_A) {
+                    race_start(n, floor_z);
+                    fin_frames = 0;
+                }
+            }
             if (press & KEY_START) {
                 if (sel) {                              /* Select + Start: the race again from the grid */
                     race_start(n, floor_z);
+                    fin_frames = 0;
                 } else {                                /* Start: back to the ride */
                     leave(n, mode, &st_all);
                     *drive = 0;
@@ -453,7 +474,13 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 *drive = 1;
                 return -n;
             }
-            if (press & KEY_B) *overlay = !*overlay;
+            if (press & KEY_B) {
+                if (sel) {                              /* Select + B: back to the menu */
+                    leave(n, mode, &st_all);
+                    return 0;
+                }
+                *overlay = !*overlay;
+            }
         }
 
         /* the scene moves with real time: a video frame is 1/50 s whatever the frame took */
@@ -549,7 +576,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             p = pc->gear > 0 ? fmt_udec(p, (uint32_t)pc->gear) : fmt_str(p, "N");
             fmt_str(p, manual ? " MAN" : " AUTO");
             con_text(fb, CON_COLS - (int)__builtin_strlen(l), 0, l, col_text, col_bg);
-            race_text(fb, col_text, col_bg);
+            fin_frames = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES) ? fin_frames + 1 : 0;
         }
         tl_mark(TL_HUD);
 
@@ -615,6 +642,17 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     }
 }
 
+/* the menu's choices into the race (race.h): the grid, the laps, the computers' level, the gearbox */
+static struct s2_menu_cfg cfg;
+
+static void apply_cfg(void)
+{
+    s2menu_grid(&cfg, race_grid);
+    race_laps = s2_menu_laps[cfg.laps];
+    race_level = 2 - cfg.skill;
+    manual = cfg.manual;
+}
+
 void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
 {
     struct zip *z = files_zip();
@@ -625,25 +663,46 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     int drive = sim && (in_keys() & KEY_START);         /* in the simulation Start held (SIM_KEYS=8000): the driving mode */
     dlog_str("viewer: start\n");
     s2snd_init(z);
+    s2menu_init(z);
+    s2menu_load(&cfg);
     for (;;) {
-        const char *what = "";
-        screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);
-        if (load_track(z, n, &what)) {
-            int next;
-            while ((next = visit(n, &cars, &overlay, &drive)) < 0)
-                ;                                       /* the cars or the mode changed: the same visit again */
-            n = next;
-        } else {                                        /* what stopped it is in the log; left and right try another */
-            char l[40];
-            fmt_str(fmt_str(l, "Could not set up "), what);
-            screen_text(n, l, "see debug.txt in the Saves folder", "d-pad left/right: another track", 1);
-            uint32_t keys_before = in_keys();
-            for (;;) {
-                wait_swap_done();
-                uint32_t keys = in_keys(), press = keys & ~keys_before;
-                keys_before = keys;
-                if (press & KEY_RIGHT) { n = n % TRACKS + 1; break; }
-                if (press & KEY_LEFT) { n = (n + TRACKS - 2) % TRACKS + 1; break; }
+        if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
+            int go = s2menu_run(&cfg);
+            n = cfg.track;
+            drive = go == S2M_RACE;
+            apply_cfg();
+            s2menu_log(&cfg, go);
+        }
+        for (;;) {                                      /* the track, its visits, until the player asks for the menu */
+            const char *what = "";
+            screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);
+            if (load_track(z, n, &what)) {
+                int next;
+                while ((next = visit(n, &cars, &overlay, &drive)) < 0)
+                    ;                                   /* the cars or the mode changed: the same visit again */
+                cfg.track = next ? next : n;
+                cfg.manual = manual;                    /* (d-pad up in the race) */
+                s2menu_store(&cfg);
+                if (!next) break;
+                n = next;
+            } else {                                    /* what stopped it is in the log; left and right try another, B the menu */
+                char l[40];
+                fmt_str(fmt_str(l, "Could not set up "), what);
+                screen_text(n, l, "see debug.txt in the Saves folder", "d-pad left/right: another track  B: menu", 1);
+                uint32_t keys_before = in_keys();
+                int menu = 0;
+                while (!menu) {
+                    wait_swap_done();
+                    uint32_t keys = in_keys(), press = keys & ~keys_before;
+                    keys_before = keys;
+                    if (press & KEY_RIGHT) { n = n % TRACKS + 1; break; }
+                    if (press & KEY_LEFT) { n = (n + TRACKS - 2) % TRACKS + 1; break; }
+                    menu = !sim && (press & KEY_B);
+                }
+                if (menu) {
+                    cfg.track = n;
+                    break;
+                }
             }
         }
     }
