@@ -6,6 +6,9 @@
 #       the cells' visibility lists, everything in reach looked at (-DTRACK_NO_VIS)
 #   tools/s2/framestats.sh sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]   (ROAD_S=185,370: the viewer's frames at those places instead)
 #       the frames along the road, see framestats.c
+#   tools/s2/framestats.sh race <track image> <label> <out.csv> <steps> <every> [track]
+#       a race on the PC (the game's driver drives all four cars), a frame every <every> steps, see racestats.c
+#       (needs the game's folder for the physics: GAME_DIR, default C:/GOG Games/Screamer 2)
 # The firmware is never changed; the counters live in the copies. Game data only under build/.
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -27,7 +30,7 @@ build)
     src="$st/src_$v"
     rm -rf "$src"
     mkdir -p "$src"
-    cp "$root"/firmware/*.c "$root"/firmware/*.h "$root"/tools/s2/perf.h "$root"/tools/s2/perf.c        "$root"/tools/s2/framestats.c "$src/"
+    cp "$root"/firmware/*.c "$root"/firmware/*.h "$root"/tools/s2/perf.h "$root"/tools/s2/perf.c        "$root"/tools/s2/framestats.c "$root"/tools/s2/racestats.c "$src/"
     python -I - "$src/hw.h" <<'PY'
 import sys
 p = sys.argv[1]
@@ -44,7 +47,8 @@ open(p, "w").write(t)
 PY
     python -I "$root/tools/s2/perf_patch.py" "$src"
     docker_sh -v "$mount:/b" --entrypoint sh $img -c "
-        cd /b/stats/src_s2 && gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../framestats_s2 framestats.c perf.c $LIST -lm"
+        cd /b/stats/src_s2 && gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../framestats_s2 framestats.c perf.c $LIST -lm &&
+        gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../racestats_s2 racestats.c perf.c $LIST race.c -lm"
     ;;
 sweep)
     v=$1; image=$2; label=$3; out=$4; step=$5; cars=$6; grid=$7
@@ -52,8 +56,16 @@ sweep)
     docker_sh ${FAR:+-e FAR=$FAR} ${REACH:+-e REACH=$REACH} ${MIRROR:+-e MIRROR=$MIRROR} ${ROAD_S:+-e ROAD_S=$ROAD_S} -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats && ./framestats_$v $(basename "$image") $label $(basename "$out") $step $cars $grid"
     mv "$st/$(basename "$out")" "$out"
     ;;
+race)
+    image=$1; label=$2; out=$3; steps=$4; every=$5; tn=$6
+    cp "$image" "$st/$(basename "$image")"
+    game=${GAME_DIR:-C:/GOG Games/Screamer 2}
+    if command -v cygpath >/dev/null 2>&1; then game_mount=$(cygpath -wa "$game"); else game_mount=$game; fi
+    docker_sh -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game --entrypoint sh $img -c "cd /b/stats && ./racestats_s2 $(basename "$image") $label $(basename "$out") $steps $every $tn"
+    mv "$st/$(basename "$out")" "$out"
+    ;;
 *)
-    echo "usage: framestats.sh build | sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]"
+    echo "usage: framestats.sh build | race <image> <label> <out.csv> <steps> <every> [track] | sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]"
     exit 2
     ;;
 esac

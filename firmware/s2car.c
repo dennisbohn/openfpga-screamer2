@@ -32,6 +32,7 @@
 #include "track.h"
 #include "car.h"
 #include "dat.h"
+#include "prof.h"
 #include <math.h>
 #include <string.h>
 
@@ -997,19 +998,27 @@ static void wheel_pictures(car_t *c)
 /* 0x2baa4 for one car alone, up to the engine (0x167e2's first part) */
 static void frame_body(car_t *c, const struct s2car_input *in, int manual, int *squeal)
 {
+    PF_VAR(pf);
     RI(0x4c) &= ~8;
     tyres(c, squeal);
+    PF_ADD(PF_TYRES, pf); PF_SET(pf);
     struct corner_ground under[4];
     look_under_corners(c, under);
+    PF_ADD(PF_LOOK, pf); PF_SET(pf);
     against_wall(c, under);                             /* 0x16824 */
+    PF_ADD(PF_WALL, pf); PF_SET(pf);
     ground_under_wheels(c, under);
+    PF_ADD(PF_GROUND, pf); PF_SET(pf);
     ground_step(c);                                     /* 0x1b92b */
+    PF_ADD(PF_GSTEP, pf); PF_SET(pf);
     wheel_pictures(c);                                  /* 0x16878 */
+    PF_ADD(PF_WPIC, pf); PF_SET(pf);
     RF(0x30) = RF(0x30) - DT;                           /* 0x1f3ce: the knock's clocks run down */
     if(RF(0x30) < 0.0f) RF(0x30) = 0.0f;
     RF(4) = RF(4) - DT;
     if(RF(4) < 0.0f) RF(4) = 0.0f;
     engine(c, in, manual);                              /* 0x167e2: the clocks, the engine, the controls */
+    PF_ADD(PF_ENGINE, pf);
 }
 
 static void frame(car_t *c, const struct s2car_input *in, int *squeal)
@@ -1110,7 +1119,9 @@ void s2car_step(struct s2car_state *s, const struct s2car_input *in)
     car_t *c = s;
     RI(100) = c->manual ? 0 : 1;
     frame(c, in, &squeal);
+    PF_VAR(pf);
     outputs(c, squeal);
+    PF_ADD(PF_OUTPUTS, pf);
 }
 
 void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx)
@@ -1122,10 +1133,14 @@ void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state 
     frame_body(c, &none, 0, &squeal);
     RF(0x1e8) = 0.0f;                                   /* 0x1756f: no pedals */
     RF(0x1e4) = 0.0f;
+    PF_VAR(pf);
     driver(s, ctx);                                     /* 0x19409: the road under the car (0x153c6), the driver (0x17726) */
+    PF_ADD(PF_DRIVER, pf); PF_SET(pf);
     if((RI(0x4c) & 1) && (RI(4) & 0x7fffffff) == 0) { RI(0x1ec) = 0; RF(0x1e8) = 1.0f; }     /* finished and the time is up */
     steering_out(c, c->ai);
+    PF_ADD(PF_STEER, pf); PF_SET(pf);
     outputs(c, squeal);
+    PF_ADD(PF_OUTPUTS, pf);
 }
 
 float s2car_ground_grip(const struct s2car_state *s)

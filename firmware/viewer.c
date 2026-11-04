@@ -20,6 +20,7 @@
 #include "s2teams.h"
 #include "s2sound.h"
 #include "s2menu.h"
+#include "prof.h"
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
    ZIP's entries read whole), the build's scratch up to the program */
@@ -76,6 +77,28 @@ static struct blit_list back;
 static uint32_t sim_frames;             /* in the simulation: the frames to draw before it ends */
 static uint32_t results;
 static int sim;
+
+#ifdef S2_PROF
+uint32_t prof_t[PF_N], prof_n[PF_N];
+/* the simulation's cycle counters (prof.h): per frame, the mean cycles of each stretch and its runs */
+void prof_log(uint32_t frames)
+{
+    static const char *const name[PF_N] = {
+        "player step", "driver", "tyres", "look", "wall", "ground", "gstep", "wpic", "engine", "steer", "outputs",
+        "ai step", "collide", "line", "places", "scene", "sound", "cull setup", "cull walk", "cull objs", "cull sort",
+        "pieces static", "pieces obj", "pieces multi", "push" };
+    dlog_str("prof (cycles, runs a frame):\n");
+    for (int i = 0; i < PF_N; i++) {
+        dlog_str("  ");
+        dlog_str(name[i]);
+        dlog_char(' ');
+        dlog_dec((int32_t)(prof_t[i] / frames));
+        dlog_char(' ');
+        dlog_dec((int32_t)(prof_n[i] * 10 / frames));
+        dlog_char('\n');
+    }
+}
+#endif
 
 /* "10.4" for cycles, to one decimal of a millisecond */
 static char *fmt_ms(char *p, uint32_t cycles)
@@ -502,8 +525,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             race_pending = RACE_OVERLAP ? steps : 0;
             struct s2car_state *rc[RACE_CARS];
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
+            PF_VAR(pf);
             nobj = road_race_scene(rc, race_cars(), &cam, objs);
+            PF_ADD(PF_SCENE, pf); PF_SET(pf);
             s2snd_frame(&cam);                          /* the race's sound (s2sound.h) */
+            PF_ADD(PF_SOUND, pf);
         } else {
             uint32_t steps = drawn ? (dvf > 10 ? 10 : dvf) : 1;
             s += (float)steps * STEP_S * SPEED;
@@ -632,6 +658,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         }
         if (sim && drawn + 1 == sim_frames) {
             log_stats(n, mode, &st_all);
+#ifdef S2_PROF
+            prof_log(drawn + 1);
+#endif
             dlog_str("stack used ");
             dlog_dec((int32_t)stack_used());
             dlog_str(" bytes\n");

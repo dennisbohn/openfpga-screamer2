@@ -12,6 +12,7 @@
 #include "race.h"
 #include "s2params.h"
 #include "dat.h"
+#include "prof.h"
 #include <math.h>
 #include <string.h>
 
@@ -582,8 +583,10 @@ int race_init(int track, float floor_z)
 /* the first half of a step: the race's clock, places and pace, the lights, the player's car */
 void race_step_player(const struct s2car_input *in)
 {
+    PF_VAR(pf);
     R.clock += DT;
     places_and_pace();
+    PF_ADD(PF_PLACES, pf);
     if(!R.running && R.clock > 3.0f) {                  /* the lights are out: the cars are let go */
         R.running = 1;
         for(int i = 0; i < R.n; i++) R.car[i].hold = 0;
@@ -591,8 +594,11 @@ void race_step_player(const struct s2car_input *in)
     struct s2car_state *c = &R.car[0];
     if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }          /* 0x1f3ce */
     if(!(I(c, 0x4c) & 1)) {
+        PF_SET(pf);
         s2car_step(c, in);
+        PF_ADD(PF_PLAYER_STEP, pf); PF_SET(pf);
         locate(0);
+        PF_ADD(PF_LINE, pf);
     } else
         s2car_step_driven(c, driver, 0);                /* he has finished: the game's driver brings the car to a stop */
     R.steps++;
@@ -607,9 +613,13 @@ void race_step_others(uint32_t count)
         for(int i = 1; i < R.n; i++) {
             struct s2car_state *c = &R.car[i];
             if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }
+            PF_VAR(pf);
             s2car_step_driven(c, driver, (void *)(intptr_t)i);
+            PF_ADD(PF_AI_STEP, pf);
         }
+        PF_VAR(pc);
         collide();
+        PF_ADD(PF_COLLIDE, pc);
         for(int i = 0; i < R.n; i++) {                  /* a car off the road for good goes back onto the line */
             struct s2car_state *c = &R.car[i];
             R.off[i] = c->off_track ? R.off[i] + 1 : 0;

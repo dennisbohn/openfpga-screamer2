@@ -30,6 +30,7 @@
 #include <stdio.h>
 #endif
 #include "crc32.h"
+#include "prof.h"
 #include <math.h>
 #include <string.h>
 
@@ -158,8 +159,13 @@ struct vcell { uint16_t key, first, count, list, nlist; };      /* the table's c
 static const struct vcell *vcells;
 static const uint16_t *vlist;
 static int nvcells;
-static struct { float x0, y0, x1, y1; uint16_t first, count; } cells[MAX_CELLS];
+/* A cell's box round the places of its placements that have a mesh (x0 .. y1, the reach test), the middle of their
+   heights and the radius of the sphere round box and heights (r0), the largest reach of their meshes (rmax): enough to
+   tell that none of the cell's placements can be in view (cell_out) */
+static struct { float x0, y0, x1, y1, ch, r0, rmax; uint16_t first, count; } cells[MAX_CELLS];
 static int ncells;
+static int cells_keyed;                 /* every placement lies in its cell's square of the map's grid: draw() may pick the
+                                           cells of the camera's window by their keys instead of looking at all of them */
 
 int track_mode;
 void (*track_hw_piece)(const struct gu_piece *p);
@@ -177,6 +183,8 @@ static inline uint32_t now(void)
 #define INT_NOW2(a, b) __asm__ ("" : "+r"(a), "+r"(b))
 #define INT_NOW4(a, b, c, d) __asm__ ("" : "+r"(a), "+r"(b), "+r"(c), "+r"(d))
 #define INT_NOW6(a, b, c, d, e, f) __asm__ ("" : "+r"(a), "+r"(b), "+r"(c), "+r"(d), "+r"(e), "+r"(f))
+#define INT_NOW7(a, b, c, d, e, f, g) \
+    __asm__ ("" : "+r"(a), "+r"(b), "+r"(c), "+r"(d), "+r"(e), "+r"(f), "+r"(g))
 #define INT_NOW8(a, b, c, d, e, f, g, h) \
     __asm__ ("" : "+r"(a), "+r"(b), "+r"(c), "+r"(d), "+r"(e), "+r"(f), "+r"(g), "+r"(h))
 #else
@@ -184,6 +192,7 @@ static inline uint32_t now(void) { return 0; }
 #define INT_NOW2(a, b) ((void)0)
 #define INT_NOW4(a, b, c, d) ((void)0)
 #define INT_NOW6(a, b, c, d, e, f) ((void)0)
+#define INT_NOW7(a, b, c, d, e, f, g) ((void)0)
 #define INT_NOW8(a, b, c, d, e, f, g, h) ((void)0)
 #endif
 
@@ -447,20 +456,39 @@ int track_init(void)
     vcells = (const struct vcell *)(vh + 3);
     vlist = (const uint16_t *)(vcells + nvcells);
     ncells = nvcells ? nvcells : (npieces + GROUP - 1) / GROUP;
+    cells_keyed = nvcells > 0;
     for(int g = 0; g < ncells; g++) {
         int first = nvcells ? vcells[g].first : g * GROUP;
         int n = nvcells ? vcells[g].count : npieces - first < GROUP ? npieces - first : GROUP;
         if(first + n > npieces) return 0;
         cells[g].first = (uint16_t)first;
-        cells[g].count = (uint16_t)n;
-        cells[g].x0 = cells[g].x1 = n ? cpieces[first].x : 0.0f;
-        cells[g].y0 = cells[g].y1 = n ? cpieces[first].y : 0.0f;
-        for(int i = first + 1; i < first + n; i++) {
+        int m = 0;                                  /* the placements with a mesh: the others are never drawn */
+        float h0 = 0.0f, h1 = 0.0f, rmax = 0.0f;
+        for(int i = first; i < first + n; i++) {
+            if(cpieces[i].rad < 0.0f) continue;
+            if(nvcells) {                           /* the map's cell of its place (camera_cell) must be this cell */
+                uint32_t key = (uint32_t)(((int32_t)cpieces[i].y + 0x100000) >> 13) << 8 | (uint32_t)(((int32_t)cpieces[i].x + 0x100000) >> 13);
+                if(key != vcells[g].key) cells_keyed = 0;
+            }
+            if(!m++) {
+                cells[g].x0 = cells[g].x1 = cpieces[i].x;
+                cells[g].y0 = cells[g].y1 = cpieces[i].y;
+                h0 = h1 = cpieces[i].h;
+            }
             if(cpieces[i].x < cells[g].x0) cells[g].x0 = cpieces[i].x;
             if(cpieces[i].x > cells[g].x1) cells[g].x1 = cpieces[i].x;
             if(cpieces[i].y < cells[g].y0) cells[g].y0 = cpieces[i].y;
             if(cpieces[i].y > cells[g].y1) cells[g].y1 = cpieces[i].y;
+            if(cpieces[i].h < h0) h0 = cpieces[i].h;
+            if(cpieces[i].h > h1) h1 = cpieces[i].h;
+            if(cpieces[i].rad > rmax) rmax = cpieces[i].rad;
         }
+        cells[g].count = (uint16_t)(m ? n : 0);     /* (a cell with nothing to draw is passed over) */
+        if(!m) cells[g].x0 = cells[g].x1 = cells[g].y0 = cells[g].y1 = 0.0f;
+        float ex = 0.5f * (cells[g].x1 - cells[g].x0), ey = 0.5f * (cells[g].y1 - cells[g].y0), eh = 0.5f * (h1 - h0);
+        cells[g].ch = 0.5f * (h0 + h1);
+        cells[g].r0 = __builtin_sqrtf(ex * ex + ey * ey + eh * eh);
+        cells[g].rmax = rmax;
     }
     return npieces;
 }
@@ -907,6 +935,17 @@ static int camera_cell(float x, float y)
     return lo < nvcells && vcells[lo].key == key ? lo : -1;
 }
 
+/* The first cell (its number) whose key is not below key, ncells if none: the cells lie in the order of their keys */
+static int first_cell(uint32_t key)
+{
+    int lo = 0, hi = nvcells;
+    while(lo < hi) {
+        int mid = (lo + hi) / 2;
+        if(vcells[mid].key < key) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+}
+
 /* The drawing key of a piece or object at squared distance d2 from the camera, STARTL.EXE 0x7e8c0..0x7e97b: the walk
    stores d^2 >> 3 (0x76f46), the key is -(sqrt of it, rounded to nearest, >> 2): about the distance / 11.3, far first.
    A piece adds its mesh's class key (track_class_key: minus the object header's entry 43), an object 300 more */
@@ -1074,6 +1113,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
                  struct track_stats *st)
 {
     uint32_t t_start = now();
+    PF_VAR(pf);
     st->pieces = st->faces = st->triangles = st->see_through = st->vertices = st->objects = 0;
     const float cx = c[0], cy = c[1], ch = c[2];
     const float fx = f[0], fy = f[1], fh = f[2], rx = r[0], ry = r[1], rh = r[2];
@@ -1089,26 +1129,54 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
     const float up = (float)eye / FOCAL;                                       /* above the eye line */
     const float down = (float)(clip->y1 - clip->y0 - eye) / FOCAL;
     int nv = 0;
-    float nearest = 1e30f;
     /* The cells to look at, in the order of the file (so the pieces come in the order of their numbers): the
        original's walk over the map (STARTL.EXE 0x76d80, docs/screamer2/draw_distance.md) takes only the cells
        that the list of the cell the camera is in names, if that cell has a list (most of the road's cells
-       do), else every cell in reach */
+       do), else every cell in reach. Without a list the cells whose rows lie in reach are found by their keys
+       (a binary search each way), the others by their column; of those a cell is looked at only if it can be
+       in reach (the box of its places) and in view (cell_out: its sphere against the planes) */
     const uint16_t *list = 0;
-    int ncl = ncells, cc = camera_cell(cx, cy);
+    int ncl = ncells, cc = camera_cell(cx, cy), q0 = 0, c0 = 0, c1 = 255;
     if(cc >= 0 && vcells[cc].nlist) {
         list = vlist + vcells[cc].list;
         ncl = vcells[cc].nlist;
+    } else if(cells_keyed) {
+        const float reach = __builtin_sqrtf(REACH2);
+        int r0 = (((int32_t)(cy - reach) + 0x100000) >> 13) - 1, r1 = (((int32_t)(cy + reach) + 0x100000) >> 13) + 1;
+        c0 = (((int32_t)(cx - reach) + 0x100000) >> 13) - 1;
+        c1 = (((int32_t)(cx + reach) + 0x100000) >> 13) + 1;
+        q0 = r0 > 0 ? first_cell((uint32_t)r0 << 8) : 0;
+        ncl = r1 < 255 ? first_cell((uint32_t)(r1 + 1) << 8) : ncells;
     }
-    for(int q = 0; q < ncl; q++) {
+    PF_ADD(PF_CULL_SETUP, pf); PF_SET(pf);
+    const float side = __builtin_sqrtf(1.0f + half_w * half_w), top = __builtin_sqrtf(1.0f + up * up),
+                bottom = __builtin_sqrtf(1.0f + down * down);
+    for(int q = q0; q < ncl; q++) {
         const int g = list ? list[q] : q;
         if(!cells[g].count) continue;
+        if(!list && cells_keyed) {
+            int col = vcells[g].key & 255;
+            if(col < c0 || col > c1) continue;
+        }
         {                                           /* the whole cell out of reach (in the plane) */
             int wx = cx < cells[g].x0, ex = cx > cells[g].x1, sy = cy < cells[g].y0, ny = cy > cells[g].y1;
             INT_NOW4(wx, ex, sy, ny);
             float gx = wx ? cells[g].x0 - cx : ex ? cx - cells[g].x1 : 0.0f;
             float gy = sy ? cells[g].y0 - cy : ny ? cy - cells[g].y1 : 0.0f;
             if(gx * gx + gy * gy >= REACH2) continue;
+        }
+        {   /* the whole cell out of view: every placement p of it lies within r0 of the middle m, its reach rad is
+               at most rmax, and the placement is out if (n . (p - cam)) > rad (1 + k) for a plane's normal n of
+               length s (the tests below, rewritten): so the cell is out if n . (m - cam) > rmax (1 + k) + r0 s
+               (and a margin for the rounding). Near: vf + rad < NEAR, far: vf - rad > far_eye (s = 1, k = 0) */
+            float dx = 0.5f * (cells[g].x0 + cells[g].x1) - cx, dy = 0.5f * (cells[g].y0 + cells[g].y1) - cy, dh = cells[g].ch - ch;
+            float vf = dx * fx + dy * fy + dh * fh + EYE_BACK, vr = dx * rx + dy * ry + dh * rh;
+            float vu = dx * ux + dy * uy + dh * uh, r0 = cells[g].r0 + 8.0f, rm = cells[g].rmax;
+            int o1 = vf + r0 + rm < NEAR, o2 = vf - r0 - rm > far_eye;
+            int o3 = vr - half_w * vf > rm * (1.0f + half_w) + r0 * side, o4 = -vr - half_w * vf > rm * (1.0f + half_w) + r0 * side;
+            int o5 = vu - up * vf > rm * (1.0f + up) + r0 * top, o6 = -vu - down * vf > rm * (1.0f + down) + r0 * bottom;
+            INT_NOW6(o1, o2, o3, o4, o5, o6);
+            if(o1 | o2 | o3 | o4 | o5 | o6) continue;
         }
         for(int i = cells[g].first, end = i + cells[g].count; i < end; i++) {
             const struct cpiece *pc = &cpieces[i];
@@ -1121,15 +1189,15 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             float vu = dx * ux + dy * uy + dh * uh;
             /* the nearest so far, and out of reach or out of view: all the comparisons asked for at
                once, then one wait for their answers */
-            int nearer = d2 < nearest, o0 = d2 >= REACH2, o1 = vf + rad < NEAR, o2 = vf - rad > far_eye;
+            int o0 = d2 >= REACH2, o1 = vf + rad < NEAR, o2 = vf - rad > far_eye;
             int o3 = vr - rad > half_w * (vf + rad), o4 = vr + rad < -half_w * (vf + rad);
             int o5 = vu - rad > up * (vf + rad), o6 = vu + rad < -down * (vf + rad);
-            INT_NOW8(nearer, o0, o1, o2, o3, o4, o5, o6);
-            if(nearer) nearest = d2;
+            INT_NOW7(o0, o1, o2, o3, o4, o5, o6);
             if(o0 | o1 | o2 | o3 | o4 | o5 | o6) continue;
             vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;
         }
     }
+    PF_ADD(PF_CULL_WALK, pf); PF_SET(pf);
     for(int k = 0; k < nobj && k < MAX_OBJS; k++) {
         const struct track_object *ob = &objs[k];
         float dx = ob->x - cx, dy = ob->y - cy, dh = ob->h - ch, rad = ob->radius;
@@ -1144,10 +1212,11 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         vis[nv++] = (depth_key(d2) + 300 + ob->key) * 65536 + npieces + k;
         st->objects++;
     }
-    st->nearest = nearest < 4e18f ? (uint32_t)__builtin_sqrtf(nearest) : 0xFFFFFFFFu;
+    st->nearest = 0xFFFFFFFFu;                  /* (not measured any more: it cost a compare for every placement) */
     /* by key, far first. The list is in the order of i, the keys' low half, and the keys differ:
        sorted by their high half, keeping that order (two passes of 8 bits, radix), it is in the
        order of the whole key, as any sort by it has it */
+    PF_ADD(PF_CULL_OBJ, pf); PF_SET(pf);
     static int32_t vis2[MAX_PIECES + MAX_OBJS];
     static int cnt[2][256];                     /* both passes' counts in one go; the sums clear
                                                    them (no memset: picolibc's goes byte by byte) */
@@ -1168,6 +1237,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         }
         for(int n = 0; n < nv; n++) to[at[((uint32_t)from[n] ^ 0x80000000u) >> sh & 255]++] = from[n];
     }
+    PF_ADD(PF_CULL_SORT, pf);
     uint32_t t_pieces = now();
     st->cyc_cull = t_pieces - t_start;
 #ifdef TRACK_DUMP                               /* the PC renderer (tools/render.sh): the list drawn */
@@ -1186,6 +1256,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
     uint32_t t_out = 0;
     for(int n = 0; n < nv; n++) {
         const int vi = vis[n] & 0xFFFF;
+        PF_VAR(pb);
         if(vi >= npieces) {                         /* an object: its blocks as they come */
             struct track_object *ob = &objs[vi - npieces];
             if(ob->make) ob->make(ob->id, cam, ob);
@@ -1207,6 +1278,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
                 else gu_draw(fb, clip, &view, mlb, &g, &gst);
                 t_out += now() - t0;
             }
+            PF_ADD(PF_PC_OBJ, pb);
             continue;
         }
         const struct piece *pc = &pieces[vi];
@@ -1220,6 +1292,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
                 else gu_draw(fb, clip, &view, mlb, &gs[b], &gst);
                 t_out += now() - t0;
             }
+            PF_ADD(PF_PC_MULTI, pb);
             continue;
         }
         struct gu_piece g;
@@ -1238,7 +1311,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             int lvl = track_lod_level(sqrtf(wx * wx + wy * wy + wh * wh), 0);
             if(lvl) {
                 int32_t off = rd32(g.obj + 0x18 + 4 * 13 * lvl);
-                if(!off) continue;
+                if(!off) { PF_ADD(PF_PC_STATIC, pb); continue; }
                 g.blk = g.obj + off;
             }
         }
@@ -1260,12 +1333,17 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         if(track_mode == TRACK_HW) track_hw_piece(&g);
         else gu_draw(fb, clip, &view, mlb, &g, &gst);
         t_out += now() - t0;
+        PF_ADD(PF_PC_STATIC, pb);
     }
     st->faces = gst.faces;
     st->triangles = gst.triangles;
     st->see_through = gst.see_through;
     st->vertices = gst.vertices;
     st->cyc_out = t_out;
+#ifdef S2_PROF
+    prof_t[PF_PUSH] += t_out;
+    prof_n[PF_PUSH] += st->pieces;
+#endif
     st->cyc_piece = now() - t_pieces - t_out;
 }
 

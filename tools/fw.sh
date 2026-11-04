@@ -5,6 +5,7 @@
 # tools/package.sh puts them on the SD card.
 # Usage: tools/fw.sh                 the firmware, copied to build/assets/
 #        tools/fw.sh FAULT=IFETCH    a fault test for sim/soc in build/firmware-IFETCH/, not copied
+#        tools/fw.sh PROF=1          with the cycle counters of firmware/prof.h, for the simulation, in build/firmware-prof/, not copied
 # Output: build/firmware/{firmware,program}.elf, .bin, .lst (disassembly), .map
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -27,10 +28,11 @@ if ! docker image inspect "$image" > /dev/null 2>&1; then
 fi
 
 fault=""
+prof=""
 for arg in "$@"; do
-    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; esac
+    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; PROF=*) prof=-prof ;; esac
 done
-out=firmware${fault:+-$fault}
+out=firmware${fault:+-$fault}$prof
 
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/work" -w /work/firmware "$image" \
     make --no-print-directory OUT=../build/$out "$@" info
@@ -47,8 +49,8 @@ if [ "$prog_size" -gt "$prog_limit" ]; then
     echo "program.bin has $prog_size bytes, more than the $prog_limit bytes of data slot 2"
     exit 1
 fi
-if [ -n "$fault" ]; then
-    echo "fault test: build/$out/firmware.bin, $size bytes"
+if [ -n "$fault$prof" ]; then
+    echo "not copied: build/$out/firmware.bin, $size bytes"
     exit 0
 fi
 assets="$root/build/assets/screamer2/Chainy.Screamer2"

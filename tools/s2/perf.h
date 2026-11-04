@@ -18,7 +18,8 @@
     X(tris_flat) X(tris_tex) X(tris_blend) X(walk_tris) X(rows) X(spans) X(px_span) X(px_drawn) \
     X(texel_reads) X(tex_miss) X(tex_lines) X(gu_reads) X(gu_miss) \
     X(fade_night) X(fade_fog) X(tex_miss32) X(tex_miss2w) \
-    X(lod_s1) X(lod_s2) X(lod_sd) X(lod_c1) X(lod_c2) X(lod_cd)
+    X(lod_s1) X(lod_s2) X(lod_sd) X(lod_c1) X(lod_c2) X(lod_cd) \
+    X(cell_out) X(vis_hash)
 
 struct perf_counts {
 #define X(n) uint32_t n;

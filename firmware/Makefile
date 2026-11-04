@@ -4,7 +4,7 @@
 # well where riscv64-unknown-elf-gcc and picolibc are installed.
 # Output in $(OUT): firmware.elf/.bin/.lst/.map and program.elf/.bin/.lst/.map
 CROSS   ?= riscv64-unknown-elf-
-OUT     ?= ../build/firmware$(if $(FAULT),-$(FAULT))
+OUT     ?= ../build/firmware$(if $(FAULT),-$(FAULT))$(if $(PROF),-prof)
 CC       = $(CROSS)gcc
 OBJCOPY  = $(CROSS)objcopy
 OBJDUMP  = $(CROSS)objdump
@@ -25,6 +25,11 @@ CRC32    = python3 -c 'import os, sys, zlib; d = open(sys.argv[1], "rb").read();
 # has its own OUT (../build/firmware-IFETCH), because the objects do not depend on CFLAGS.
 ifneq ($(FAULT),)
 CFLAGS  += -DFAULT_$(FAULT)
+endif
+
+# PROF=1: cycle counters for the simulation (prof.h), in build/firmware-prof
+ifneq ($(PROF),)
+CFLAGS  += -DS2_PROF
 endif
 
 # The car physics of the viewer's driving mode (s2car.h): the real one when firmware/s2car.c exists (with
