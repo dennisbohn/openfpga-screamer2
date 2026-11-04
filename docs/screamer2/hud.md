@@ -44,14 +44,28 @@ cockpits, the mirror.
 
 | File | |
 |---|---|
-| `firmware/s2hud.c`, `s2hud.h` | `s2hud_init(z)` (the set and the texts), `s2hud_begin(track)` (a race starts: the records from `s2_best_get`, `MAPnDIR.SPL`, every timer), `s2hud_draw(cam, view, steps, top)` (one frame: update the timers and easing from the car records, build one blitter list of about 100 commands, hand it to the blitter) |
+| `firmware/s2hud.c`, `s2hud.h` | `s2hud_init(z)` (the set and the texts), `s2hud_begin(track)` (a race starts: the records from `s2_best_get`, `MAPnDIR.SPL`, every timer), `s2hud_draw(cam, view, steps, top)` (one frame: update the timers and easing from the car records, build one blitter list of about 90 commands, 46 of them copied from a list made when `top` or a record changes, hand it to the blitter) |
 | `firmware/s2gfx.c` | `s2gfx_game_init` and `s2gfx_game_sprite / _text` (and `_centred`): `GAMEL.SPR` and `GAMEL.FNT` from `GFX/GAME1.DAT`, in 0.25 MB at `0x10C0_0000` (docs/soc.md); the menu's calls are unchanged |
 | `firmware/race.c` | `race_line_nodes()` (the checkpoints are the fifths of a lap) |
-| `firmware/viewer.c` | `s2hud_init` once, `s2hud_begin` in `race_start`, `s2hud_draw` after the rasterizer has finished, the old console text only where there is no set; the finish text and the timing overlay as before |
+| `firmware/viewer.c` | `s2hud_init` once, `s2hud_begin` in `race_start`, `s2hud_draw` right after the last piece of the scene, the old console text only where there is no set; the finish text and the timing overlay as before |
 
 The screen's state is not in the race: it reads the four cars' records (`race_car(i)->rec`, the game's layout: places `+0xc30`, progress `+0x4b8`, `+0x4bc`, times
 `+0xc38`, `+0xc3c`, best lap `+0xc40`, speed `+0x500`, revs `+0xc78`, most revs `+0x60`, gear `+0xc7c`, wrong way `+0x1f0`, laps `+0x4ac`, flags `+0x4c`)
 and `race_get_hud()`. The checkpoints and BEST LAP! are noticed from the change of those words between frames. Formatting is done by hand (no library calls).
+
+**Cost** (Verilator simulation, track 4, 220 frames from the grid, `tools/s2/sim_race.sh`, 2026-11-05). The list is handed to the blitter right after the last piece of the scene,
+as Screamer 1's race screen was: the blitter starts it when the 3D units are done and draws it (about 22,000 clocks) while the CPU runs the computers' steps, so only the CPU's part
+counts: the update 2,500 cycles, the list 18,200 and the hand-over of its 90 commands 4,200 (counters of a build made for this, not kept), about 25,000 cycles = 0.33 ms. Before the commands
+that do not change were kept (46 of the 90) the list took 22,400.
+
+The frame statistic (`T4 drv ... avg / max`) ends when the rasterizer is done: it did not count the old text (drawn after it) and counts this screen's CPU part. **11.2 / 12.2 ms**
+mean / worst, against 10.7 / 11.5 for main (eb6dbe8, built and simulated the same way: the numbers of the baseline given). What comes after that end (the timing overlay's two lines, and in
+the old build the speed, lap, place and times as console text) took 29,200 cycles (0.39 ms) in the last frame of the baseline and 13,100 now: the whole frame costs 13,000 cycles
+(0.18 ms) more in that frame, and like for like (the statistic plus that stretch) the mean went from 11.1 to 11.4 ms (+0.29 ms; the worst frames, 11.9 to 12.4). The first version, which made
+the list after the rasterizer had finished and waited for the blitter before the overlay, left 55,800 cycles after the end (+0.36 ms): the early hand-over is what hides the blitter.
+The code lies 112 to 312 bytes further on than main's (62 objects moved, `tools/s2/map_shift.py`); the I-cache is direct mapped, and moving the code after `main.o` by 64, 128 and 256 bytes
+(`CODE_PAD2`) gives 11.3 / 12.2, 11.3 / 12.2 and 11.1 / 12.0 ms: a tenth of a millisecond either way, which no measurement here separates from the screen's own cost (none of it was tuned).
+The program's stack rose from 4,800 to 5,116 bytes.
 
 **The timing overlay.** The viewer's two lines (top left, `con_text`, up to 22 characters = 176 pixels wide, 16 rows) stay as they are, switched by X in the
 race and B in the ride; the overlay is drawn after the screen. While it is on, the elements that would sit under it move down 16 rows: the lap block (LAP, the lap, the

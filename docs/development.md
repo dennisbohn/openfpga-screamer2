@@ -196,7 +196,8 @@ the stand-in does not have those, so a build without `s2car.c` does not link.
 
 The overlay (top left, drawn after the 3D picture) shows the mean and the worst time of a frame over
 the last second in ms, the track, the cars and the faces of the frame. A frame's time runs from its
-start (the swap before it is done) to the end of the rasterizer's work, not including the wait for the next
+start (the swap before it is done) to the end of the rasterizer's work (in the driving mode including the CPU's part of the race screen, docs/screamer2/hud.md,
+which is made while the rasterizer works, but not the overlay's own text), not including the wait for the next
 vertical blanking, so 10 ms still shows 50 pictures a second; the camera advances by the real time
 (video frames of 1/50 s), so a frame over 20 ms makes the picture slower but not the movement.
 `debug.txt` (4 KB, not a ring: when it is full later lines are lost, so the lines are short): its first line (128 bytes; the
