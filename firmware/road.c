@@ -112,9 +112,8 @@ static struct track_block blocks[ROAD_CARS][CAR_BLOCKS];
 
 static int car_make(int id, const struct track_cam *cam, struct track_object *ob)
 {
-    /* standing, not braking: the texture phase of a car at rest on the game's paint job */
-    const struct car_look lk = { car[id].x, car[id].y, car[id].z, car[id].yaw, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                                 0x4000u >> 2 };
+    /* standing, not braking, whole: picture 0 of every texture (the object's flags 0; s2car.h look) */
+    const struct car_look lk = { car[id].x, car[id].y, car[id].z, car[id].yaw, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0 };
     return car_draw(car[id].model, &lk, cam, blocks[id], ob);
 }
 

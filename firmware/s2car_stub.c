@@ -124,9 +124,9 @@ void s2car_step(struct s2car_state *s, const struct s2car_input *in)
 
 void s2car_look(const struct s2car_state *s, struct car_look *lk)
 {
-    /* the object's pitch and roll are the car's, negated; the texture phase as car.c has it: the paint job 0,
-       0x4000 not braking, 0x2000 at 4000 units a second or under */
-    uint32_t phase = ((s->rec[0] ? 0u : 0x4000u) | (s->speed_kmh * UNITS_KMH <= 4000.0f ? 0x2000u : 0u)) >> 2;
+    /* the object's pitch and roll are the car's, negated; the texture phase as Screamer 2's cars have it (s2car.h look >> 2):
+       0x200 while braking, no damage marks, no blur */
+    uint32_t phase = (s->rec[0] ? 0x200u : 0u) >> 2;
     *lk = (struct car_look){ s->pos[0], s->pos[1], s->pos[2], s->yaw, -s->pitch, -s->roll, s->body_pitch, s->body_roll,
                              -s->wheel_spin[0], s->wheel_steer, phase };
 }

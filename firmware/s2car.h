@@ -49,7 +49,10 @@ struct s2car_state {
     int hit_wall;                       /* 1 on a step on which the car touched a wall */
     float hit_hard;                     /* the strongest wall knock (the game's 0x29571 `hard`, which its sound goes by) since the caller
                                            last set it to 0; set by the physics only upwards */
-    int braking;                        /* the brake lights: the brake is down */
+    uint32_t look;                      /* the car object's flags (0x16878, record +0x20), set once a step with the wheels: 0x200 the
+                                           brake is down (the lights), 0x400 / 0x8000 a pair of wheels turning fast (the hubs' blur),
+                                           the damage marks of the four sides 0x2000 0x800 0x4000 0x1000 (record +0xb8); the texture
+                                           picture of a car's materials is look >> 9 (128 pictures) */
     int off_track;                      /* 1 if the car's middle has no drivable ground under it (for a reset rule) */
     float cam[6];                       /* the game's chase camera (view 3): x, y, height, yaw, pitch, roll, as track_cam */
     /* ---- input to the physics from the caller ---- */
@@ -108,7 +111,7 @@ void s2car_set_data(const uint8_t *game_dat, uint32_t game_size, const uint8_t *
 void s2car_step(struct s2car_state *s, const struct s2car_input *in);
 
 /* The car as car.h draws it (struct car_look): place, heading, tilt, body lean, the wheels' turn and
-   steering, the texture phase of braking. */
+   steering, the texture phase (look >> 2). */
 void s2car_look(const struct s2car_state *s, struct car_look *lk);
 
 /* A test of the reference (OpenScreamer's s2_put): the car at (x, y), height 0, facing heading, its corners worked out

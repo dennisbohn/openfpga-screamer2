@@ -401,13 +401,18 @@ static void ground_under_wheels(car_t *c, const struct corner_ground q[4])
 #undef CZ
 }
 
-/* 0x19aaa: a knock from a wall: the side's count for the look, and with DAMAGES on (the game's default; the
-   level ROOKIE: x 1) the corner's and the car's damage, and the corner's spring softer */
+/* 0x19aaa: a knock from a wall: the side's count for the look and, once it is 1, a knock over 2000 puts the side's mark
+   in the car's flags (+0xb8: what the drawn car's textures show), and with DAMAGES on (taken as on: the game has it off
+   until its menu says so; the level ROOKIE: x 1) the corner's and the car's damage, and the corner's spring softer */
 static void knock(car_t *c, int side, int corner, float share, float force)
 {
+    static const uint32_t mark[4] = { 0x2000, 0x800, 0x4000, 0x1000 };       /* sides 0 .. 3 (the table at 0x19b58) */
     int count = 0x1c + 4 * side;
     RF(count) = (1.0f - share) * force / 20000.0f + RF(count);
-    if(RF(count) >= 1.0f) RF(count) = 1.0f;
+    if(RF(count) >= 1.0f) {
+        RF(count) = 1.0f;
+        if(force > 2000.0f) RI(0xb8) |= (int32_t)mark[side];
+    }
     int hurt = 0xc + 4 * corner;
     RF(hurt) = share * force / 50000.0f + RF(hurt);
     if(RF(hurt) > 2.0f) RF(hurt) = 2.0f;
@@ -968,7 +973,10 @@ static void pedals(car_t *c, const struct s2car_input *in)
     RF(0x1e8) = RF(0x1e8) - RF(0x1e4);
 }
 
-/* 0x16878's part: the wheels' turning and the front wheels' steering as drawn */
+/* 0x16878's part: the wheels' turning and the front wheels' steering as drawn, and the car object's flags (+0x20, 0x1737b):
+   a pair of wheels turning more than 0.29 turns a step blurs its hubs (0x400 for the pair the drive goes to, 0x8000 for
+   the other; with four-wheel drive 0x400 by the rear pair alone), plus the damage marks (+0xb8) and 0x200 while the
+   brake is down (+0x1e4 + 0x1e8: the pedal, or a computer's driver, not the slowing down) */
 static void wheel_pictures(car_t *c)
 {
     ease_angle(&RF(0x13c), PI_F / (RF(0x6c) * 4.0f) * RF(0x660), 0x50);
@@ -978,6 +986,12 @@ static void wheel_pictures(car_t *c)
     RF(0x664) = RF(0x664) - front * PI_F;
     RF(0x5f4) = RF(0x5f4) - back * PI_F;
     RF(0x6d4) = RF(0x6d4) - back * PI_F;
+    const int fast_front = fabsf(front) > 0.29f, fast_back = fabsf(back) > 0.29f;
+    uint32_t look;
+    if(RF(0x90) > 0.8f) look = (fast_front ? 0x400u : 0u) | (fast_back ? 0x8000u : 0u);
+    else if(RF(0x94) > 0.8f) look = (fast_back ? 0x400u : 0u) | (fast_front ? 0x8000u : 0u);
+    else look = fast_back ? 0x400u : 0u;
+    c->look = look | (uint32_t)RI(0xb8) | (RF(0x1e8) + RF(0x1e4) != 0.0f ? 0x200u : 0u);
 }
 
 /* 0x2baa4 for one car alone, up to the engine (0x167e2's first part) */
@@ -1074,7 +1088,6 @@ static void outputs(car_t *c, int squeal)
     for(int i = 0; i < 4; i++) if(RI(WH(i) + 0x60)) c->skid_flags |= 1 << i;
     if(squeal) c->skid_flags |= 16;
     c->hit_wall = RI(0x150) != 0;
-    c->braking = RF(0x1e4) + RF(0x1e8) > 0.0f;
     c->off_track = 0;
     if(RI(0x150)) {                                     /* some corner is off the road: and the middle? */
         int held, h, n[3], k;
@@ -1423,6 +1436,5 @@ void s2car_look(const struct s2car_state *s, struct car_look *lk)
        same senses as the car's angles, the wheels' turn as the game's, the steering + right (the game's: + left).
        The tilt's signs were not seen drawn on a slope. */
     *lk = (struct car_look){ s->pos[0], s->pos[1], s->pos[2], s->yaw, -s->pitch, s->roll, -s->body_pitch,
-                             s->body_roll, s->wheel_spin[0], -s->wheel_steer,
-                             (s->braking ? 0u : 0x4000u) >> 2 };
+                             s->body_roll, s->wheel_spin[0], -s->wheel_steer, s->look >> 2 };
 }
