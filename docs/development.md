@@ -79,7 +79,7 @@ far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). T
 
 ### Start menu
 
-A list in the console's text style (`firmware/s2menu.c`, 40 x 25 characters; the originals' own menu screens are in
+A list in the console's text style (`firmware/s2menu.c`, 40 x 25 characters; the original's own menu screens are in
 docs/screamer2/menus.md). Everything is open from the start: all seven tracks, all four teams and their five cars, no championship.
 
 | Row | Values |
@@ -130,7 +130,7 @@ the cars. The four cars (`firmware/s2car.c`) each wear their own team's model an
 (CONDOR), the computers' are team 2's car 2, team 3's car 3 and team 4's car 4; the start menu sets the player's team and car and the
 computers get the other three teams ("Teams" below). Speed in mph, gear and the gearbox (AUTO / MAN) are drawn top right, below it
 `LAP 1/3` and `POS 1/4`, top left under the timing overlay `TIME`, `LAP` (this lap's clock) and `BEST`
-(mm:ss:hundredths). After his third lap the player's car is the game's driver's (it slows to a stop) and `FINISH`, his place and total
+(mm:ss:hundredths). After his last lap the player's car is the game's driver's (it slows to a stop) and `FINISH`, his place and total
 time are on the screen.
 
 | Button (drive) | |
