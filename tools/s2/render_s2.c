@@ -82,7 +82,9 @@ int main(int argc, char **argv)
         } else if (argv[a][0] == 'd') {
             static struct s2car_state car;
             int steps = atoi(argv[a] + 1);
-            s2car_init(&car, 0, 0, 1, 0);
+            int tn = 1;                                 /* the track of the image: the last digit 1 .. 7 of its file name (ref3.bin), else 1 */
+            for (const char *q = argv[1]; *q; q++) if (*q >= '1' && *q <= '7') tn = *q - '0';
+            s2car_init(&car, 0, 0, tn, 0);
             for (int k = 0; k < steps; k++) {
                 struct s2car_input in = { .throttle = k < 130, .brake = k >= 130, .steer = k >= 100 && k < 120 ? 1.0f : k >= 25 && k < 100 ? -1.0f : 0.0f };
                 s2car_step(&car, &in);
