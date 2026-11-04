@@ -74,28 +74,65 @@ it from the game's near chase camera over a car that drives the road at 150 km/h
 player's car and three more ahead (`firmware/viewer.c`, `firmware/road.c`). Frames go through the
 hardware path (geometry unit, setup unit, rasterizer, blitter) with the original's level of detail at
 DETAIL HIGH (`track_lod_level()`: placed meshes switch at 6,000 and 9,000 units, cars at 2,000 and 6,000;
-far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). No menu, physics, race
-screen, sound or music.
+far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). No menu, race screen, sound
+or music. Start switches between this ride and the driving mode (next section).
 
-| Button | |
+| Button (ride) | |
 |---|---|
 | d-pad left / right | previous / next track (1 to 7), the track is loaded again (about 5 to 10 s) |
 | A | the cars: 4 (the realistic field), 0, 1 (the player's) in turn |
 | B | timing overlay on / off (default on) |
+| Start | the driving mode |
+
+### Driving mode
+
+Start puts the player's car on the start line and lets the player drive it: the buttons are Screamer 1's
+(`core/input.json`, README "Controls": B accelerate, Y brake, d-pad steering, L / R the gears), the camera is
+the car physics' chase camera, no cars ahead. The physics steps 20 ms at a time by real elapsed time (a video
+frame is 20 ms; at most 4 steps per frame, as Screamer 1's race), so a slow frame makes the picture slower, not
+the car. The car is model AUTO01 with turning, steering wheels. Speed in mph, gear and the gearbox (AUTO / MAN)
+are drawn top right.
+
+| Button (drive) | |
+|---|---|
+| d-pad left / right | steering (-1 / 0 / +1: there is no analog value; a docked controller's stick works as the d-pad) |
+| B / Y | gas / brake (1 or 0) |
+| A | handbrake (held) |
+| L / R | gear down / up (on the step the button goes down; the gearbox is automatic until d-pad up makes it manual) |
+| d-pad up | automatic / manual gearbox |
+| X | timing overlay on / off (B is the gas here; Screamer 1's X, the camera, has no use yet) |
+| Select + left / right | previous / next track (the track is loaded again, the car put on its start) |
+| Select + Start | the car back to the start of the lap |
+| Start | back to the ride |
+
+A car with no drivable ground under it for 3 s (`off_track` of the state), or more than 3,000 units below the
+lowest road point of the track, is put back on the start by itself (`OFF_STEPS`, `FALL_UNITS` in `viewer.c`).
+
+The physics sits behind `firmware/s2car.h` (`s2car_init`, `s2car_step` for one 20 ms step, `s2car_look`,
+`s2car_camera`; the header is the contract with the car physics of the other branch). Until `firmware/s2car.c`
+exists the Makefile builds the kinematic stand-in `firmware/s2car_stub.c`: speed from gas, brake and drag (top
+speed 200 km/h), a yaw rate from the wheel angle, the car on the surface under it (`track_under`) and tilted by it,
+five gears of 40 km/h, a camera behind and above as the ride's. It is not a model of the game's car (no
+grip, weight, reverse, walls or fall: with no ground under it the car keeps its height). With `s2car.c` present
+the Makefile takes it and every other `firmware/s2car*.c` instead (`S2CAR_SRCS`, also settable on the command
+line); `tools/s2/render_s2.sh` and `framestats.sh` do the same. `yaw` grows to the left (the view turns left),
+so steering left (-1) must increase it.
 
 The overlay (top left, drawn after the 3D picture) shows the mean and the worst time of a frame over
 the last second in ms, the track, the cars and the faces of the frame. A frame's time runs from its
 start (the swap before it is done) to the end of the rasterizer's work, not including the wait for the next
 vertical blanking, so 10 ms still shows 50 pictures a second; the camera advances by the real time
 (video frames of 1/50 s), so a frame over 20 ms makes the picture slower but not the movement.
-`debug.txt` (4 KB, not a ring: when it is full later lines are lost): its first line is the live statistics of the
-current visit (`Screamer Pocket T1 c4 fr1234 avg10.4 max12.8 late0 fps49.9`: track, cars, frames, mean and
-worst ms, frames over 20 ms, pictures a second); one line per track load (`viewer: T1 loaded in 5100 ms: read
-2973 KB ... ms, build 4494 KB ... ms (unpack ...), crc ..., road 1440 pts ... ms, 2000 placements`); per visit
-a line `view T1 c4 249fr avg10.4 max12.8@512k late0 50.0/s f1180 p95` (track, cars, frames, mean and worst ms and
-where on the road in thousand units, frames over 20 ms, pictures a second, faces and pieces a frame) after 5 s, after
-30 s, then every minute, and one when a visit that went on past the last line is left; the frame timeline (`tl_*`:
-cycles and the units' busy clocks at each stage, 1 KB) once, with the first line.
+`debug.txt` (4 KB, not a ring: when it is full later lines are lost, so the lines are short): its first line is the
+live statistics of the current visit (`Screamer Pocket T1 c4 fr1234 avg10.4 max12.8 late0 fps49.9`: track, cars or `drv`
+in the driving mode, frames, mean and worst ms, frames over 20 ms, pictures a second); one line per track load (`T1 load
+5100 ms: read 2973 KB ... ms, build 4494 KB ... ms (unpack ...), road 1440 pts ... ms, 2000 pl`); one line when a visit
+ends (another track, the cars or the mode changed; a visit of under 50 frames leaves none), `T1 c4 249fr avg10.4
+max12.8@512k late0 50.0/s f1180 p95` (track, cars or drv, frames, mean and worst ms and where on the road in thousand
+units (not in drv), frames over 20 ms, pictures a second, faces and pieces a frame); the frame timeline (`tl_*`: cycles and
+the units' busy clocks at each stage, 1 KB) once, 5 s into the first visit. A visit that ends with the core being quit
+has no line: the first line is its last state. The load no longer checks the image's CRC-32s (they cost 1.4 s; the
+native check of the build has them, and the firmware's builder leaves them 0).
 
 Known gaps (accepted): the cars' windows are white (no environment map: routine 160 reads `ENV.MLB`),
 no shadows, smoke, props or animated scenery, no fade by depth, no night or fog, no mirror, the S1
@@ -124,11 +161,29 @@ The run of 2026-11-04: no trap, 6.1 ms mean and 6.3 ms worst for the 8 frames (t
 them without the game's own physics), the picture equal to the PC render of the same camera
 (`tools/s2/render_s2.sh build/s2/track1.bin <prefix> v1482.4,4`) in every pixel outside the overlay's box.
 
+The driving mode in the simulation: Start held (`SIM_KEYS=8000`) starts the viewer in the driving mode, on scripted
+buttons (`sim_keys()` in `viewer.c`: gas for 2.6 s, left from 0.5 s to 2 s, right for 0.4 s, then the brake), one physics
+step per frame; `SIM_RACE_FRAMES` is the number of frames, the log gets a line per 25 frames (speed, gear, heading,
+place):
+
+```sh
+SIM_QUICK=1 SIM_GAME=build/gamedata SIM_IMAGE=build/s2/track1.bin SIM_TRACK=1 SIM_RACE_FRAMES=160 SIM_KEYS=8000 \
+    tools/sim.sh soc build/firmware/firmware.bin build/sim/drive 3000 > build/sim/drive.log
+python -I tools/rgb2png.py build/sim/drive.rgb build/sim/drive.png
+```
+
+The run of 2026-11-04 (stand-in physics): no trap, 160 frames at 50.3 a second, 5.5 ms mean and 6.4 ms worst (332 faces,
+60 pieces a frame; the ride's 4-car frame took 6.1 ms; the physics step with the stand-in about 0.1 ms), the speed
+1, 17, 30, 42, 52, 60 mph on the gas and 29 mph 0.5 s into the brake, the heading turning left then right; the
+hardware's last frame equals the PC render of the same step (`render_s2.sh build/s2/track1.bin <prefix> d161`) in every
+pixel below the overlay's rows. The load line of this run: 654 ms with the image from the testbench (the 1.4 s CRC
+check is gone).
+
 ## PC renderer
 
 `tools/s2/render_s2.sh <image> <out prefix> v<s>[,<cars>] ...` draws the viewer's scene (`road.c`, `track.c`,
 `car.c` and the C models of the units) natively in Docker: `v0.3f,4` is 30 % round the road with four cars;
-`NOLOD=1` draws every block at level 0 (to compare), `r<i>` and `c<x>,<y>,<h>,<yaw>,<pitch>` are other
+`NOLOD=1` draws every block at level 0 (to compare), `d<k>` the driving mode after k steps of the simulation's scripted buttons, `r<i>` and `c<x>,<y>,<h>,<yaw>,<pitch>` are other
 cameras; `tools/rgb2png.py` makes PNGs. `tools/s2/framestats.sh build` and `sweep s2 <image> <label> <out.csv>
 <step> <cars,...>` count what a frame asks of the units along the road (`ROAD_S=185,371` the viewer's own
 places), see `docs/screamer2/performance.md`. For Screamer 1: `tools/render.sh` runs the firmware's C code
@@ -183,7 +238,7 @@ built with injected faults for the counter-checks (`SIM_DEFINES`, see `tools/sim
 is the quick run (no resets); `--full` behaves like the Pocket. Without a track image (`SIM_IMAGE`) the
 program stops at the files screen, so the check is its title bar and the log (`SCREAMER2.zip: ...`, `game
 files: ...`, one line per file of the read test). With `SIM_IMAGE` the viewer runs (see above) and the
-testbench only checks the log (`viewer: track ...`), the picture is `build/sim/<name>.rgb`. The audio of the
+testbench only checks the log (the track's `T1 load ...` line), the picture is `build/sim/<name>.rgb`. The audio of the
 run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 
 ## Tools
@@ -195,7 +250,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c` | the Screamer 2 track image on the PC (the reference) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks, natively under the sanitizers |
-| `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene on the PC from the firmware's own code (`NOLOD=1`: no level of detail) |
+| `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene and the driving mode on the PC from the firmware's own code (`NOLOD=1`: no level of detail) |
 | `tools/s2/framestats.sh`, `tools/s2/perf_patch.py`, `tools/s2/perf_model.py`, `tools/s2/lod_report.py` | the study's counting build (counters in copies of the firmware) and cost model, `docs/screamer2/performance.md` |
 | `tools/fmcheck.sh [song ...]`, `tools/fmsongs.py`, `tools/host/fmdump.c`, `tools/host/fmref.c` | the FM music on the PC: `fmsongs.py` reads the songs of `DATA/MUSIC.DAT` independently (tracks, messages, lengths); `fmdump.c` runs `firmware/fm.c` against a model of the hardware's write queue; `fmref.c` is openscreamer's driver with the chip replaced by a log; `fmcheck.sh` runs all of them (Docker) and compares the register writes tick by tick |
 | `tools/dis.sh [-h] [-f] <from> <to>` | disassembles part of `STARTL.EXE` (`-h`: `STARTH.EXE`) at the addresses of OpenScreamer's notes; `tools/unle.py` (from OpenScreamer) unpacks the program into `build/exe/` on first use |
