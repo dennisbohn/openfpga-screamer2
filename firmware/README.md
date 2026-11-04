@@ -54,6 +54,7 @@ and package versions pinned); the script builds the image on first use. The resu
 | `sound.c`, `speech.c`, `music.c` | sound effects, the race commentary, the music: streamed from the CD image, or the MIDI songs on the FM chip |
 | `s2menu.c` | Screamer 2's start menu: track, team, car, laps, level, gearbox, START RACE / WATCH in the console's text style; the names from `DATA/LOCAL.DAT`, the choices kept in `CHOICE.DAT`; the keys, the grid and the kept choices are tested on the PC (`tools/menu_screens.sh`) |
 | `s2snd.c`, `s2sound.c` | Screamer 2's race sound: `s2snd.c` the rules without hardware (the samples of `DATA/SOUND.DAT`, `CD_TRACKS`, an engine's rate, volume and pan, the tyres, the knocks; `tools/s2/check_sound.sh`), `s2sound.c` the voices, the music's start and fade, called from `viewer.c` |
+| `s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c` | the 2D toolkit of Screamer 2's menu pages: `.BKK` pictures, sprites and fonts of `GRAF1.DAT`, text, the page runner (keys, fades), the LOADING screen and the race's pause menu (docs/screamer2/menus.md section 6; `tools/menu_screens.sh`) |
 | `fm.c` | the FM music: HMI's song player and OPL2 driver, queueing the chip's register writes with their times |
 | `files.c` | the files screen: the ZIP's state, every file green/red/grey, the notice for a compressed ZIP, the read test |
 | `console.c`, `screen.c`, `dlog.c`, `selftest.c`, `memtest.c`, `trap.c` | text drawing, the test band, the debug log, self-tests, the memory test, the trap handler |

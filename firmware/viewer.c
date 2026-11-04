@@ -113,13 +113,13 @@ static void screen_text(int n, const char *l1, const char *l2, const char *l3, i
     if (l3) con_text(fb, 20 - (int)__builtin_strlen(l3) / 2, 14, l3, GREY, BLACK);
     con_text(fb, 1, 15, "RIDE   d-pad left/right: track", GREY, BLACK);
     con_text(fb, 1, 16, "       A: cars 4/0/1  B: timing", GREY, BLACK);
-    con_text(fb, 1, 17, "       Start: drive (and back)", GREY, BLACK);
+    con_text(fb, 1, 17, "       Start: drive  Select+B: menu", GREY, BLACK);
     con_text(fb, 1, 19, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
     con_text(fb, 1, 20, "       A handbrake  L/R gears", GREY, BLACK);
     con_text(fb, 1, 21, "       up: auto/manual  X: timing", GREY, BLACK);
     con_text(fb, 1, 22, "       Select + left/right: track", GREY, BLACK);
     con_text(fb, 1, 23, "       Select + Start: restart", GREY, BLACK);
-    con_text(fb, 1, 24, "BOTH   Select + B: back to the menu", GREY, BLACK);
+    con_text(fb, 1, 24, "       Start: pause menu (exit there)", GREY, BLACK);
     VID_SWAP = 1;
 }
 
@@ -440,6 +440,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         *drive = 0;
         return -n;
     }
+    s2load_fade();                                      /* the LOADING picture was up through the track's build and the race's set-up (no-op if none) */
     for (;;) {
         uint32_t st = wait_swap_done(), t_frame = rdcycle(), vf = VID_FRAME(st);
         uint32_t keys = in_keys(), press = keys & ~keys_before;
@@ -747,7 +748,6 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
             const uint32_t *loading = ui_ready ? s2load_show(n, race_laps) : 0;     /* the original's picture; it stays up while the CPU builds */
             if (!loading) screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);
             if (load_track(z, n, &what)) {
-                if (loading) s2load_fade();
                 int next;
                 while ((next = visit(n, &cars, &overlay, &drive)) < 0)
                     ;                                   /* the cars or the mode changed: the same visit again */

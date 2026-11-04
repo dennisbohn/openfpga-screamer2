@@ -106,9 +106,9 @@ files screen, Start). The grid is applied when the track image is built (`load_t
 `tools/menu_screens.sh` runs the menu's code on the PC: tests of the keys, the grid, the kept choices and the texts read from the real ZIP,
 and pictures of the list in `build/check/menu/`.
 
-Back to the menu: Select + B in the race and in the ride (the music stops), and after the player has finished a race (a second later,
-so that the gas held across the line does nothing) A starts the race again and B goes to the menu; the FINISH screen says so. The
-loading screen shows the buttons too. The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
+Back to the menu: EXIT in the race's pause menu (Start, "Loading screen and pause menu" below), Select + B in the ride (the music stops), and after
+the player has finished a race (a second later, so that the gas held across the line does nothing) A starts the race again and B goes to the menu; the
+FINISH screen says so. The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
 
 | Button (ride) | |
 |---|---|
@@ -143,9 +143,20 @@ time are on the screen.
 | X | timing overlay on / off (B is the gas here; Screamer 1's X, the camera, has no use yet) |
 | Select + left / right | previous / next track (the track is loaded again, a new race) |
 | Select + Start | a new race from the grid |
-| Select + B | back to the menu (the music stops) |
 | A / B after the finish | the race again / back to the menu (from a second after the line) |
-| Start | back to the ride |
+| Start | the pause menu (RESUME, RESTART, EXIT; not once the player has finished), the original's Esc; B or Start take the item, A or Select resume |
+
+### Loading screen and pause menu
+
+Both are the original's pages on the 2D toolkit (`firmware/s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`; docs/screamer2/menus.md section 6 has the details and
+the SDRAM map). **LOADING:** the track's `LOAD_nL` picture with the track's banner, BEST TIME and BEST LAP (empty until the save exists: `--:--:-- MIL`) and
+LOADING... is put up before `load_track()` and stays through the track's build and the race's set-up: the display is driven by the hardware from the front
+buffer and its palette, so the CPU can be busy for the 3 to 5 s of `T1 load` and the picture does not change. It then fades out in 0.4 s. The log has
+`ui: loading screen up after N ms` (the picture's read, unpacking and drawing, expected about 0.1 s), and once at the start `ui: 111 sprites, 6 fonts ... ms`
+(the toolkit's assets, expected a few tenths of a second before the start menu). **Pause:** Start in the race stops it over the darkened picture; the race loop is not
+run, so the clock, the cars and the frame statistics stand still (the first frame after it takes one 20 ms step); the effects (engines, tyres) ease out over a
+second and come back whole, the music plays on. RESTART is the race again from the grid (the track stays loaded), EXIT the start menu. The pause adds nothing to a
+frame of the race but the test of one button bit; the log has `pause: still and palette N ms` once (the darkening table and the copy of the screen, estimated 20 to 40 ms).
 
 A car (any of the four) with no drivable ground under it for 3 s (`off_track` of the state), or more than 3,000 units below the
 lowest road point of the track, or a computer's car that has not moved for 6 s, is put back onto the line by itself (the nearest point
@@ -356,7 +367,7 @@ restart of the race on the same track (Select + Start) keeps its song. A frame a
 What is open: the original's volume balance is not known (the CD drive's analogue mix is not in the program; the two thirds are
 Screamer 1's choice), the pan law of the effects is HMI's as Screamer 1's `sound.c` has it, the car against car knock is the
 firmware's closing speed, the cones' knock and the scenery's sounds (`ANIMATIONS` rows with a sound, `AMBIENT*.DTR`) are not
-done, no menu sounds (the start menu is silent), no pause.
+done, no menu sounds in the start menu (the clicks of `MENU.DTR` exist, `s2sound_menu()`, the pause menu uses them), the pause eases the effects out (above).
 
 ## PC renderer
 
@@ -431,7 +442,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/dat_sizes.py <file.DAT>...` | lists a game container with unpacked sizes (`-v`: every file) |
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
-| `tools/menu_screens.sh`, `tools/host/menu_screen.c` | the start menu `firmware/s2menu.c` on the PC with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
+| `tools/menu_screens.sh`, `tools/host/menu_screen.c`, `tools/host/ui_screen.c`, `tools/ui_reference.py` | the 2D toolkit (`s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`) on the PC with the blitter's C model and scripted buttons, against references made from the game's files by `ui_reference.py` (its own LZW, `.SPR` / `.FNT` and text readers): the 28 `L` pictures of `GRAF1.DAT` (CRC-32 of pixels and palette, on the stored ZIP and on a deflated one made on the fly), 20 text and sprite cases pixel for pixel, the loading screens of the seven tracks, the pause menu (keys, clicks, the easing of the effects, the darkened still pixel for pixel, the darkening table against a double-precision search) on three of the repository's race pictures quantized to their track's palette, the page runner's key repeat and fades, the 15 samples of `MENU.DTR`; pictures in `build/check/menu/` (`menu_load*.png`, `menu_pause*.png`). And the start menu `firmware/s2menu.c` with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py`, `tools/s2/check_cars_s2.py` | the Screamer 2 track image on the PC (the reference; `S2CARS=team:car,...` chooses the grid's cars) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks and three grids, natively under the sanitizers; the windows' reflection picture and the cars' materials, textures and colours in the image against the original's |
 | `tools/s2/check_cars_s2.sh`, `tools/s2/check_cars_s2.c` | the cars' loader `firmware/s2teams.c` natively under the sanitizers on a stored and a deflated ZIP of the team containers: the cars equal the containers' own entries, the bytes read are counted, a repeated or partly changed grid reads nothing or only the changed cars |

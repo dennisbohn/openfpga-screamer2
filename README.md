@@ -29,7 +29,7 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
 - **Start menu:** after the files screen a list in the console's text style (`firmware/s2menu.c`): track 1 to 7 (the names from the
   game's `STRINGS.TXT`), your team (CONDOR, ANGELS, WASP, ZEUS) and car 1 to 5, laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL,
   PRO), the gearbox, START RACE and WATCH (the ride). Everything is open from the start. d-pad up/down row, left/right value, L / R three
-  tracks on or back, A or Start go; Select + B in the race returns to it, and after a finished race A races again, B goes to the menu. The choices
+  tracks on or back, A or Start go; Start in the race opens the pause menu (RESUME, RESTART, EXIT), and after a finished race A races again, B goes to the menu. The choices
   are kept across power-ups. Docs: docs/development.md, "Start menu".
 - **Driving mode (a race):** the race of the start menu (or Start in the ride) puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
@@ -45,4 +45,4 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   your tyres (squeal, rolling on rough ground), wall and car knocks and a landing, all by the original's own rules
   (`firmware/s2snd.c`, tested natively with `tools/s2/check_sound.sh`; `firmware/s2sound.c` plays them). Open: the volume balance (not
   heard yet), the scenery's own sounds (birds, mill, crowd), the cones' knock, the car-against-car knock is the firmware's closing
-  speed, no pause or menu sounds. The original has no sound for the start lights or the gears. Docs: docs/development.md, "Sound".
+  speed, no menu sounds in the start menu. The original has no sound for the start lights or the gears. Docs: docs/development.md, "Sound".
