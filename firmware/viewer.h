@@ -12,7 +12,8 @@
  * The overlay (top left, drawn after the 3D picture): the mean and the worst time of a frame over the
  * last second, from the frame's start to the end of the rasterizer's work (not the wait for the next
  * vertical blanking), the track and the cars. The first line of debug.txt is the same, live; a line goes
- * into the log 5 s after a track is shown, then every minute, and one when it is left.
+ * into the log (4 KB: kept short) 5 s after a track is shown, after 30 s, then every minute, and one when it is
+ * left; a track's loading is one line.
  */
 #pragma once
 #include <stdint.h>

@@ -88,12 +88,14 @@ the last second in ms, the track, the cars and the faces of the frame. A frame's
 start (the swap before it is done) to the end of the rasterizer's work, not including the wait for the next
 vertical blanking, so 10 ms still shows 50 pictures a second; the camera advances by the real time
 (video frames of 1/50 s), so a frame over 20 ms makes the picture slower but not the movement.
-`debug.txt`: its first line is the live statistics of the current visit (`Screamer Pocket T1 c4 fr1234
-avg10.4 max12.8 late0 fps49.9`: track, cars, frames, mean and worst ms, frames over 20 ms, pictures a
-second), a line `viewer: track 1, cars 4, frames ..., ms mean ... max ... at <units>k, over 20 ms ...,
-<pictures>/s, faces ..., pieces ...` 5 s after a track is shown, then every minute, and one when it is
-left; the frame timeline (`tl_*`: cycles and the units' busy clocks at each stage) once. The log has 4 KB
-and is not a ring: it ends when it is full.
+`debug.txt` (4 KB, not a ring: when it is full later lines are lost): its first line is the live statistics of the
+current visit (`Screamer Pocket T1 c4 fr1234 avg10.4 max12.8 late0 fps49.9`: track, cars, frames, mean and
+worst ms, frames over 20 ms, pictures a second); one line per track load (`viewer: T1 loaded in 5100 ms: read
+2973 KB ... ms, build 4494 KB ... ms (unpack ...), crc ..., road 1440 pts ... ms, 2000 placements`); per visit
+a line `view T1 c4 249fr avg10.4 max12.8@512k late0 50.0/s f1180 p95` (track, cars, frames, mean and worst ms and
+where on the road in thousand units, frames over 20 ms, pictures a second, faces and pieces a frame) after 5 s, after
+30 s, then every minute, and one when a visit that went on past the last line is left; the frame timeline (`tl_*`:
+cycles and the units' busy clocks at each stage, 1 KB) once, with the first line.
 
 Known gaps (accepted): the cars' windows are white (no environment map: routine 160 reads `ENV.MLB`),
 no shadows, smoke, props or animated scenery, no fade by depth, no night or fog, no mirror, the S1
@@ -111,7 +113,7 @@ firmware takes the finished image from the testbench instead of building it (the
 natively, above), `tools/s2/make_track_s2.py` makes it:
 
 ```sh
-python -I tools/s2/make_track_s2.py "C:/GOG Games/Screamer 2" 1 build/s2/track1.bin
+python -I tools/s2/make_track_s2.py <game folder> 1 build/s2/track1.bin
 # build/gamedata/ needs SCREAMER2.zip, GAME.GOG and GAME.DAT (see tools/simcheck.sh)
 SIM_QUICK=1 SIM_GAME=build/gamedata SIM_IMAGE=build/s2/track1.bin SIM_TRACK=1 SIM_RACE_FRAMES=8 \
     tools/sim.sh soc build/firmware/firmware.bin build/sim/viewer 1500 > build/sim/viewer.log

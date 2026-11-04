@@ -87,32 +87,28 @@ static void screen_text(int n, const char *l1, const char *l2, const char *l3, i
     VID_SWAP = 1;
 }
 
-/* a ZIP entry whole to dest; 1 if that worked. The log gets its size and how long it took */
-static int read_entry(struct zip *z, const char *path, uint8_t *dest, uint32_t max, uint32_t *size)
+/* a ZIP entry whole to dest; 1 if that worked, then its size and the cycles it took are added to *size
+   and *cycles. A failure goes into the log at once (the log has 4 KB: a track's loading is one line) */
+static int read_entry(struct zip *z, const char *path, uint8_t *dest, uint32_t max, uint32_t *size, uint32_t *cycles)
 {
     const struct zip_entry *e = zip_find(z, path);
     dlog_str("viewer: ");
-    dlog_str(path);
     if (!e) {
+        dlog_str(path);
         dlog_str(" is not in the ZIP\n");
         return 0;
     }
     uint32_t t0 = rdcycle();
     int r = zip_read(z, e, dest, max);
-    dlog_char(' ');
-    dlog_dec((int32_t)e->size);
-    dlog_str(" bytes, method ");
-    dlog_dec(e->method);
     if (r) {
+        dlog_str(path);
         dlog_str(": read failed (zip result ");
         dlog_dec(r);
         dlog_str(")\n");
         return 0;
     }
-    dlog_str(", read in ");
-    dlog_dec((int32_t)((rdcycle() - t0) / MS_CYCLES));
-    dlog_str(" ms\n");
     *size = e->size;
+    *cycles += rdcycle() - t0;
     return 1;
 }
 
@@ -124,35 +120,37 @@ static int sim_image(void)
     if (!size || size > TEX_MAX) return 0;
     if (body && slot_read(IMAGE_SLOT, 0, (uint32_t)(uintptr_t)TEX_FILE, body)) return 0;
     if (size > body && slot_read(IMAGE_SLOT, body, (uint32_t)(uintptr_t)TEX_FILE + body, SLOT_REST)) return 0;
-    dlog_str("viewer: track image from the testbench\n");
     return track_open(TEX_FILE);
 }
 
 /* Track n: its containers from the ZIP, the image built, checked and set up, the road chained. 1 if all
-   worked, else 0 and what stopped it in *what. The cars' container is read once. */
+   worked, else 0 and what stopped it in *what. The cars' container is read once. The log gets one line:
+   the bytes read and the milliseconds of each step. */
 static int load_track(struct zip *z, int n, const char **what)
 {
     static uint32_t cars_size;
     static struct s2_files f;
     static char gfx_name[24], data_name[24];
-    struct track_build_info info;
-    uint32_t t0 = rdcycle();
-    dlog_str("viewer: loading track ");
-    dlog_dec(n);
-    dlog_char('\n');
+    struct track_build_info info = { "", 0, 0 };
+    uint32_t t0 = rdcycle(), read_cycles = 0, read_bytes = 0, crc_cycles = 0, road_cycles = 0, image = 0;
     if (sim && slot_size(IMAGE_SLOT)) {
         if (!sim_image()) return *what = "the image", 0;
     } else {
+        uint32_t size = 0;
         fmt_str(fmt_udec(fmt_str(gfx_name, "GFX/MAP"), (uint32_t)n), "H01.DAT");
         fmt_str(fmt_udec(fmt_str(data_name, "DATA/MAP"), (uint32_t)n), ".DAT");
-        if (!cars_size && !read_entry(z, "GFX/CARS101.DAT", CARS_MEM, CARS_MAX, &cars_size)) return *what = "GFX/CARS101.DAT", 0;
+        if (!cars_size) {
+            if (!read_entry(z, "GFX/CARS101.DAT", CARS_MEM, CARS_MAX, &cars_size, &read_cycles)) return *what = "GFX/CARS101.DAT", 0;
+            read_bytes += cars_size;
+        }
         f.cars = CARS_MEM;
         f.cars_size = cars_size;
         f.gfx = GFX_MEM;
         f.data = DATA_MEM;
-        if (!read_entry(z, gfx_name, GFX_MEM, GFX_MAX, &f.gfx_size)) return *what = "the track's GFX file", 0;
-        if (!read_entry(z, data_name, DATA_MEM, DATA_MAX, &f.data_size)) return *what = "the track's DATA file", 0;
-        uint32_t size = track_build_s2(&f, n, (uint8_t *)(uintptr_t)TEX_FILE, TEX_MAX, SCRATCH_MEM, SCRATCH_MAX, &info);
+        if (!read_entry(z, gfx_name, GFX_MEM, GFX_MAX, &f.gfx_size, &read_cycles)) return *what = "the track's GFX file", 0;
+        if (!read_entry(z, data_name, DATA_MEM, DATA_MAX, &f.data_size, &read_cycles)) return *what = "the track's DATA file", 0;
+        read_bytes += f.gfx_size + f.data_size;
+        size = track_build_s2(&f, n, (uint8_t *)(uintptr_t)TEX_FILE, TEX_MAX, SCRATCH_MEM, SCRATCH_MAX, &info);
         while (!(MEM_STATUS & MEM_WRITES_IDLE))     /* all of it in the SDRAM for the 3D units */
             ;
         dcache_invalidate();                        /* the block check reads the SDRAM */
@@ -163,40 +161,45 @@ static int load_track(struct zip *z, int n, const char **what)
             *what = size ? "the image header" : "the image build";
             return 0;
         }
-        dlog_str("viewer: image ");
-        dlog_dec((int32_t)size);
-        dlog_str(" bytes built in ");
-        dlog_dec((int32_t)(info.cycles / MS_CYCLES));
-        dlog_str(" ms (unpacking ");
-        dlog_dec((int32_t)(info.unpack_cycles / MS_CYCLES));
-        dlog_str(" ms)\n");
+        image = size;
     }
     int bad = 0;
     uint32_t t1 = rdcycle();
     for (int k = 0; k < track_blocks(); k++) bad += !track_block_ok(k);
-    dlog_str("viewer: image CRC of the 256 KB blocks ");
-    dlog_str(bad ? "BAD in " : "all ok in ");
-    dlog_dec((int32_t)((rdcycle() - t1) / MS_CYCLES));
-    dlog_str(" ms\n");
-    if (bad) return *what = "the image CRC", 0;
+    crc_cycles = rdcycle() - t1;
+    if (bad) {
+        dlog_str("viewer: the image's CRC is BAD in the SDRAM\n");
+        return *what = "the image CRC", 0;
+    }
     int placements = track_init();
     if (!placements) return *what = "the track limits", 0;
     uint32_t t2 = rdcycle();
     int points = road_build();
+    road_cycles = rdcycle() - t2;
     if (!points) return *what = "the road", 0;
-    dlog_str("viewer: track ");
+    dlog_str("viewer: T");
     dlog_dec(n);
-    dlog_str(": ");
-    dlog_dec(placements);
-    dlog_str(" placements, road ");
-    dlog_dec(points);
-    dlog_str(" points ");
-    dlog_dec((int32_t)road_length());
-    dlog_str(" units (");
-    dlog_dec((int32_t)((rdcycle() - t2) / MS_CYCLES));
-    dlog_str(" ms), ready after ");
+    dlog_str(" loaded in ");
     dlog_dec((int32_t)((rdcycle() - t0) / MS_CYCLES));
-    dlog_str(" ms\n");
+    dlog_str(" ms: read ");
+    dlog_dec((int32_t)(read_bytes / 1024));
+    dlog_str(" KB ");
+    dlog_dec((int32_t)(read_cycles / MS_CYCLES));
+    dlog_str(" ms, build ");
+    dlog_dec((int32_t)(image / 1024));
+    dlog_str(" KB ");
+    dlog_dec((int32_t)(info.cycles / MS_CYCLES));
+    dlog_str(" ms (unpack ");
+    dlog_dec((int32_t)(info.unpack_cycles / MS_CYCLES));
+    dlog_str("), crc ");
+    dlog_dec((int32_t)(crc_cycles / MS_CYCLES));
+    dlog_str(", road ");
+    dlog_dec(points);
+    dlog_str(" pts ");
+    dlog_dec((int32_t)(road_cycles / MS_CYCLES));
+    dlog_str(" ms, ");
+    dlog_dec(placements);
+    dlog_str(" placements\n");
     return 1;
 }
 
@@ -212,32 +215,29 @@ struct stats {
 static void stats_text(char *p, int n, int cars, const struct stats *s, int full)
 {
     uint32_t dvf = s->video, fps10 = dvf && s->n > 1 ? (s->n - 1) * 500 / dvf : 0;   /* n - 1 intervals */
-    char *q = fmt_udec(fmt_str(fmt_udec(fmt_str(p, full ? "viewer: track " : "Screamer Pocket T"), (uint32_t)n),
-                               full ? ", cars " : " c"), (uint32_t)cars);
-    q = fmt_udec(fmt_str(q, full ? ", frames " : " fr"), s->n);
-    q = fmt_str(q, full ? ", ms mean " : " avg");
+    char *q = fmt_udec(fmt_str(p, full ? "view T" : "Screamer Pocket T"), (uint32_t)n);
+    q = fmt_udec(fmt_str(q, " c"), (uint32_t)cars);
+    q = fmt_udec(fmt_str(q, full ? " " : " fr"), s->n);
+    q = fmt_str(q, full ? "fr avg" : " avg");
     q = fmt_ms(q, s->n ? (uint32_t)(s->sum / s->n) : 0);
-    q = fmt_str(q, full ? " max " : " max");
-    q = fmt_ms(q, s->max);
-    if (full) {
-        q = fmt_udec(fmt_str(q, " at "), (uint32_t)(s->worst_s / 1000.0f));
-        q = fmt_str(q, "k");
-    }
-    q = fmt_udec(fmt_str(q, full ? ", over 20 ms " : " late"), s->over);
-    q = fmt_str(q, full ? ", " : " fps");
-    q = fmt_udec(q, fps10 / 10);
+    q = fmt_ms(fmt_str(q, " max"), s->max);
+    if (full) q = fmt_str(fmt_udec(fmt_str(q, "@"), (uint32_t)(s->worst_s / 1000.0f)), "k");
+    q = fmt_udec(fmt_str(q, " late"), s->over);
+    q = fmt_udec(fmt_str(q, full ? " " : " fps"), fps10 / 10);
     *q++ = '.';
     *q++ = (char)('0' + fps10 % 10);
     *q = 0;
     if (full) {
-        q = fmt_udec(fmt_str(q, "/s, faces "), s->n ? s->faces / s->n : 0);
-        q = fmt_udec(fmt_str(q, ", pieces "), s->n ? s->pieces / s->n : 0);
+        q = fmt_udec(fmt_str(q, "/s f"), s->n ? s->faces / s->n : 0);
+        fmt_udec(fmt_str(q, " p"), s->n ? s->pieces / s->n : 0);
     }
 }
 
+/* a line into the log: track, cars, frames, mean and worst ms (@ where on the road, in thousand units),
+   frames over 20 ms, pictures a second, faces and pieces a frame */
 static void log_stats(int n, int cars, const struct stats *s, const char *tag)
 {
-    char buf[160];
+    char buf[100];
     stats_text(buf, n, cars, s, 1);
     dlog_str(tag);
     dlog_str(buf);
@@ -258,7 +258,7 @@ static int visit(int n, int *cars, int *overlay)
     RS_CTRL = 1;
     static float resume_s;                              /* where the road was left when only the cars changed */
     static int timeline_done;
-    uint32_t keys_before = in_keys(), last_vf = 0, drawn = 0, window_vf = 0, next_log = 5 * VID_HZ;
+    uint32_t keys_before = in_keys(), last_vf = 0, drawn = 0, window_vf = 0, next_log = 5 * VID_HZ, logged_n = 0;
     struct stats st_all = { 0 };
     float s = resume_s;
     resume_s = 0.0f;
@@ -280,11 +280,11 @@ static int visit(int n, int *cars, int *overlay)
         st_all.video += dvf;
         /* a button: another track (this visit ends), the cars, the overlay */
         if (press & (KEY_LEFT | KEY_RIGHT)) {
-            log_stats(n, *cars, &st_all, "left: ");
+            if (st_all.n > logged_n + 100) log_stats(n, *cars, &st_all, "left ");
             return (press & KEY_RIGHT) ? n % TRACKS + 1 : (n + TRACKS - 2) % TRACKS + 1;
         }
         if (press & KEY_A) {
-            log_stats(n, *cars, &st_all, "left: ");
+            if (st_all.n > logged_n + 100) log_stats(n, *cars, &st_all, "left ");
             *cars = *cars == 4 ? 0 : *cars == 0 ? 1 : 4;
             resume_s = s;
             return -n;                                  /* the same track, the statistics from the start */
@@ -382,11 +382,12 @@ static int visit(int n, int *cars, int *overlay)
         uint32_t since = st_all.video;
         if (sim ? drawn + 1 == sim_frames : since >= next_log) {
             log_stats(n, *cars, &st_all, "");
+            logged_n = st_all.n;
             if (!timeline_done) {                       /* the previous frame's timeline, once: it is a kilobyte */
                 timeline_done = 1;
                 tl_log();
             }
-            next_log = since + 60 * VID_HZ;
+            next_log = since + (since < 300 ? 25 : 60) * VID_HZ;       /* 5 s, 30 s, then every minute */
             if (sim) {
                 dlog_str("stack used ");
                 dlog_dec((int32_t)stack_used());
