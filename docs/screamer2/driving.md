@@ -21,13 +21,13 @@ game's addresses (the comment at each routine in `s2car.c` names it):
 | 0x1f756, 0x1f697, 0x174ca, 0x1756f, 0x19409, 0x1f3ce | engine and gearbox (automatic or manual), throttle, brake, steering, clocks |
 | 0x14e20, 0x2f519 | the car made of its set-up and put on the grid |
 | 0x13f38 | the chase camera (view 3, the one a race starts in): 1300 behind, 200 over the car, looking down 0.274, its turn led towards the way the car goes and eased by speed |
-| 0x16878 (part) | the front wheels' steering and the wheels' turning as drawn |
+| 0x16878 (part) | the front wheels' steering and the wheels' turning as drawn; the car object's flags (`look`: brake lights, wheels' blur, damage marks) |
 
 Left out of `s2car.c` because one car does not need them: the other cars (the solver 0x245a3, the outlines 0x22d35, 0x20a18),
 the driver of the computer's cars (0x17726), laps and the position along the road (0x153c6): these are in `race.c`
 (section "The race" below, with a simpler touch between cars); cones, sparks, smoke and dust,
-sound, the road kind's look (0x1f1ef), the other camera views are not done. The car's damage is kept (it takes power away and softens
-a spring) but nothing shows it.
+sound, the road kind's look (0x1f1ef), the other camera views are not done. The car's damage takes power away, softens
+a spring and shows on the car (the marks of the four sides, "The cars' look" below).
 
 ## The car's numbers
 
@@ -193,10 +193,37 @@ models. The game's fourth body block `fai` leans with the body now too (it was t
 `track_draw_cam()` makes every car's blocks and pushes the pieces into the geometry unit's registers (`hw_piece`) before it returns, the
 hardware reads only the image's meshes afterwards, and the computers' states are changed later.
 
+### The cars' look: brake lights, wheels' blur, damage marks
+
+A car's materials have 128 pictures (frames), and the picture a face shows is `flags >> 9` of the car object's flags (`STARTL.EXE`:
+`0x7ec0b` phase = flags >> 2, `0xbd748` frame = frames x phase >> 14). The flags are made once a step by `0x16878` (`0x1737b` to `0x174bf`),
+`s2car_state.look` here (`wheel_pictures()`, the step's order as the game's: the brake it sees is the last step's):
+
+| Flag | Picture bit | Set when |
+|---|---|---|
+| `0x200` | 0 | the brake is down: `+0x1e4 + +0x1e8` is not 0 (the pedal or, for a computer's car, its driver; not the slowing down) |
+| `0x400`, `0x8000` | 1, 6 | a pair of wheels turns more than 0.29 turns a step (`speed / +0x5c`; the driven pair at the engine's speed): `0x400` for the pair the drive goes to, `0x8000` for the other, with four-wheel drive `0x400` for the rear pair alone |
+| `0x2000 0x800 0x4000 0x1000` | 4, 2, 5, 3 | the marks of sides 0 to 3 (car `+0xb8`), set by the knock `0x19aaa` once a side's count is 1 and a knock is over 2000 |
+
+In every car file the textures change with those bits only: the rear panel (`rauto`) with bit 0 (picture 1: the rear lights bright) and
+bit 3 (the crumpled rear), the front body with bit 2, the flanks with bits 4 and 5 (`0x4000` the left flank from behind: scraped, its number scratched),
+the hubs with bit 1 and bit 6 (the rear-drive cars have the rear hubs on bit 1, the front-drive cars the front ones: the same order as the flags).
+
+**The bug on the Pocket:** the firmware gave the cars Screamer 1's flags, `0x4000` when not braking, 0 when braking. In Screamer 2 `0x4000`
+is the mark of side 2, so a car that was not braking showed the scraped left flank (picture 32, "damaged" bodywork next to the rear light), the
+picture went whole when the player braked, and the brake (`0x200`, picture 1) was never asked for: the lights never lit (a car in the viewer
+showed the scraped flank as well). The damage marks are set by `knock()` with the damage on (the game has DAMAGES off until its menu says so; there is
+no menu here); a car against a car does not knock yet.
+
 ### Checks of the race
 
 - `tools/s2/check_car.sh`: the player's car is unchanged by the additions (the output is the same line for line as before): the computer's
   rules are all behind `s2car_state.ai`, the hold behind `.hold`. `check_params.sh` and `check_track_build_s2.sh` pass.
+- **The cars' look** (`check_looks()` in `tools/s2/render_s2.c`, every run): the player's car on the start line is drawn from four sides: standing it
+  has look 0 and texture phase 0; braking it has `0x200` and the rear lights brighter (672 pixels, nothing else but the rear: not from the front);
+  each of the four marks changes the car from some side; each wheel flag changes the hubs; at full throttle the rear (driven) wheels blur from step 15
+  and the front ones from step 101, the brake lights never; in a race of 1,100 steps no car on the grid has a look and the computers show their brake lights
+  (77 car steps). It fails 11 checks with the rule of Screamer 1. `LOOK_DUMP=/b/s2host/look_` writes the pictures.
 - **The cars as drawn** (`tools/s2/render_s2.c`, every run): each car model of the image is drawn with and without the wheels' spin and
   steering, and exactly four blocks (the hubs) may change with the spin and four (the front wheels) with the steering; in a `g` run every
   car's pose each step must be a number and a car's (tilt under 1.2 rad, body lean under 0.5, steering under 1). It failed for AUTO02 and
@@ -255,7 +282,7 @@ physics step is the cost: its four ground looks and about 20 `atanf`) are the ne
   what the check measures.
 - The pose of a tilted car (`s2car_look`) and the wheels' sign of turning have not been seen on a slope, and the camera
   of view 3 only in the numbers.
-- Not done: the road kind's effects on the look, the dust, damage shown, the camera's other views.
+- Not done: the road kind's effects on the look, the dust, the camera's other views, damage from a car against a car and the DAMAGES option.
 - The race (section above): the game's swept solver for touching cars, sparks, sounds and damage from a touch; the split times and
   "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie are a constant, `LEVEL` in
   `race.c`) and the number of laps (`RACE_LAPS`) are not in a menu; the computers' cars are teams 2 to 4's cars 2 to 4 whatever the

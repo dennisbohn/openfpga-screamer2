@@ -320,7 +320,8 @@ done, no menu sounds (there is no menu), no pause.
 `NOLOD=1` draws every block at level 0 (to compare), `d<k>` the lone car after k steps of a script of its own, `g<k>[,<n>]` the race for k
 steps (the firmware's own `race.c`; the player parked, `RACE_GAS=1` holding the gas, `RACE_ROBOT=1` driven by the game's driver, `RACE_CAM=<car>`
 the picture from behind that car) with a line per car every n steps and per lap done; every run also checks that the car models and the cars'
-poses hold together (a block that is not a wheel must not turn with the wheels: the exit code is 3 if one does), `r<i>` and `c<x>,<y>,<h>,<yaw>,<pitch>` are other
+poses hold together (a block that is not a wheel must not turn with the wheels: the exit code is 3 if one does) and the cars' look (brake lights,
+wheels' blur, damage marks as drawn, `docs/screamer2/driving.md`; `LOOK_DUMP=/b/s2host/look_` keeps its pictures), `r<i>` and `c<x>,<y>,<h>,<yaw>,<pitch>` are other
 cameras; `tools/rgb2png.py` makes PNGs. `tools/s2/framestats.sh build` and `sweep s2 <image> <label> <out.csv>
 <step> <cars,...>` count what a frame asks of the units along the road (`ROAD_S=185,371` the viewer's own
 places), see `docs/screamer2/performance.md`. For Screamer 1: `tools/render.sh` runs the firmware's C code
