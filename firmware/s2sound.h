@@ -13,6 +13,7 @@
  * and nothing else is wrong. Everything is silent in the ride (no race).
  */
 #pragma once
+#include <stdint.h>
 
 struct zip;
 struct track_cam;
@@ -30,3 +31,10 @@ void s2snd_frame(const struct track_cam *cam);
 /* The race is left (another track, the ride): every voice and the music stop; a line into the log with the cost
    per frame. Nothing may run on the data slots (a track's load) while music plays, so this comes first. */
 void s2snd_stop(void);
+
+/* The menu's sound `id` (MENU.DTR of SOUND.DAT, 0 .. 14: MENU1 .. MENU15, s2snd.h) on a voice of its own, at the sample's rate and the
+   effects' master volume. Works in the menus and in the race. Silent without SOUND.DAT. */
+void s2sound_menu(int id);
+/* The race's effects (engines, tyres) at f of 0x8000 of their volume, f = 0x8000 giving the registers back as the race left them: the
+   pause eases them out and restores them at once (the original's, 0xaec90). Knocks are stopped. */
+void s2sound_effects(int32_t f);

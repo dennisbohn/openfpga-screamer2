@@ -47,6 +47,11 @@ struct s2snd_sample {
    leaves its row with len 0) */
 int s2snd_parse(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out);
 
+/* The menu's samples: MENU.DTR of the same container lists MENU1.RAW .. MENU15.RAW as samples 0 .. 14 (11,025 Hz, two at 22,050;
+   the original loads them with the menu pages, 0xafc70). The same rules as above, out[S2SND_MENU_SAMPLES]. */
+#define S2SND_MENU_SAMPLES  15
+int s2snd_parse_menu(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out);
+
 /* CD_TRACKS of DATA/GAME.DAT's MISC.DTR: the CD track of each of the 7 tracks, in the game's order (0x2eb98
    plays CD_TRACKS[track - 1]); 1 if it read all seven */
 int s2snd_cd_tracks(const uint8_t *game_dat, uint32_t size, int out[7]);

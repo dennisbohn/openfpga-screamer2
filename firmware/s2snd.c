@@ -48,13 +48,14 @@ static int32_t field(const char *t, uint32_t n, int *ok)
     return (int32_t)(neg ? 0u - v : v);
 }
 
-int s2snd_parse(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out)
+/* the sample table `table` (GAME.DTR, MENU.DTR) of the container into out[count] */
+static int parse_table(const uint8_t *dat, uint32_t size, uint32_t base, const char *table, struct s2snd_sample *out, int count)
 {
     static uint8_t text[8192];
     struct dat_entry e;
     int found = 0;
-    memset(out, 0, sizeof *out * S2SND_SAMPLES);
-    if(!dat_find(dat, size, "GAME.DTR", &e) || e.size >= sizeof text) return 0;
+    memset(out, 0, sizeof *out * (size_t)count);
+    if(!dat_find(dat, size, table, &e) || e.size >= sizeof text) return 0;
     uint32_t n = dat_extract(dat, size, &e, text, sizeof text);
     const char *p = (const char *)text, *end = p + n, *w;
     uint32_t len;
@@ -73,7 +74,7 @@ int s2snd_parse(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_s
             uint32_t m = word(&p, end, &t);
             f[k] = m ? field(t, m, &ok) : (ok = 0);
         }
-        if(!ok || f[0] < 0 || f[0] >= S2SND_SAMPLES) continue;
+        if(!ok || f[0] < 0 || f[0] >= count) continue;
         /* id, loop length, loop count, volume; rate, bits, channels, format */
         struct s2snd_sample *s = &out[f[0]];
         if(f[5] != 8 || f[6] != 0 || f[7] != 0) continue;           /* 8-bit mono unsigned only */
@@ -86,6 +87,16 @@ int s2snd_parse(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_s
         found++;
     }
     return found;
+}
+
+int s2snd_parse(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out)
+{
+    return parse_table(dat, size, base, "GAME.DTR", out, S2SND_SAMPLES);
+}
+
+int s2snd_parse_menu(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out)
+{
+    return parse_table(dat, size, base, "MENU.DTR", out, S2SND_MENU_SAMPLES);
 }
 
 int s2snd_cd_tracks(const uint8_t *game_dat, uint32_t size, int out[7])

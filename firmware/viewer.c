@@ -20,6 +20,9 @@
 #include "s2teams.h"
 #include "s2sound.h"
 #include "s2menu.h"
+#include "s2gfx.h"
+#include "s2load.h"
+#include "s2pause.h"
 #include "prof.h"
 #include <string.h>
 
@@ -77,6 +80,7 @@ static struct blit_list back;
 #define RED     3
 #define GREY    4
 
+static int ui_ready;                    /* the 2D toolkit (s2gfx.h) is up: the loading screen and the pause menu */
 static uint32_t sim_frames;             /* in the simulation: the frames to draw before it ends */
 static uint32_t results;
 static int sim;
@@ -459,7 +463,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 leave(n, mode, &st_all);
                 return other_track(n, press);
             }
-            if (sel && (press & KEY_B)) {               /* Select + B: back to the menu */
+            if (!ui_ready && sel && (press & KEY_B)) {  /* Select + B: back to the menu, where there is no pause menu */
                 leave(n, mode, &st_all);
                 return 0;
             }
@@ -477,10 +481,19 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 if (sel) {                              /* Select + Start: the race again from the grid */
                     race_start(n, floor_z);
                     fin_frames = 0;
-                } else {                                /* Start: back to the ride */
-                    leave(n, mode, &st_all);
-                    *drive = 0;
-                    return -n;
+                } else if (ui_ready && drawn && !fin_frames) {      /* Start: the pause menu (not once the player has finished) */
+                    int choice = s2pause_run(!!(st & VID_FRONT), pal);
+                    if (choice == S2PAUSE_EXIT) {
+                        leave(n, mode, &st_all);
+                        return 0;
+                    }
+                    if (choice == S2PAUSE_RESTART) {
+                        race_start(n, floor_z);
+                        fin_frames = 0;
+                    }
+                    keys_before = in_keys();            /* (what is held now, the gas, is no press) */
+                    window_vf = last_vf = VID_FRAME(VID_STATUS);    /* the pause is not racing time: the next frame is one step */
+                    continue;
                 }
             }
             if (press & KEY_X) *overlay = !*overlay;
@@ -720,6 +733,7 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     s2snd_init(z);
     s2menu_init(z);
     s2menu_load(&cfg);
+    ui_ready = !sim && s2gfx_init(z);                   /* (the simulation has no menus) */
     for (;;) {
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
             int go = s2menu_run(&cfg);
@@ -730,8 +744,10 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
         }
         for (;;) {                                      /* the track, its visits, until the player asks for the menu */
             const char *what = "";
-            screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);
+            const uint32_t *loading = ui_ready ? s2load_show(n, race_laps) : 0;     /* the original's picture; it stays up while the CPU builds */
+            if (!loading) screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);
             if (load_track(z, n, &what)) {
+                if (loading) s2load_fade();
                 int next;
                 while ((next = visit(n, &cars, &overlay, &drive)) < 0)
                     ;                                   /* the cars or the mode changed: the same visit again */
