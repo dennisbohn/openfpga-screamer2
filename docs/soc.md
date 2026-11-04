@@ -78,7 +78,7 @@ the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
 | `0x1012_0000` | front of the CD player |
 | `0x1020_0000` | parts of `MENU.DAT` (slot 19) |
 | `0x1060_0000` | parts of `GRAF.DAT` (slot 20); each at its place as in the file |
-| `0x10A0_0000` | Screamer 2's 2D toolkit (`firmware/s2gfx.c`, 1 MB, 0.93 MB used): two pictures of 64,000 bytes (+0x0, +0x10000), a stage 160 KB (+0x20000) and an unpack buffer 72 KB (+0x48000) for entries read by range from `GRAF1.DAT`, then `MENUL.SPR` as the file is and the fonts' glyphs (+0x60000, 0.57 MB). Screamer 1: images, sprites and fonts of the menu pages and of the track and car selection, the unpacked loading screen |
+| `0x10A0_0000` | Screamer 2's 2D toolkit (`firmware/s2gfx.c`, 1 MB, 0.93 MB used): two pictures of 64,000 bytes (+0x0, +0x10000), a stage 160 KB (+0x20000) and an unpack buffer 72 KB (+0x48000) for entries read by range from `GRAF1.DAT`, then `MENUL.SPR` as the file is and the fonts' glyphs (+0x60000, 0.57 MB), and `GAMEL.SPR` unpacked at +0x100000 (0.2 MB: the race screen's track banners, from `GFX/GAME1.DAT`). Screamer 1: images, sprites and fonts of the menu pages and of the track and car selection, the unpacked loading screen |
 | `0x1100_0000` | read test of the files screen (`files_load_check`, up to 8 MB); afterwards, for a deflated ZIP only, `GFX/GRAF1.DAT` inflated whole (4.2 MB, `s2gfx.c`) |
 | `0x11C0_0000` | sound effects `DATA/SOUND.DAT` (Screamer 2: read whole from the ZIP once, 1.4 MB, by `firmware/s2sound.c`; the mixer plays the samples from there. Screamer 1's code in the tree reads it from slot 8, up to 2 MB, the nine menu samples at their places) |
 | `0x11E0_0000` | music ring (256 KB, from the CD image, slot 22) |

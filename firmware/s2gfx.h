@@ -11,6 +11,7 @@
  *   +0x60000  sprites, fonts 0.57 MB        MENUL.SPR as the file is, then the fonts' glyphs one byte a pixel
  * A deflated ZIP cannot be read by range: its GRAF1.DAT (4.2 MB) is inflated once, whole, at 0x1100_0000 (the files screen's read
  * test region, free by then).
+ *   +0x100000 race sprites   0.2 MB         GAME1.DAT's GAMEL.SPR as the file is (the race screen's track banners, s2gfx_banner)
  */
 #pragma once
 #include <stdint.h>
@@ -53,6 +54,11 @@ const char *s2gfx_line(const char *key, int k, const char *fallback);
 struct blit_list *s2gfx_begin(void);
 void s2gfx_end(const uint32_t *pal, int32_t fade);
 
+/* The same for a frame somebody else is drawing into framebuffer `buffer` (the race's back buffer, once its rasterizer is done), and the
+   end of it: the list to the blitter, waited for, the boxes of s2gfx_dark_after() applied. No palette, no swap. */
+struct blit_list *s2gfx_begin_on(int buffer);
+void s2gfx_flush(void);
+
 /* The whole screen from a picture buffer (opaque copy) */
 void s2gfx_picture(struct blit_list *l, const uint8_t *pic);
 /* Sprite n of MENUL.SPR with its own offset: its pixels start at (x + its x, y + its y) */
@@ -67,6 +73,22 @@ int s2gfx_text(struct blit_list *l, int font, int colour, int space, int x, int 
    between them, none after the last; checked against the running original on the ARCADE page) */
 void s2gfx_text_centred(struct blit_list *l, int font, int colour, int space, int y, const char *s);
 
+/* The same centred in the box x0 .. x0 + width (0x332f5: x = x0 + (width - text width) / 2, the width measured as s2gfx_text_centred does) */
+void s2gfx_text_boxed(struct blit_list *l, int font, int colour, int space, int x0, int width, int y, const char *s);
+
+/* The clip of the original's drawing (0x51189 for text, 0x50f3c for sprites: a box of rows, whole width): what s2gfx_text and
+   s2gfx_sprite draw outside the rows [y0, y1) is cut off. (0, 200, 0, 200) for none, the state after s2gfx_init(). */
+void s2gfx_clip(int text_y0, int text_y1, int sprite_y0, int sprite_y1);
+
+/* MENUL.SPR's cars' side views: sprite S2G_SPR_CAR + 5 * team + car, team 0 .. 3 and car 0 .. 4 (31 x 10 to 12 pixels). They are
+   the same pictures as the race screen's (GAMEL.SPR 0x2e ..). */
+#define S2G_SPR_CAR 0x55
+
+/* The track banner of the race screen (GAMEL.SPR 0x27 + track - 1, 144 x 50: the end of the race) as a sprite number for
+   s2gfx_sprite(); track 1 .. 7. The art is the loading screen's but for COLUMBIA, which the loading screen spells COLOMBIA. Without
+   GAMEL.SPR (the ZIP has no GAME1.DAT) the loading screen's banner. */
+int s2gfx_banner(int track);
+
 /* The darkening of the original (it builds a table for the palette every picture is darkened with): for each colour the palette entry
    nearest to 0.67 of it (the first of equals), and where that is the colour itself, the nearest to 0.7 of that again. Entries from
    `keep` up to 255 are never the result (a few the page wants for itself); 256 for none. */
@@ -75,3 +97,9 @@ void s2gfx_dark_table(const uint32_t *pal, uint8_t table[256], int keep);
 void s2gfx_snapshot(int buffer, uint8_t *dst, const uint8_t *table);
 /* The box of a picture through the table */
 void s2gfx_dark_box(uint8_t *pic, int x, int y, int w, int h, const uint8_t table[256]);
+/* The box of a framebuffer through the table, as the original's 0x51868 does it: in words of four pixels, so x and w lose their low two
+   bits (a box at x 30, 260 wide, is 28 .. 288) */
+void s2gfx_dark_fb(volatile uint8_t *fb, int x, int y, int w, int h, const uint8_t table[256]);
+/* The same box, `passes` times, applied to the frame being built once the blitter has drawn it (s2gfx_end), for the page's text under it
+   too: up to 4 boxes a frame, forgotten by s2gfx_begin(). */
+void s2gfx_dark_after(int x, int y, int w, int h, int passes, const uint8_t *table);

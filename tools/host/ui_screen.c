@@ -15,6 +15,10 @@
 #include "../s2menu.h"
 #include "../s2save.h"
 #include "../s2snd.h"
+#include "../s2pages.h"
+#include "../s2end.h"
+#include "../s2save.h"
+#include "../s2menu.h"
 #include "../frame.h"
 #include "../hw.h"
 #include "../blit.h"
@@ -49,6 +53,9 @@ static const char *expect_ref;
 static uint8_t *slurp(const char *path, uint32_t *n);
 static void check_frame(const struct expect *e);
 static void save(const char *name);
+static struct { uint32_t at; int slot; } caps[12];      /* frames kept in memory: the picture on show in a call, for the comparisons */
+static int ncaps;
+static uint8_t cap[12][S2G_PIC_BYTES];
 
 /* hw.h's registers are plain memory here: the swap request is a store to VID_SWAP */
 static void save(const char *name)
@@ -79,6 +86,8 @@ uint32_t wait_swap_done(void)
             if (shots[i].at == calls) save(shots[i].name);
         for (int i = 0; i < nexpects; i++)
             if (expects[i].at == calls) check_frame(&expects[i]);
+        for (int i = 0; i < ncaps; i++)
+            if (caps[i].at == calls) memcpy(cap[caps[i].slot], (const void *)FB(front), S2G_PIC_BYTES);
     }
     uint32_t keys = 0;
     char c = script && script[script_at] ? script[script_at++] : '.';
@@ -136,7 +145,7 @@ static void begin_run(const char *keys, const char *prefix)
     IN_KEY = 0;
     calls = 0;
     swaps = 0;
-    nshots = 0;
+    nshots = ncaps = 0;
     shot_prefix = prefix;
     music_frames = effects_calls = nclicks = 0;
     effects_min = 0x8000;
@@ -147,6 +156,12 @@ static void shot_at(uint32_t call, const char *name)
 {
     shots[nshots].at = call;
     shots[nshots++].name = name;
+}
+
+static void cap_at(uint32_t call, int slot)
+{
+    caps[ncaps].at = call;
+    caps[ncaps++].slot = slot;
 }
 
 /* ------------------------------------------------------------------------------------------------ helpers */
@@ -660,6 +675,291 @@ static void check_sounds(struct zip *z, const char *ref)
     printf("ui: MENU.DTR: %d menu samples equal to the independent reading (the race's GAME.DTR still gives %d)\n", m, g);
 }
 
+/* ------------------------------------------------------------------------------------------------ the pages */
+
+/* the darkening table against a search in double precision: the entry nearest to 0.67 of each colour, or where that is the colour itself,
+   the one nearest to 0.7 of that (a tolerance for the float arithmetic of the firmware); the number of colours darkened to something else */
+static int table_wrong(const uint32_t *pal, const uint8_t *dark, int keep)
+{
+    int wrong = 0;
+    for (int i = 0; i < 256; i++) {
+        double best[2] = { 1e30, 1e30 }, got[2] = { 0, 0 }, self = 0;
+        for (int pass = 0; pass < 2; pass++)
+            for (int q = 0; q < keep; q++) {
+                double d = 0, k2 = pass ? 0.469 : 0.67;
+                for (int sh = 16; sh >= 0; sh -= 8) {
+                    double e = (double)(pal[q] >> sh & 255) - (double)(pal[i] >> sh & 255) * k2;
+                    d += e * e;
+                }
+                if (d < best[pass]) best[pass] = d;
+                if (q == dark[i]) got[pass] = d;
+                if (!pass && q == i) self = d;
+            }
+        int nearest0 = got[0] <= best[0] * 1.0001 + 1e-3;
+        int self_nearest = i < keep && self <= best[0] * 1.0001 + 1e-3;
+        int nearest1 = got[1] <= best[1] * 1.0001 + 1e-3;
+        wrong += !nearest0 && !(self_nearest && nearest1);
+    }
+    return wrong;
+}
+
+/* a frame against a reference of tools/ui_reference.py: `want` (palette indices) with `dk` passes of the table over each pixel afterwards; if
+   `ov` is given, `want` is only an overlay (drawn where ov is 1), `base` the picture under it, darkened by dk (the order of the original's
+   frame: the picture through the table first, the text and sprites over it). The number of pixels that differ; the first one is reported. */
+static int compare_frame(const uint8_t *got, const uint8_t *want, const uint8_t *dk, const uint8_t *ov, const uint8_t *base, const uint8_t *table,
+                         const char *what)
+{
+    int differ = 0, first = -1;
+    for (int i = 0; i < S2G_PIC_BYTES; i++) {
+        uint8_t e = ov ? (ov[i] ? want[i] : base[i]) : want[i];
+        if (!ov || !ov[i])
+            for (int p = 0; dk && p < dk[i]; p++) e = table[e];
+        if (got[i] != e && differ++ == 0) first = i;
+    }
+    CHECK(!differ, "%s: %d pixels differ from the reference, first at x %d y %d (%02x, expected %02x)", what, differ, first % 320, first / 320,
+          first >= 0 ? got[first] : 0, first >= 0 ? (ov && ov[first] ? want[first] : 0) : 0);
+    return differ;
+}
+
+static uint8_t *ref_file(const char *ref, const char *name, const char *ext, uint32_t expect)
+{
+    char path[512];
+    uint32_t n;
+    snprintf(path, sizeof path, "%s/%s.%s", ref, name, ext);
+    uint8_t *b = slurp(path, &n);
+    CHECK(b && n == expect, "reference %s missing or of the wrong size", path);
+    if (b && n != expect) { free(b); b = 0; }
+    return b;
+}
+
+/* the best times of rows.txt into the save */
+static void fill_save(const char *ref)
+{
+    char path[512], word[16], name[8];
+    snprintf(path, sizeof path, "%s/rows.txt", ref);
+    FILE *f = fopen(path, "r");
+    CHECK(f != 0, "no rows.txt");
+    s2save_reset();
+    int kind, track, list, team, car, row, n, rows = 0;
+    double t;
+    while (f && fscanf(f, "%15s", word) == 1) {
+        if (!strcmp(word, "add") && fscanf(f, "%d %d %d %lf %7s %d %d", &kind, &track, &list, &t, name, &team, &car) == 7) {
+            s2save_add_time(kind, track, list, (float)t, name, team, car, 0);
+            rows++;
+        } else if (!strcmp(word, "replay") && fscanf(f, "%d %d %d %d %d", &kind, &track, &list, &row, &n) == 5) {
+            s2save_set_replay(kind, track, list, row, n);
+        }
+    }
+    if (f) fclose(f);
+    CHECK(rows > 30, "rows.txt gave %d rows", rows);
+}
+
+static void put_keys(char *script, size_t size, const char *spec)
+{
+    memset(script, '.', size);
+    script[size - 1] = 0;
+    for (const char *s = spec; *s;) {                       /* "<frame>:<key> ...": the key's character in that frame */
+        int at = atoi(s);
+        s = strchr(s, ':') + 1;
+        script[at] = *s++;
+        while (*s == ' ') s++;
+    }
+}
+
+static void check_settings(const char *ref, const char *prefix)
+{
+    static uint8_t dummy[256];
+    char script[256];
+    s2save_reset();
+    /* frames: 0 .. 1 nothing (the page as it opens), D D (cursor on NUMBER OF LAPS), B B (laps 3 -> 5 -> 10), then D x 6 to VIEW HIGH SCORES, one
+       more D (no wrap), a lit and a dark frame, A (leave); one key a frame, a held key is one press, so the keys stand on alternate frames */
+    put_keys(script, sizeof script, "2:D 4:D 6:B 8:B 11:D 13:D 15:D 17:D 19:D 21:D 23:D 44:A");
+    begin_run(script, prefix);
+    cap_at(2, 0);
+    cap_at(11, 1);
+    cap_at(32, 2);
+    cap_at(42, 3);
+    shot_at(2, "settings_a");
+    shot_at(11, "settings_b");
+    shot_at(32, "settings_c");
+    shot_at(42, "settings_d");
+    s2_page_settings();
+    static const char *const names[4] = { "settings_0", "settings_1", "settings_2", "settings_3" };
+    for (int k = 0; k < 4; k++) {
+        uint8_t *want = ref_file(ref, names[k], "idx", S2G_PIC_BYTES);
+        if (want) compare_frame(cap[k], want, 0, 0, 0, dummy, names[k]);
+        free(want);
+    }
+    static const int expect_clicks[10] = { 10, 10, 12, 12, 10, 10, 10, 10, 10, 10 };
+    int clicks_ok = nclicks == 10;
+    for (int i = 0; i < 10 && i < nclicks; i++) clicks_ok &= clicks[i] == expect_clicks[i];
+    CHECK(clicks_ok, "GAME SETTINGS clicks: %d, the first %d %d %d %d", nclicks, clicks[0], clicks[1], clicks[2], clicks[3]);
+    CHECK(s2save_get(S2S_LAPS) == 3 && s2save_get(S2S_TRANS) == 0 && s2save_get(S2S_SKILL) == 1 && s2save_get(S2S_DAMAGE) == 0,
+          "the settings in the save: laps %d (3 expected)", s2save_get(S2S_LAPS));
+    CHECK(swaps >= 43 && swaps <= 45, "the page ran %u frames (ESC at 44 is a cut)", swaps);
+
+    /* left / right step the value back and on; every row of the save is reachable and wraps; the eight settings and their value texts */
+    s2save_reset();
+    put_keys(script, sizeof script, "2:R 4:R 6:L 8:D 10:R 12:R 14:L 16:A");
+    begin_run(script, prefix);
+    s2_page_settings();
+    CHECK(s2save_get(S2S_TRANS) == 1 && s2save_get(S2S_DETAIL) == 0 && nclicks == 7, "left / right: transmission %d, detail %d, %d clicks",
+          s2save_get(S2S_TRANS), s2save_get(S2S_DETAIL), nclicks);
+    /* the cursor does not wrap, ESC is silent, the last row's B goes to the scores (click 13) and the way back is the settings again */
+    s2save_reset();
+    put_keys(script, sizeof script, "1:U 3:D 5:D 7:D 9:D 11:D 13:D 15:D 17:D 19:D 21:B 40:A 80:A 120:A");
+    begin_run(script, prefix);
+    s2_page_settings();
+    CHECK(nclicks == 9 && clicks[7] == 10 && clicks[8] == S2PAGE_SND_BACK, "VIEW HIGH SCORES: %d clicks, the last %d", nclicks, clicks[nclicks - 1]);
+    CHECK(swaps >= 117 && swaps <= 121, "settings, scores and settings again: %u frames (the scores fade out after B at 21; the two ESC are cuts)", swaps);
+    printf("ui: GAME SETTINGS: four states equal to the reference, keys, clicks and the save checked\n");
+}
+
+static void check_hiscores(const char *ref, const char *prefix)
+{
+    static uint32_t pal[256];
+    static uint8_t table[256];
+    char script[256];
+    fill_save(ref);
+    CHECK(s2gfx_bkk("HISCOREL.BKK", s2gfx_pic(1), pal), "HISCOREL.BKK");
+    s2gfx_dark_table(pal, table, 256);
+    CHECK(!table_wrong(pal, table, 256), "darkening table of HISCOREL");
+    /* the first visit: the arcade totals of 3 laps on England; D x 4 (row 5), R (the kind box), B (CHAMPIONSHIP, an empty list), B B (TIME ATTACK,
+       ARCADE), L, B (LAP TIME), U x 4 (the first row, which has a replay), R x 3 and B (the track: Egypt), R (VIEW REPLAY), then dark, D x 14, L x 4,
+       B (TOTAL TIME), R x 3, B x 6 (round to England), L x 3: the last row in view; A leaves. One key a frame, on alternate frames. */
+    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:R 12:B 14:B 16:B 18:L 20:B 22:U 24:U 26:U 28:U 30:R 32:R 34:R 36:B 38:R "
+             "58:D 60:D 62:D 64:D 66:D 68:D 70:D 72:D 74:D 76:D 78:D 80:D 82:D 84:D 86:L 88:L 90:L 92:L 94:B 96:R 98:R 100:R "
+             "102:B 104:B 106:B 108:B 110:B 112:B 114:L 116:L 118:L 122:A");
+    begin_run(script, prefix);
+    static const struct { uint32_t call; const char *name; const char *png; } at[9] = {
+        { 2, "hs_0", "scores_0" }, { 12, "hs_1", "scores_1" }, { 14, "hs_2", "scores_2" }, { 22, "hs_3", "scores_3" }, { 30, "hs_4", "scores_4" },
+        { 38, "hs_5", "scores_5" }, { 40, "hs_6", "scores_6" }, { 57, "hs_7", "scores_7" }, { 121, "hs_8", "scores_8" } };
+    for (int k = 0; k < 9; k++) {
+        cap_at(at[k].call, k);
+        shot_at(at[k].call, at[k].png);
+    }
+    s2_page_hiscores();
+    for (int k = 0; k < 9; k++) {
+        uint8_t *want = ref_file(ref, at[k].name, "idx", S2G_PIC_BYTES), *dk = ref_file(ref, at[k].name, "dk", S2G_PIC_BYTES);
+        if (want && dk) compare_frame(cap[k], want, dk, 0, 0, table, at[k].name);
+        free(want);
+        free(dk);
+    }
+    CHECK(nclicks == 0, "the scores page is silent (%d clicks)", nclicks);
+    CHECK(swaps >= 121 && swaps <= 123, "the page ran %u frames (ESC at 122 is a cut)", swaps);
+    printf("ui: HI SCORES: nine states (lists, boxes, scrolling, the replay box lit and dark) equal to the reference, the keys checked\n");
+}
+
+/* the end of the race over a race picture: the three runs of ui_reference.py's END_RUNS, frame by frame (one video frame each) */
+static void check_end(const char *ref, const char *prefix)
+{
+    static struct {
+        const char *name, *race; struct s2_end_in in; int keep[6], right_at, last;
+    } runs[3] = {
+        { "A", "s2_track4_city", { 4, 3, 1, 85.5f, 29.5f, 2, 3 }, { 100, 200, 231, 302, 400, -1 }, 300, 400 },
+        { "B", "s2_track1_village", { 1, 3, 3, 140.125f, 45.0f, 4, 2 }, { 100, 400, -1 }, -1, 400 },
+        { "C", "s2_track5_snow", { 7, 1, 4, 99.0f, 0.0f, 1, 1 }, { 400, -1 }, -1, 400 },
+    };
+    static uint32_t pal[256];
+    static uint8_t table[256];
+    shot_prefix = prefix;
+    fill_save(ref);
+    for (int r = 0; r < 3; r++) {
+        char name[64];
+        snprintf(name, sizeof name, "frame_%s", runs[r].race);
+        uint8_t *base = ref_file(ref, name, "idx", S2G_PIC_BYTES);
+        uint8_t *pb = ref_file(ref, name, "pal", 1024);
+        if (!base || !pb) continue;
+        memcpy(pal, pb, 1024);
+        for (int i = 0; i < 256; i++) VID_PAL[i] = pal[i];
+        s2gfx_dark_table(pal, table, 256);
+        CHECK(!table_wrong(pal, table, 256), "darkening table of the race palette of %s", runs[r].race);
+        int result = 0, early = 0;
+        for (int j = 0; j <= runs[r].last; j++) {
+            memcpy((void *)FB(0), base, S2G_PIC_BYTES);
+            uint32_t press = j == runs[r].right_at ? KEY_RIGHT : j == 50 ? KEY_B : 0;
+            int got = s2end_frame(FB(0), 0, pal, &runs[r].in, (uint32_t)j, 1000 + (uint32_t)j, press);
+            if (j == 50) early = got;
+            for (int k = 0; runs[r].keep[k] >= 0; k++)
+                if (runs[r].keep[k] == j) {
+                    char what[40], png[40];
+                    snprintf(what, sizeof what, "end_%s_%d", runs[r].name, j);
+                    uint8_t *want = ref_file(ref, what, "idx", S2G_PIC_BYTES), *dk = ref_file(ref, what, "dk", S2G_PIC_BYTES),
+                            *ov = ref_file(ref, what, "ov", S2G_PIC_BYTES);
+                    if (want && dk && ov) compare_frame((const uint8_t *)FB(0), want, dk, ov, base, table, what);
+                    free(want);
+                    free(dk);
+                    free(ov);
+                    front = 0;
+                    snprintf(png, sizeof png, "end_%s_%d", runs[r].name, j);
+                    save(png);
+                }
+        }
+        CHECK(early == S2END_NONE, "run %s: ENTER in the first four seconds took effect (%d)", runs[r].name, early);
+        /* ENTER: the lit choice: RACE AGAIN, or EXIT after right */
+        result = s2end_frame(FB(0), 0, pal, &runs[r].in, (uint32_t)runs[r].last + 1, 1000 + (uint32_t)runs[r].last + 1, r == 2 ? KEY_START : KEY_B);
+        CHECK(result == (runs[r].right_at >= 0 ? S2END_EXIT : S2END_AGAIN), "run %s: ENTER gave %d", runs[r].name, result);
+        free(base);
+        free(pb);
+    }
+    /* the lists as the end screens left them: the player's name, team and car, the total in the list of the laps, the lap in the lap list */
+    const struct s2save_row *t = s2save_row(S2S_KIND_ARCADE, 4, 1, 6), *l = s2save_row(S2S_KIND_ARCADE, 4, S2S_LAP, 0);
+    CHECK(t->time == 85.5f && !strcmp(t->name, "MIL") && t->team == 2 && t->car == 3 && t->replay == 0, "track 4 row 7: %g %s %d %d", t->time, t->name, t->team, t->car);
+    CHECK(l->time == 29.5f && l->team == 2 && l->car == 3, "track 4 best lap: %g", l->time);
+    const struct s2save_row *b = s2save_row(S2S_KIND_ARCADE, 1, 1, 7), *c = s2save_row(S2S_KIND_ARCADE, 7, 0, 14);
+    CHECK(b->time == 140.125f && b->team == 4 && b->car == 2, "track 1 row 8: %g", b->time);
+    CHECK(c->time == 64.0f && s2save_row(S2S_KIND_ARCADE, 7, 0, 0)->time == 50.0f, "a slower time than the fifteenth goes nowhere (row 15 is %g)", c->time);
+    CHECK(s2save_row(S2S_KIND_ARCADE, 7, S2S_LAP, 0)->time >= S2S_NO_TIME, "a run without a best lap writes none");
+    /* a time equal to one in the list goes ahead of it (0x354cf: fcomp, ja): 83.01 against DDD and CCC (the later one went ahead of the first in
+       rows.txt) of track 1's 3-lap list; the race's frames up to the choices (200 of them) are enough to put it in */
+    struct s2_end_in tie = { 1, 3, 2, (float)83.01, 0.0f, 1, 1 };
+    for (int j = 0; j <= 200; j++) s2end_frame(FB(1), 1, pal, &tie, (uint32_t)j, 5000 + (uint32_t)j, 0);
+    CHECK(s2save_row(S2S_KIND_ARCADE, 1, 1, 2)->time == tie.time && !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 2)->name, "MIL") &&
+          !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 3)->name, "DDD") && !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 4)->name, "CCC") &&
+          !strcmp(s2save_row(S2S_KIND_ARCADE, 1, 1, 1)->name, "BBB"), "a tied time goes ahead of the old ones");
+    /* the loading screen's BEST TIME / BEST LAP from the same lists */
+    struct s2_record total, lap;
+    s2_best_get(4, 3, &total, &lap);
+    CHECK(total.time == 70.0f && !strcmp(total.name, "ONE") && lap.time == 29.5f, "BEST TIME of track 4: %g %s, BEST LAP %g", total.time, total.name, lap.time);
+    s2_best_get(5, 3, &total, &lap);
+    CHECK(total.time >= S2S_NO_TIME && !strcmp(total.name, "MIL") && lap.time >= S2S_NO_TIME, "an empty track has no record");
+    s2_best_get(1, 10, &total, &lap);
+    CHECK(total.time >= S2S_NO_TIME, "the 10-lap list of track 1 is empty");
+    char tx[24];
+    s2_best_get(1, 3, &total, &lap);
+    s2_record_text(tx, &total);
+    CHECK(!strcmp(tx, "01:20:50 AAA"), "BEST TIME text '%s'", tx);
+    printf("ui: end of the race: three runs of frames equal to the reference, ENTER, the best times and the loading screen's records checked\n");
+}
+
+/* the start menu's two rows open the pages and take the settings back */
+static void check_menu_hook(const char *prefix)
+{
+    char script[400];
+    struct s2_menu_cfg c;
+    s2save_reset();
+    s2menu_load(&c);
+    /* five D from ARCADE to GAME SETTINGS, A; in the page D D B (laps 3 -> 5), A out (a cut); D to HI SCORES, A; A out; U U U to START RACE, A */
+    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:A 16:D 18:D 20:B 22:A 30:D 32:A 40:A 46:U 48:U 50:U 52:A");
+    begin_run(script, prefix);
+    int r = s2menu_run(&c);
+    CHECK(r == S2M_RACE, "the menu ended with %d", r);
+    CHECK(s2_menu_laps[c.laps] == 5 && s2save_get(S2S_LAPS) == 2, "the menu took the laps back from the page: %d", s2_menu_laps[c.laps]);
+    CHECK(c.track == 1, "track %d", c.track);
+    printf("ui: start menu: GAME SETTINGS and HI SCORES rows open the pages, the settings come back\n");
+}
+
+/* the track's banner of the race screen as the toolkit draws it into the first framebuffer's rows, a copy in out */
+static void draw_banner(int track, uint8_t *out)
+{
+    static struct blit_list l;
+    blit_start(&l, 0);
+    memset((void *)FB(0), 0, S2G_PIC_BYTES);
+    s2gfx_sprite_centred(&l, s2gfx_banner(track), 4);
+    blit_model(FB(0), &l);
+    memcpy(out, (const void *)FB(0), S2G_PIC_BYTES);
+}
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -673,11 +973,24 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_text(ref, prefix);
     check_loading(prefix);
     check_pause(ref, prefix);
+    check_settings(ref, prefix);
+    check_hiscores(ref, prefix);
+    check_end(ref, prefix);
+    check_menu_hook(prefix);
     check_runner();
     check_arcade_cases(ref, prefix);
     check_arcade_chain(prefix);
     check_arcade_reach(prefix);
     check_sounds(z, ref);
+    static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
+    int stored_banners = s2gfx_banner(1) != 0x13;
+    for (int k = 0; k < 7; k++) {
+        draw_banner(k + 1, banners[k]);
+        int drawn = 0;
+        for (int i = 0; i < S2G_PIC_BYTES; i++) drawn += banners[k][i] != 0;
+        CHECK(drawn > 3000 && drawn <= 144 * 50, "track %d's banner has %d pixels", k + 1, drawn);
+    }
+    CHECK(stored_banners && s2gfx_banner(2) != 0x14, "GAMEL.SPR's banners are not in the table (%d)", s2gfx_banner(1));
     if (deflated) {                                                 /* GRAF1.DAT inflated whole at the start, the pictures out of that */
         CHECK(s2gfx_init(deflated), "s2gfx_init on the deflated ZIP");
         check_pictures(ref, "deflated ZIP");
@@ -685,6 +998,12 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
         static uint32_t pal[256];
         CHECK(s2gfx_bkk(name, s2gfx_pic(0), pal), "a picture from the deflated ZIP");
         CHECK(s2load_show(3, 3) != 0, "loading screen from the deflated ZIP");
+        static uint8_t again[S2G_PIC_BYTES];                        /* the same banners out of a deflated GAME1.DAT, inflated whole */
+        for (int k = 0; k < 7; k++) {
+            draw_banner(k + 1, again);
+            CHECK(!memcmp(again, banners[k], S2G_PIC_BYTES), "track %d's banner differs in the deflated ZIP", k + 1);
+        }
+        printf("ui: GAMEL.SPR's seven track banners: the same from a stored and a deflated GAME1.DAT\n");
     }
     printf("%s", (const char *)(uintptr_t)DLOG_BASE + DLOG_HEAD);
     printf(failures ? "ui: %d tests FAILED\n" : "ui: all tests passed\n", failures);

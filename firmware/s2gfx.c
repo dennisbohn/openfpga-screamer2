@@ -21,6 +21,9 @@
 #define SECT_MAX    0xA0000u
 #define WHOLE       ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x1000000))    /* a deflated GRAF1.DAT, whole */
 #define WHOLE_MAX   0x800000u
+#define GAME_SPR    ((uint8_t *)(uintptr_t)(MEM + 0x100000))            /* GAMEL.SPR, unpacked (197,668 bytes) */
+#define GAME_MAX    0x40000u
+#define GAME_FIRST  0x27                        /* GAMEL.SPR's seven track banners: 0x27 .. 0x2d */
 
 #define BKK_BYTES   64792u                      /* "V652", 256, 320, 200, 64000, 0; 768 palette bytes; the pixels */
 #define BKK_MAGIC   0x32353656u
@@ -35,9 +38,13 @@ static uint32_t dir_buf[TAIL_MAX / 4 + 4];
 static const uint8_t *dir;                      /* what dat_find reads: the container's end, or all of it when it is deflated */
 static uint32_t dir_len;
 static struct blit_list list;
-static struct blit_image img[IMAGES];           /* MENUL.SPR's sprites, then the fonts' glyphs */
+static struct blit_image img[IMAGES];           /* MENUL.SPR's sprites, then the fonts' glyphs, then the race banners */
 static struct blit_font font[FONTS];
 static uint32_t nsprites, nfonts;
+static int banner_img;                          /* the image number of the first race banner, 0: none */
+static int clip_text_y0, clip_text_y1 = FB_H, clip_spr_y0, clip_spr_y1 = FB_H;
+static struct { int x, y, w, h, passes; const uint8_t *table; } later[4];
+static int nlater;
 
 static int ready;
 
@@ -56,16 +63,23 @@ uint8_t *s2gfx_pic(int k)
     return PIC(k);
 }
 
-/* GRAF1.DAT's entry `name` unpacked to out (max bytes): its size, 0 if it is missing or damaged. A stored ZIP gives the entry's stored
-   bytes by range (stage), a deflated one has the container whole in memory. */
-static uint32_t entry(const char *name, uint8_t *out, uint32_t max)
+/* The entry `name` of a container (its ZIP entry c, its directory: the container's end, or all of it when the ZIP is deflated) unpacked
+   to out (max bytes): its size, 0 if it is missing or damaged. A stored ZIP gives the entry's stored bytes by range (stage), a
+   deflated one has the container whole in memory. */
+static uint32_t entry_of(const struct zip_entry *c, const uint8_t *cdir, uint32_t cdir_len, const char *name, uint8_t *out, uint32_t max)
 {
     struct dat_entry d;
-    if (!graf || !dat_find(dir, dir_len, name, &d)) return 0;
-    if (graf->method != 0) return dat_extract(dir, dir_len, &d, out, max);
-    if (d.stored + ZIP_SLACK > STAGE_MAX || zip_read_range(zip, graf, d.offset, d.stored, STAGE, STAGE_MAX)) return 0;
+    if (!c || !dat_find(cdir, cdir_len, name, &d)) return 0;
+    if (c->method != 0) return dat_extract(cdir, cdir_len, &d, out, max);
+    if (d.stored + ZIP_SLACK > STAGE_MAX || zip_read_range(zip, c, d.offset, d.stored, STAGE, STAGE_MAX)) return 0;
     d.offset = 0;                                           /* the bytes begin at the stage now */
     return dat_extract(STAGE, d.stored, &d, out, max);
+}
+
+/* GRAF1.DAT's entry */
+static uint32_t entry(const char *name, uint8_t *out, uint32_t max)
+{
+    return entry_of(graf, dir, dir_len, name, out, max);
 }
 
 /* the SDRAM holds what the CPU wrote (the blitter reads it there) */
@@ -186,6 +200,49 @@ static uint32_t build_fonts(const uint8_t *f, uint32_t size, uint8_t *to, uint32
     return used;
 }
 
+/* GAME1.DAT's GAMEL.SPR (the race screen's sprites): its seven track banners join the image table after the fonts, their pixels where
+   the file was unpacked. 0 if the ZIP has no GAME1.DAT or it is damaged (the loading screen's banners stand in). */
+static uint32_t game_dir_buf[TAIL_MAX / 4 + 4];
+
+static int load_banners(struct zip *z, int first_free)
+{
+    const struct zip_entry *g = zip_find(z, "GFX/GAME1.DAT");
+    const uint8_t *gdir;
+    uint32_t glen;
+    banner_img = 0;
+    if (!g || first_free + 7 > IMAGES) return 0;
+    if (g->method == 0) {                                   /* the container's end: its directory */
+        uint32_t tail = g->size < TAIL_MAX ? g->size : TAIL_MAX;
+        if (zip_read_range(z, g, g->size - tail, tail, (uint8_t *)game_dir_buf, sizeof game_dir_buf)) return 0;
+        gdir = (const uint8_t *)game_dir_buf;
+        glen = tail;
+    } else {                                                /* deflated: all of it, behind GRAF1.DAT's */
+        uint8_t *whole = WHOLE + (graf->method ? (graf->size + 0xFFFFu) & ~0xFFFFu : 0);
+        if (whole + g->size + ZIP_SLACK > WHOLE + WHOLE_MAX || zip_read(z, g, whole, (uint32_t)(WHOLE + WHOLE_MAX - whole))) return 0;
+        gdir = whole;
+        glen = g->size;
+    }
+    uint32_t size = entry_of(g, gdir, glen, "GAMEL.SPR", GAME_SPR, GAME_MAX);
+    if (size < 8) return 0;
+    uint32_t n = rd32(GAME_SPR), head = 8 + 20 * n;
+    if (n < GAME_FIRST + 7 || n > 256 || head > size) return 0;
+    for (int k = 0; k < 7; k++) {
+        const uint8_t *r = GAME_SPR + 8 + 20 * (GAME_FIRST + k);
+        uint32_t w = rd32(r + 8), h = rd32(r + 12), at = rd32(r + 16);
+        if (w > 0x7FFF || h > 0x7FFF || head + at > size || w * h > size - head - at) return 0;
+        img[first_free + k] = (struct blit_image){ (uint32_t)(GAME_SPR - SECT) + head + at, (uint16_t)w, (uint16_t)h,
+                                                   (int16_t)rd32(r), (int16_t)rd32(r + 4) };
+    }
+    banner_img = first_free;
+    return 1;
+}
+
+int s2gfx_banner(int track)
+{
+    if (track < 1 || track > 7) track = 1;
+    return banner_img ? banner_img + track - 1 : 0x13 + track - 1;
+}
+
 int s2gfx_init(struct zip *z)
 {
     uint32_t t0 = rdcycle();
@@ -212,6 +269,9 @@ int s2gfx_init(struct zip *z)
     if (!spr || !build_sprites(SECT, spr)) return dlog_str("ui: MENUL.SPR unusable\n"), 0;
     uint32_t fnt = entry("MENUL.FNT", UNPACK, UNPACK_MAX);
     if (!fnt || !(used = build_fonts(UNPACK, fnt, SECT + glyphs, SECT_MAX - glyphs, glyphs))) return dlog_str("ui: MENUL.FNT unusable\n"), 0;
+    int banners = load_banners(z, (int)(font[nfonts - 1].first_image + font[nfonts - 1].count));
+    nlater = 0;
+    s2gfx_clip(0, FB_H, 0, FB_H);
     settle();
     /* the texts of DATA/LOCAL.DAT (STRINGS.TXT 2.6 KB, GAME.TXT 0.6 KB), through the stage */
     const struct zip_entry *e = zip_find(z, "DATA/LOCAL.DAT");
@@ -228,7 +288,7 @@ int s2gfx_init(struct zip *z)
     dlog_dec((int32_t)((glyphs + used) / 1024));
     dlog_str(" KB), ");
     dlog_dec(nlines);
-    dlog_str(" text lines, ");
+    dlog_str(banners ? " text lines, GAMEL banners, " : " text lines, ");
     dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
     dlog_str(" ms\n");
     return ready = 1;
@@ -240,7 +300,25 @@ struct blit_list *s2gfx_begin(void)
 {
     uint32_t st = wait_swap_done();
     blit_start(&list, !(st & VID_FRONT));
+    nlater = 0;
     return &list;
+}
+
+struct blit_list *s2gfx_begin_on(int buffer)
+{
+    blit_start(&list, buffer);
+    nlater = 0;
+    return &list;
+}
+
+void s2gfx_flush(void)
+{
+    settle();
+    hw_blit(&list);
+    while (RS_DRAW & RS_BUSY)
+        ;
+    for (int i = 0; i < nlater; i++)
+        for (int p = 0; p < later[i].passes; p++) s2gfx_dark_fb(FB(list.buffer), later[i].x, later[i].y, later[i].w, later[i].h, later[i].table);
 }
 
 void s2gfx_end(const uint32_t *pal, int32_t fade)
@@ -250,7 +328,30 @@ void s2gfx_end(const uint32_t *pal, int32_t fade)
     pal_faded(pal, fade);
     while (RS_DRAW & RS_BUSY)                               /* (the bit holds the blitter too) */
         ;
+    for (int i = 0; i < nlater; i++)
+        for (int p = 0; p < later[i].passes; p++) s2gfx_dark_fb(FB(list.buffer), later[i].x, later[i].y, later[i].w, later[i].h, later[i].table);
     VID_SWAP = 1;
+}
+
+/* an image w wide, cut to the rows [y0, y1) */
+static void copy_clipped(struct blit_list *l, const uint8_t *src, int w, int h, int x, int y, int kind, int colour, int y0, int y1)
+{
+    if (y < y0) {
+        src += (y0 - y) * w;
+        h -= y0 - y;
+        y = y0;
+    }
+    if (y + h > y1) h = y1 - y;
+    if (h < 1) return;
+    blit_copy(l, src, w, h, w, x, y, kind, colour);
+}
+
+void s2gfx_clip(int text_y0, int text_y1, int sprite_y0, int sprite_y1)
+{
+    clip_text_y0 = text_y0;
+    clip_text_y1 = text_y1;
+    clip_spr_y0 = sprite_y0;
+    clip_spr_y1 = sprite_y1;
 }
 
 void s2gfx_picture(struct blit_list *l, const uint8_t *pic)
@@ -258,16 +359,22 @@ void s2gfx_picture(struct blit_list *l, const uint8_t *pic)
     blit_copy(l, pic, 320, 200, 320, 0, 0, BLIT_COPY | BLIT_OPAQUE, 0);
 }
 
+/* a sprite of MENUL.SPR, or one of the race banners that follow the fonts */
+static int sprite_ok(int n)
+{
+    return n >= 0 && (n < (int)nsprites || (banner_img && n >= banner_img && n < banner_img + 7));
+}
+
 void s2gfx_sprite(struct blit_list *l, int n, int x, int y)
 {
-    if (n < 0 || n >= (int)nsprites) return;
+    if (!sprite_ok(n)) return;
     const struct blit_image *s = &img[n];
-    blit_copy(l, SECT + s->off, s->w, s->h, s->w, x + s->x, y + s->y, BLIT_COPY, 0);
+    copy_clipped(l, SECT + s->off, s->w, s->h, x + s->x, y + s->y, BLIT_COPY, 0, clip_spr_y0, clip_spr_y1);
 }
 
 void s2gfx_sprite_centred(struct blit_list *l, int n, int y)
 {
-    if (n < 0 || n >= (int)nsprites) return;
+    if (!sprite_ok(n)) return;
     const struct blit_image *s = &img[n];
     s2gfx_sprite(l, n, (320 - (s->w + s->x)) / 2 - (s->x - (s->x >> 31)) / 2, y);
 }
@@ -286,7 +393,7 @@ int s2gfx_text(struct blit_list *l, int font_no, int colour, int space, int x, i
         }
         const struct blit_image *g = &img[f->first_image + (uint32_t)(ch - (int)f->first)];
         int w = g->w;
-        if (l) blit_copy(l, SECT + g->off, w, g->h, w, x + (fixed ? (cell - (w + 1)) / 2 : 0), y, BLIT_FONT, colour);
+        if (l) copy_clipped(l, SECT + g->off, w, g->h, x + (fixed ? (cell - (w + 1)) / 2 : 0), y, BLIT_FONT, colour, clip_text_y0, clip_text_y1);
         x += fixed ? cell : w + space;
     }
     return x - x0;
@@ -297,6 +404,13 @@ void s2gfx_text_centred(struct blit_list *l, int font_no, int colour, int space,
     int w = s2gfx_text(0, font_no, colour, space, 0, 0, s);
     if (w > 0) w -= space;                                  /* (the original's measure, 0xc6c88, leaves the gap after the last character out) */
     s2gfx_text(l, font_no, colour, space, (320 - w) >> 1, y, s);
+}
+
+void s2gfx_text_boxed(struct blit_list *l, int font_no, int colour, int space, int x0, int width, int y, const char *s)
+{
+    int w = s2gfx_text(0, font_no, colour, space, 0, 0, s);
+    if (w > 0) w -= space;                                  /* (the original's measure has no gap after the last character, as for s2gfx_text_centred) */
+    s2gfx_text(l, font_no, colour, space, x0 + ((width - w) >> 1), y, s);
 }
 
 /* ------------------------------------------------------------------------------------------------ the darkening */
@@ -338,4 +452,30 @@ void s2gfx_dark_box(uint8_t *pic, int x, int y, int w, int h, const uint8_t tabl
 {
     for (int r = y < 0 ? 0 : y; r < y + h && r < 200; r++)
         for (int c = x < 0 ? 0 : x; c < x + w && c < 320; c++) pic[r * 320 + c] = table[pic[r * 320 + c]];
+}
+
+void s2gfx_dark_fb(volatile uint8_t *fb, int x, int y, int w, int h, const uint8_t table[256])
+{
+    x &= ~3;
+    w &= ~3;
+    if (x < 0 || x >= FB_W) return;
+    if (x + w > FB_W) w = FB_W - x;
+    for (int r = y < 0 ? 0 : y; r < y + h && r < FB_H; r++) {
+        volatile uint32_t *p = (volatile uint32_t *)(fb + r * FB_W + x);
+        for (int c = 0; c < w / 4; c++, p++) {
+            uint32_t v = *p;
+            *p = (uint32_t)table[v & 255] | (uint32_t)table[v >> 8 & 255] << 8 | (uint32_t)table[v >> 16 & 255] << 16 | (uint32_t)table[v >> 24] << 24;
+        }
+    }
+}
+
+void s2gfx_dark_after(int x, int y, int w, int h, int passes, const uint8_t *table)
+{
+    if (nlater >= 4) return;
+    later[nlater].x = x;
+    later[nlater].y = y;
+    later[nlater].w = w;
+    later[nlater].h = h;
+    later[nlater].passes = passes;
+    later[nlater++].table = table;
 }

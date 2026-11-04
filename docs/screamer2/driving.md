@@ -212,8 +212,8 @@ the hubs with bit 1 and bit 6 (the rear-drive cars have the rear hubs on bit 1, 
 **The bug on the Pocket:** the firmware gave the cars Screamer 1's flags, `0x4000` when not braking, 0 when braking. In Screamer 2 `0x4000`
 is the mark of side 2, so a car that was not braking showed the scraped left flank (picture 32, "damaged" bodywork next to the rear light), the
 picture went whole when the player braked, and the brake (`0x200`, picture 1) was never asked for: the lights never lit (a car in the viewer
-showed the scraped flank as well). The damage marks are set by `knock()` with the damage on (the game has DAMAGES off until its menu says so; there is
-no menu here); a car against a car does not knock yet.
+showed the scraped flank as well). The damage marks are set by `knock()` with the damage on (the GAME SETTINGS row DAMAGES, off at the first start as in the game: `s2car_damages`, which the viewer sets
+from the save when a race is set up; off, a knock marks and hurts nothing, as the game's 0x19aaa returns at once); a car against a car does not knock yet.
 
 ### Checks of the race
 
@@ -288,7 +288,7 @@ Pocket: 14.5 ms mean, 19.6 worst; 13.8 mean in the earlier run with the steps be
   what the check measures.
 - The pose of a tilted car (`s2car_look`) and the wheels' sign of turning have not been seen on a slope, and the camera
   of view 3 only in the numbers.
-- Not done: the road kind's effects on the look, the dust, the camera's other views, damage from a car against a car and the DAMAGES option.
+- Not done: the road kind's effects on the look, the dust, the camera's other views, damage from a car against a car.
 - The race (section above): the game's swept solver for touching cars, sparks, sounds and damage from a touch; the split times and
   "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie, `race_level`) and the number of laps (`race_laps`) and the player's team and car
   (`race_grid`) are set by the start menu (`firmware/s2menu.c`, docs/development.md "Start menu"); the computers' cars are the other three

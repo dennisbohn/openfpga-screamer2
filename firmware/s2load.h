@@ -11,13 +11,21 @@
    an empty row, and the name of the driver, "MIL" when none was entered) */
 struct s2_record { float time; char name[4]; };
 
-/* The track's best total time over `laps` laps (1, 3, 5, 10) and its best lap, for the loading screen: the first row of the lists. The
-   save (row 2 of docs/screamer2/menus.md section 7) fills them in; until it exists there are none: 3599.999 and MIL, which the screen
-   shows as --:--:-- MIL, as the original does for a track without a record. */
+/* The track's best total time over `laps` laps (1, 3, 5, 10) and its best lap, for the loading screen: the first rows of the arcade
+   lists of the save (s2save.h). A track nobody has driven has 3599.999 and MIL, which the screen shows as --:--:-- MIL, as the original
+   does. */
 void s2_best_get(int track, int laps, struct s2_record *total, struct s2_record *lap);
+/* The place of a race of `laps` laps (1, 3, 5, 10) among the save's lists of totals: 0 .. 3 */
+int s2_laps_list(int laps);
 
-/* "01:23:45" (minutes, seconds, hundredths) and the name behind it, as the original prints a record (0x37e1e, "%s %s"); an empty row
-   (time over 3599.9 or not above 0) is --:--:--. p needs 16 bytes. */
+/* "01:23:45" (minutes, seconds, hundredths, p needs 9 bytes) as the original prints a time (0x37e1e); a time that is not above 0 or
+   is 3599.9 and over (an empty row) is --:--:--. Returns the end of the text. */
+char *s2_time_text(char *p, float t);
+/* A row of a best-times list as the end screen and the HI SCORES page set it (0x42d99): fixed pitch (the byte 1), the row's number (1 .. 15, a space in front
+   of a one-digit one), ". ", the name, six spaces, the time: "\x01 1. MIL      01:23:45". p needs 40 bytes. */
+struct s2save_row;
+void s2_row_text(char *p, int row, const struct s2save_row *r);
+/* The same and the name behind it, as the original prints a record (0x37e1e, "%s %s"); p needs 16 bytes. */
 void s2_record_text(char *p, const struct s2_record *r);
 
 /* The screen for track 1 .. 7 and a race of `laps` laps, shown at once; the palette of its picture (stays valid), or 0 if the picture,

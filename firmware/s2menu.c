@@ -9,6 +9,7 @@
 #include "zip.h"
 #include "dat.h"
 #include "s2save.h"
+#include "s2pages.h"
 #include "s2arcade.h"
 #include <string.h>
 
@@ -151,6 +152,8 @@ int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press)
     if (press & KEY_X) return S2M_WATCH;
     if (press & (KEY_A | KEY_B | KEY_START)) {              /* (the start menu has no page behind it: A takes the row as B does) */
         if (*cursor == S2M_ROW_ARCADE) return S2M_ARCADE;
+        if (*cursor == S2M_ROW_SETTINGS) return S2M_SETTINGS;
+        if (*cursor == S2M_ROW_SCORES) return S2M_SCORES;
         return *cursor == S2M_ROW_WATCH ? S2M_WATCH : S2M_RACE;
     }
     return S2M_NONE;
@@ -198,31 +201,33 @@ void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor)
     row(fb, 7, cursor == S2M_ROW_RACE, "START RACE", GREEN, v, 1);
     row(fb, 8, cursor == S2M_ROW_WATCH, "WATCH", CYAN, 0, 0);
     con_text(fb, 12, 8, "the ride round the track", GREY, cursor == S2M_ROW_WATCH ? BAR : BG);
+    row(fb, 9, cursor == S2M_ROW_SETTINGS, "GAME SETTINGS", CYAN, 0, 0);
+    row(fb, 10, cursor == S2M_ROW_SCORES, "HI SCORES", CYAN, 0, 0);
 
     struct s2_pick g[4];
     s2menu_grid(c, g);
     p = fmt_udec(fmt_str(fmt_str(v, team_name[g[0].team - 1]), " "), g[0].car);
     p = fmt_str(p, c->manual ? "  MANUAL" : "  AUTOMATIC");
-    con_text(fb, 2, 10, "YOU", GREY, BG);
-    con_text(fb, 12, 10, v, WHITE, BG);
+    con_text(fb, 2, 12, "YOU", GREY, BG);
+    con_text(fb, 12, 12, v, WHITE, BG);
     p = o;
     *p = 0;
     for (int k = 1; k < 4; k++) {
         if (k > 1) p = fmt_str(p, "  ");
         p = fmt_udec(fmt_str(fmt_str(p, team_name[g[k].team - 1]), " "), g[k].car);
     }
-    con_text(fb, 2, 11, "AGAINST", GREY, BG);
-    con_text(fb, 12, 11, o, WHITE, BG);
+    con_text(fb, 2, 13, "AGAINST", GREY, BG);
+    con_text(fb, 12, 13, o, WHITE, BG);
 
-    con_text(fb, 2, 14, "d-pad: up/down row, left/right value", GREY, BG);
-    con_text(fb, 2, 15, "B or Start: take the row   X: watch", GREY, BG);
-    con_text(fb, 2, 16, "L / R: track -3 / +3 from any row", GREY, BG);
-    con_text(fb, 2, 18, "in the race or the ride:", WHITE, BG);
+    con_text(fb, 2, 15, "d-pad: up/down row, left/right value", GREY, BG);
+    con_text(fb, 2, 16, "B or Start: take the row   X: watch", GREY, BG);
+    con_text(fb, 2, 17, "L / R: track -3 / +3 from any row", GREY, BG);
+    con_text(fb, 2, 19, "in the race or the ride:", WHITE, BG);
     static const char *const keys[4][2] = { { "Select+B", "back to this menu" }, { "Select+Start", "race again" },
                                             { "Select+left/right", "other track" }, { "Start", "ride / drive" } };
     for (int k = 0; k < 4; k++) {
-        con_text(fb, 3, 19 + k, keys[k][0], GREY, BG);
-        con_text(fb, 22, 19 + k, keys[k][1], GREY, BG);
+        con_text(fb, 3, 20 + k, keys[k][0], GREY, BG);
+        con_text(fb, 22, 20 + k, keys[k][1], GREY, BG);
     }
 }
 
@@ -259,6 +264,15 @@ int s2menu_run(struct s2_menu_cfg *c)
                 continue;
             }
             r = S2M_RACE;
+        }
+        if (r == S2M_SETTINGS || r == S2M_SCORES) {         /* a page of GAME SETTINGS / HI SCORES (s2pages.h): the choices go in, and come back as it left them */
+            s2menu_store(c);
+            if (r == S2M_SETTINGS) s2_page_settings();
+            else s2_page_hiscores();
+            s2menu_load(c);
+            keys_before = in_keys();
+            held = 0;
+            continue;
         }
         if (r) {
             s2menu_store(c);

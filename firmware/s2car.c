@@ -405,10 +405,13 @@ static void ground_under_wheels(car_t *c, const struct corner_ground q[4])
 }
 
 /* 0x19aaa: a knock from a wall: the side's count for the look and, once it is 1, a knock over 2000 puts the side's mark
-   in the car's flags (+0xb8: what the drawn car's textures show), and with DAMAGES on (taken as on: the game has it off
+   in the car's flags (+0xb8: what the drawn car's textures show), and with DAMAGES on (s2car_damages: the game has it off
    until its menu says so; the level ROOKIE: x 1) the corner's and the car's damage, and the corner's spring softer */
+int s2car_damages = 1;
+
 static void knock(car_t *c, int side, int corner, float share, float force)
 {
+    if(!s2car_damages) return;
     static const uint32_t mark[4] = { 0x2000, 0x800, 0x4000, 0x1000 };       /* sides 0 .. 3 (the table at 0x19b58) */
     int count = 0x1c + 4 * side;
     RF(count) = (1.0f - share) * force / 20000.0f + RF(count);

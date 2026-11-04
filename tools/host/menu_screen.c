@@ -170,10 +170,16 @@ int main(int argc, char **argv)
     CHECK(cursor == S2M_ROW_WATCH && press(&c, &cursor, KEY_START) == S2M_WATCH, "watch row");
     shot(argv[2], "watchrow", &c, cursor);
     press(&c, &cursor, KEY_DOWN);
+    CHECK(cursor == S2M_ROW_SETTINGS && press(&c, &cursor, KEY_A) == S2M_SETTINGS, "GAME SETTINGS row");
+    shot(argv[2], "settingsrow", &c, cursor);
+    press(&c, &cursor, KEY_DOWN);
+    CHECK(cursor == S2M_ROW_SCORES && press(&c, &cursor, KEY_START) == S2M_SCORES, "HI SCORES row");
+    shot(argv[2], "scoresrow", &c, cursor);
+    press(&c, &cursor, KEY_DOWN);
     CHECK(cursor == S2M_ROW_ARCADE, "the cursor wraps");
     CHECK(press(&c, &cursor, KEY_X) == S2M_WATCH, "X watches");
     press(&c, &cursor, KEY_UP);
-    CHECK(cursor == S2M_ROW_WATCH, "up from ARCADE wraps to WATCH");
+    CHECK(cursor == S2M_ROW_SCORES, "up from ARCADE wraps to the last row");
     cursor = S2M_ROW_SKILL;
     CHECK(press(&c, &cursor, KEY_START) == S2M_RACE, "Start on a setting starts the race");
 

@@ -34,11 +34,12 @@ struct s2_menu_cfg {
 };
 extern const uint8_t s2_menu_laps[S2M_LAPS];
 
-/* what the menu ends with (S2M_ARCADE: a key press on the ARCADE row, which s2menu_run() answers by running the arcade pages) */
-enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE };
+/* what the menu ends with (S2M_ARCADE: a key press on the ARCADE row, which s2menu_run() answers by running the arcade pages; S2M_SETTINGS and
+   S2M_SCORES: the GAME SETTINGS and HI SCORES rows, which s2menu_run() answers by running the page) */
+enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES };
 
 /* The rows, top to bottom */
-enum { S2M_ROW_ARCADE, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROWS };
+enum { S2M_ROW_ARCADE, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROWS };
 
 /* The names and labels from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the
    built-in English text, which is the same. Once, before the first menu. Returns how many of the 7 texts (the tracks, the teams, the
