@@ -24,7 +24,7 @@ int track_build_difficulty = 1;         /* NORMAL, as make_track.py */
 /* The header's block CRC-32s are for the native check (byte-identical with tools/make_track*.py); on the Pocket
    nothing reads them and they take over a second, so there the words stay 0 */
 #ifdef __riscv
-#define BLOCK_CRC(p, e) 0u
+#define BLOCK_CRC(p, e) ((void)(p), (void)(e), 0u)
 #else
 #define BLOCK_CRC(p, e) crc32(p, e)
 #endif
@@ -240,7 +240,8 @@ uint32_t track_build(const struct track_files *f, int n, uint8_t *out, uint32_t 
 /*
  * Screamer 2 (tools/s2/make_track_s2.py is the reference; docs/screamer2/comparison.md). The image is
  * version 7: the car materials in front of the MLB, then the sections of version 6 with the camera path,
- * the markers, the race screen and the opponents empty, and the cars of team 1 (AUTO1..5) merged in:
+ * the markers, the race screen and the opponents empty, and the cars of the grid (four, each its own team's:
+ * s2teams.h) merged in:
  *   - the geometry unit reads a face's material at a signed 16-bit offset from the MLB's start, so the
  *     cars' material records (16 bytes each) are collected in a section in front of the track's MLB and the
  *     cars' faces point there (a negative offset); their texture records and pixels stay in the cars' own
@@ -252,7 +253,6 @@ uint32_t track_build(const struct track_files *f, int n, uint8_t *out, uint32_t 
  *     MLB section) under a texture record of its own, and the cars' routine-160 material records point to it.
  *     The image stays version 7 (no new section)
  */
-#define S2_CARS     5                   /* AUTO1..5 */
 #define S2_ENV_HEAD  256u               /* the reflection's texture record, padded to this */
 #define S2_ENV_FRAME 65536u             /* a tiled frame: 256 rows of 256 */
 #define S2_ENV_MAX   8u
@@ -450,7 +450,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     struct build b = { .out = out, .scratch = scratch, .cap = cap, .pos = FIRST, .scratch_cap = scratch_cap,
                        .track = "MAP0", .info = info };
     info->fail[0] = 0;
-    info->cycles = info->unpack_cycles = 0;
+    info->cycles = info->unpack_cycles = info->scratch = 0;
     if(n < 1 || n > 9 || cap < FIRST) return (uint32_t)fail(&b, "track number");
     b.track[3] = (char)('0' + n);
     memset(out, 0, FIRST);
@@ -465,12 +465,14 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
 
     /* the cars' libraries: where they lie in the MLB section, how many materials they have */
     struct { const uint8_t *mlb; uint32_t size, nrec, at; } lib[S2_CARS];
+    const int ncars = f->ncars;
+    if(ncars < 1 || ncars > S2_CARS || !f->car) return (uint32_t)fail(&b, "cars");
     if(!dat_find(f->gfx, f->gfx_size, name(&b, ".MLB", buf), &e)) return (uint32_t)fail(&b, buf);
     uint32_t mlb_size = e.size, nmat = 0, end = pad256(mlb_size);
-    for(int k = 0; k < S2_CARS; k++) {
-        char nm[16] = "AUTO1.MLB";
-        nm[4] = (char)('1' + k);
-        if(!(lib[k].mlb = unpack(&b, f->cars, f->cars_size, nm, &lib[k].size))) return 0;
+    for(int k = 0; k < ncars; k++) {
+        lib[k].mlb = f->car[k].mlb;
+        lib[k].size = f->car[k].mlb_size;
+        if(!lib[k].mlb || lib[k].size < 16 || !f->car[k].x3d) return (uint32_t)fail(&b, "car");
         lib[k].nrec = mlb_records(lib[k].mlb, lib[k].size);
         lib[k].at = end;
         end += pad256(lib[k].size);
@@ -490,14 +492,14 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
 
     /* section 0: the car materials; 1: the MLB, the cars' libraries and the reflection after it */
     if(16 * nmat > room(&b)) return (uint32_t)fail(&b, "car materials");
-    for(int k = 0, o = 0; k < S2_CARS; o += (int)lib[k].nrec, k++)
+    for(int k = 0, o = 0; k < ncars; o += (int)lib[k].nrec, k++)
         lib_records(lib[k].mlb, lib[k].size, lib[k].nrec, lib[k].at, env_at, at(&b) + 16 * (uint32_t)o);
     if(!section(&b, 16 * nmat, nmat, "car materials")) return 0;
     if(end > room(&b)) return (uint32_t)fail(&b, "MLB");
     uint8_t *m = at(&b);
     if(!extract(&b, f->gfx, f->gfx_size, &e, m, room(&b))) return 0;
     memset(m + mlb_size, 0, pad256(mlb_size) - mlb_size);
-    for(int k = 0; k < S2_CARS; k++) {
+    for(int k = 0; k < ncars; k++) {
         memcpy(m + lib[k].at, lib[k].mlb, lib[k].size);
         memset(m + lib[k].at + lib[k].size, 0, pad256(lib[k].size) - lib[k].size);
         lib_relocate(m + lib[k].at, lib[k].size, lib[k].nrec, lib[k].at);
@@ -524,25 +526,20 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     stand_in_car(at(&b));
     if(!section(&b, 68, 1, "cars")) return 0;
 
-    /* the car models: each .3DX straight to its place, its faces onto the car materials */
+    /* the car models: each .3DX to its place, its faces onto the car materials */
     {
-        struct dat_entry xe[S2_CARS];
         uint32_t size[S2_CARS], rec = 0;
         const uint8_t *x3d[S2_CARS];
-        for(int k = 0; k < S2_CARS; k++) {
-            char nm[16] = "AUTO1.3DX";
-            nm[4] = (char)('1' + k);
-            if(!dat_find(f->cars, f->cars_size, nm, &xe[k])) return (uint32_t)fail(&b, nm);
-            size[k] = xe[k].size;
-        }
-        for(int k = 0; k < S2_CARS; rec += lib[k].nrec, k++) {
-            uint32_t o = tb_car_models_at(size, S2_CARS, k);
-            if(o == 0 || o > room(&b) || !extract(&b, f->cars, f->cars_size, &xe[k], at(&b) + o, room(&b) - o)) return 0;
+        for(int k = 0; k < ncars; k++) size[k] = f->car[k].x3d_size;
+        for(int k = 0; k < ncars; rec += lib[k].nrec, k++) {
+            uint32_t o = tb_car_models_at(size, ncars, k);
+            if(o == 0 || size[k] == 0 || o > room(&b) || size[k] > room(&b) - o) return (uint32_t)fail(&b, "car models");
+            memcpy(at(&b) + o, f->car[k].x3d, size[k]);
             x3d[k] = at(&b) + o;
             if(!faces_onto(at(&b) + o, size[k], (int32_t)(FIRST + 16 * rec) - (int32_t)mlb_off))
                 return (uint32_t)fail(&b, "car faces");
         }
-        if(!section(&b, tb_car_models(x3d, size, S2_CARS, at(&b), room(&b)), S2_CARS, "car models")) return 0;
+        if(!section(&b, tb_car_models(x3d, size, ncars, at(&b), room(&b)), (uint32_t)ncars, "car models")) return 0;
     }
 
     const uint8_t *dirs = at(&b);
@@ -601,5 +598,6 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
         wr32(out + 0x90 + 4 * k, BLOCK_CRC(out + s, out + z));
     }
     info->cycles = now() - t0;
+    info->scratch = b.used;
     return size;
 }

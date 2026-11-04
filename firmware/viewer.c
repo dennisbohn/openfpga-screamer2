@@ -17,6 +17,7 @@
 #include "road.h"
 #include "s2car.h"
 #include "race.h"
+#include "s2teams.h"
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
    ZIP's entries read whole), the build's scratch up to the program */
@@ -24,14 +25,15 @@
 #define TEX_MAX     0x700000u
 #define GFX_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2800000))                  /* GFX/MAPnH01.DAT */
 #define GFX_MAX     0x400000u
-#define CARS_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2C00000))                  /* GFX/CARS101.DAT */
+#define CARS_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2C00000))                  /* the place for the cars' ZIP entries (s2teams.h) */
 #define CARS_MAX    0x100000u
 #define DATA_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D00000))                  /* DATA/MAPn.DAT */
 #define DATA_MAX    0x40000u
 #define ENV_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D40000))                  /* GFX/ENVPn01.DAT (up to 20 KB) */
 #define ENV_MAX     0x20000u
-#define SCRATCH_MEM ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))
-#define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000u))
+#define BLOB_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))                  /* the grid's four cars, unpacked (0xE0000) */
+#define SCRATCH_MEM ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000 + S2_CARS_ROOM))
+#define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000u + S2_CARS_ROOM))
 
 /* the simulation's own slots (core/data.json does not have them; tools/sim.sh): a finished image offered
    instead of the build, the frames to run, the track */
@@ -146,14 +148,13 @@ static int sim_image(void)
 }
 
 /* Track n: its containers from the ZIP, the image built, checked and set up, the road chained. 1 if all
-   worked, else 0 and what stopped it in *what. The cars' container is read once. The log gets one line:
-   the bytes read and the milliseconds of each step. */
+   worked, else 0 and what stopped it in *what. The grid's cars are read and unpacked once (s2teams.h). The log
+   gets one line: the bytes read and the milliseconds of each step. */
 static int load_track(struct zip *z, int n, const char **what)
 {
-    static uint32_t cars_size;
     static struct s2_files f;
     static char gfx_name[24], data_name[24], env_name[24];
-    struct track_build_info info = { "", 0, 0 };
+    struct track_build_info info = { "", 0, 0, 0 };
     uint32_t t0 = rdcycle(), read_cycles = 0, read_bytes = 0, road_cycles = 0, image = 0;
     if (sim && slot_size(IMAGE_SLOT)) {
         if (!sim_image()) return *what = "the image", 0;
@@ -162,12 +163,11 @@ static int load_track(struct zip *z, int n, const char **what)
         fmt_str(fmt_udec(fmt_str(gfx_name, "GFX/MAP"), (uint32_t)n), "H01.DAT");
         fmt_str(fmt_udec(fmt_str(data_name, "DATA/MAP"), (uint32_t)n), ".DAT");
         fmt_str(fmt_udec(fmt_str(env_name, "GFX/ENVP"), (uint32_t)n), "01.DAT");
-        if (!cars_size) {
-            if (!read_entry(z, "GFX/CARS101.DAT", CARS_MEM, CARS_MAX, &cars_size, &read_cycles)) return *what = "GFX/CARS101.DAT", 0;
-            read_bytes += cars_size;
-        }
-        f.cars = CARS_MEM;
-        f.cars_size = cars_size;
+        uint32_t cars_t0 = rdcycle();
+        f.car = s2_cars_load(z, race_grid, 0, CARS_MEM, CARS_MAX, BLOB_MEM, &read_bytes, what);
+        if (!f.car) return 0;
+        f.ncars = S2_CARS;
+        read_cycles += rdcycle() - cars_t0;              /* (the first load: with the cars' unpacking) */
         f.gfx = GFX_MEM;
         f.data = DATA_MEM;
         if (!read_entry(z, gfx_name, GFX_MEM, GFX_MAX, &f.gfx_size, &read_cycles)) return *what = "the track's GFX file", 0;

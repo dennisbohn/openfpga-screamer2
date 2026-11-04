@@ -23,6 +23,7 @@ extern int track_build_difficulty;
 struct track_build_info {
     char fail[20];
     uint32_t cycles, unpack_cycles;
+    uint32_t scratch;                   /* the scratch the build used, bytes */
 };
 
 /* Track n (1..9, MAPn) into out (cap bytes, any alignment): returns the image's size, 0 if a
@@ -36,21 +37,29 @@ uint32_t track_build(const struct track_files *f, int n, uint8_t *out, uint32_t 
                      uint8_t *scratch, uint32_t scratch_cap, struct track_build_info *info);
 
 /*
- * Screamer 2 (docs/screamer2/comparison.md): the same from the four containers a track needs, as the ZIP
- * reader (zip.h) hands them over: GFX/MAPnH01.DAT, GFX/CARS101.DAT (team 1, day), DATA/MAPn.DAT and
- * GFX/ENVPn01.DAT (the cars' windows' reflection).
+ * Screamer 2 (docs/screamer2/comparison.md): the same from the three containers a track needs, as the ZIP
+ * reader (zip.h) hands them over: GFX/MAPnH01.DAT, DATA/MAPn.DAT and GFX/ENVPn01.DAT (the cars' windows'
+ * reflection), and the cars of the grid, each already unpacked (s2teams.h).
  * Version 7 of the image (track.h), byte for byte tools/s2/make_track_s2.py's: the track's own sections and
- * the cars AUTO1..5 of team 1 with their material libraries merged after the track's (the car materials in a
- * section in front of the MLB), then the reflection picture (the first material of ENV.MLB, its frames tiled
- * 2 x 2 into 256 x 256, 64 KB each) with the windows' materials pointing to it; no camera path, markers,
- * race screen or opponents; the player starts at the first road point; the header holds the far plane
- * (TRACK_DATA). The scratch needs about 1.8 MB for track 4's map, the cars' libraries and ENV.MLB; the
- * image 3.6 to 5.6 MB (14 to 22 blocks of 256 KB; 28 at most). env may be 0: the windows then keep the
- * cars' own (placeholder) picture.
+ * the cars of the grid, each its own team's (a race draws four: the player's and three computers'), with
+ * their material libraries merged after the track's (the car materials in a section in front of the MLB), then
+ * the reflection picture (the first material of ENV.MLB, its frames tiled 2 x 2 into 256 x 256, 64 KB each)
+ * with the windows' materials pointing to it; no camera path, markers, race screen or opponents; the player
+ * starts at the first road point; the header holds the far plane (TRACK_DATA). Car model k of the image is
+ * car[k]: the race draws grid slot k with it. The scratch needs about 1.2 MB for track 4's map and
+ * ENV.MLB; the image 3.5 to 5.4 MB (14 to 21 blocks of 256 KB; 28 at most). env may be 0: the windows then keep
+ * the cars' own (placeholder) picture.
  */
+#define S2_CARS     4                   /* the cars of a grid: at most this many models in the image */
+struct s2_car {                         /* AUTO<car>.MLB and .3DX of GFX/CARS<team>01.DAT, unpacked */
+    const uint8_t *mlb, *x3d;
+    uint32_t mlb_size, x3d_size;
+};
 struct s2_files {
-    const uint8_t *gfx, *cars, *data, *env;
-    uint32_t gfx_size, cars_size, data_size, env_size;
+    const uint8_t *gfx, *data, *env;
+    uint32_t gfx_size, data_size, env_size;
+    const struct s2_car *car;           /* ncars of them: model k of the image */
+    int ncars;                          /* 1 .. S2_CARS */
 };
 uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t cap,
                         uint8_t *scratch, uint32_t scratch_cap, struct track_build_info *info);
