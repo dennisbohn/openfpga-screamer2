@@ -74,8 +74,8 @@ it from the game's near chase camera over a car that drives the road at 150 km/h
 player's car and three more ahead (`firmware/viewer.c`, `firmware/road.c`). Frames go through the
 hardware path (geometry unit, setup unit, rasterizer, blitter) with the original's level of detail at
 DETAIL HIGH (`track_lod_level()`: placed meshes switch at 6,000 and 9,000 units, cars at 2,000 and 6,000;
-far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). No menu, race screen, sound
-or music. Start switches between this ride and the driving mode (next section).
+far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). No menu or race screen, and the
+ride is silent (the race has sound and music, "Sound" below). Start switches between this ride and the driving mode (next section).
 
 | Button (ride) | |
 |---|---|
@@ -156,7 +156,7 @@ Known gaps (accepted): the cars' windows show the original's environment picture
 first material of `ENV.MLB`, `GFX/ENVPn01.DAT`; no hardware change, see "The windows" below) but the picture
 neither slides with the car's travel nor changes by the road's kind (the tunnels' ceiling frames of tracks 3, 4, 6, 7:
 the viewer's objects carry no reflection accumulators and phase 0), the palette of tracks 2 and 5 is the track's,
-not `ENV.COL`'s, no shadows, smoke, props or animated scenery, no fade by depth, no night or fog, no mirror, the S1
+not `ENV.COL`'s, no shadows, smoke, props or animated scenery (nor its sounds), no fade by depth, no night or fog, no mirror, the S1
 see-through table (64 rows) where Screamer 2 has 112, the sky and ground colour of `TRACK_DATA` only
 where the backdrop picture ends.
 
@@ -220,6 +220,63 @@ brake: the buttons of `tools/s2/render_s2.c` `d<k>`, which still has that script
 hardware's last frame equals the PC render of the same step (`render_s2.sh build/s2/track1.bin <prefix> d161`) in every
 pixel below the overlay's rows. The load line of this run: 654 ms with the image from the testbench (the 1.4 s CRC
 check is gone).
+
+### Sound (the race)
+
+The race has the game's music and effects (`firmware/s2sound.c`, rules in `firmware/s2snd.c`); the ride is silent. The
+rules are read from the original's program (`STARTL.EXE`, addresses below; OpenScreamer's `docs/NOTES2.md` S2-5zf has
+the sound manager) and tested natively (`tools/s2/check_sound.sh`).
+
+| What | When | The rule (STARTL.EXE) |
+|---|---|---|
+| Music | with the race: the track is set up (before the lights), round and round, fades out over 3 s once the player has finished; stops when the race is left | the CD track is `CD_TRACKS` of `DATA/GAME.DAT`'s `MISC.DTR`, `9 8 6 7 4 3 5` for tracks 1 to 7 (`0x2ebc9..0x2ebdc`: `CD_TRACKS[track - 1]`, the repeat flag set); the CD image `GAME.GOG` and its cue sheet `GAME.DAT` are the optional pair (data slots 22 and 21), `firmware/music.c` streams it through the mixer's ring |
+| Engines | all four cars, from the first frame (the grid's revs too) | per car a voice: sample = the car's model (`M_PORSCH`, `M_CELICA`, `M_ACUV1`, `M_MK5` for the four cars; `M_STOCK` .. for a team's fifth model), the same recording's tunnel version (`T_*`, sample + 0x19) on road kinds 7, 13, 34, 43 (`0x1fe3b..0x1ff20`); rate = the sample's own x (2 x revs / most revs)^2, plus that x (last distance - distance) / 50,000 x 5; volume = the sample's x ((50,000 - distance) / 50,000)^2; pan = 32768 - 32767 x cos((1 - across / 50,000) x 1.87): the listener is the picture's camera (`0x1ff20..0x1ffb3` fills the call's record, the routine is `0xaf338`; the constants were read in the program: 2.0, 5.0, 1.87, 32767, 32768) |
+| Tyres | the player's car | squeal where the grip (record +0xc34) is under 0.93, volume (0.93 - grip) / 0.1 of 29,952, the sample `SKID` + the road kind's last sound number (`7 + n`); without one, the rolling sound of the kind (`0x12 + n`, `TIRES1..6`: grass and the like, none on asphalt) at 655 x the speed (50 at most); a voice that is not restarted while the sample stays (`0x1b36f`, the sounds at `0x1b7e3..0x1b8da`) |
+| Wall | the player's car | `HIT1..3` (0xc..0xe) for a knock harder than 500, 4,000, 10,000 (`0x29571`, the sounds at `0x2a301..0x2a34b`; the physics' `hit_hard`) |
+| Car against car | the player's car | `CRASH1..3` (0xf..0x11) harder than 0, 5,000, 10,000 (`0x245a3`, the thresholds at `0x27abd`; the firmware's cars touch with the closing speed of `race.c collide()`, which is not the game's knock to the unit) |
+| Landing | the player's car | `GROUND1` (0x12) when all four wheels were in the air and any is down again (`0x1c45e`) |
+| Start lights, gears | - | nothing: the original has no sound for them (every call to the sound manager in the race code is one of the above; the cones' and the scenery's sounds are not run) |
+
+`DATA/SOUND.DAT` (1.4 MB) is a `.DAT` container of `.RAW` samples (8-bit unsigned mono, stored) and `.DTR` tables;
+`GAME.DTR` lists the 33 samples of the race by number with their own rate (8,000 to 22,050 Hz), volume and loop, in a section
+`SOUND_DATA` (`sNAME.RAW xID xLOOPLEN xLOOPCOUNT xVOLUME`, then `dRATE dBITS dCHANNELS dFORMAT`). It is read whole from the ZIP once,
+when the viewer starts (about a second on a stored ZIP, longer on a deflated one), to `0x11C0_0000` (docs/soc.md), and the
+mixer plays the samples straight from there. The mixer's step is the rate over 48,000 (2.16), at most 4 samples a value. `MENU.DTR` and the
+`AMBIENT*.DTR` of the tracks (birds, mill, crowd, ...) belong to the menu and to the scenery's animations, which are not run.
+
+Voices of the mixer: 0 to 3 the engines, 5 the player's tyres, 6 to 9 the knocks (round robin). Volumes: the sample's volume (`0x3fff`
+for the engines, `0x5fff` for `M_ACUV1`, `0x7fff` for the rest) times the game's factor, then the effects' master `S2SND_FX_MASTER` `0x2000`
+of `0x7fff` (Screamer 1's `sound.c` has two thirds of the game's, `0x4000`; with that the four engines and the tyres alone clipped
+the sum in the first simulation, 686 samples in 8 s, so it is halved; a full sample at the full volume then moves the output by 63
+per 8-bit step, the music stays at `0x4000`), pan with the far side faded linearly. The game starts a new voice for every frame of a contact and lets the old
+ones play on; here a knock starts every 3 frames at most (a harder one at once). The engine of a car at rest has a floor of 200 Hz.
+
+The cost: `s2snd_frame()` (the engines, tyres, knocks, the fade) and `music_frame()` (the ring) are timed with the cycle counter
+and the mean and worst go into the log (`sound: 250 fr, effects 7211/7519, music 643/950 cycles mean/max`) five seconds into the
+race and when it is left. In the simulation of the race on track 4 (330 frames, 4 cars, the music's ring filling): the effects
+7,211 cycles on the mean and 7,519 at the worst, 0.10 ms; the ring 643 and 950 cycles, 0.01 ms. They sit before the scene in the frame, so the first mark of the
+timeline (`ph` in the log) holds them; that run: 13.6 ms mean and 15.1 ms worst a frame, no frame over 20 ms, 50.0 a second, with the
+computers' steps after the scene (`RACE_OVERLAP` 1). The ring was read as the song played: 51 reads of 32 KB or less for 330 frames,
+by the log's `data slot read 22` lines, at the rate of the song. Track 1, 260 frames: effects 7,027 / 7,356 cycles, ring 638 / 956,
+12.6 ms mean and 13.6 ms worst a frame, none late. Stack of the program 4.5 KB. (The runs: the real ZIP, a made-up CD image of
+tones and the commands of "Simulation" above with `SIM_WAV=build/sim/race1.wav`; 330 and 260 frames take 13 and 10 minutes.)
+
+What the output showed (2026-11-04, `SIM_WAV`): the music is the track's song: track 4 reads CD track 7 (its first read at the
+sector of track 7) and track 1 CD track 9, whose two test tones (1,800 and 2,700 Hz, amplitude 12,000) came out at 5,950 of the 6,000 the
+music volume gives. The engines were there from the first frame of the race and louder with the cars let go. At the effects' master `0x4000` (first run, the
+music silent in it, a track without a tone) 686 samples clipped in 8 s; at `0x2000` (second run, with the tones) the peaks were 21,800
+and 27,200, nothing clipped, the engines' rms 3.5k left and 5.2k right (the game's pan leans right: a source straight ahead is
+at 42,400 of 65,535) against the test tone's 4.2k.
+
+The music and the track load: the load takes the data slot for 3 to 5 s (the ZIP's reads), the ring is read from a data slot too,
+and the ring holds 1.5 s: so the music stops when the race is left (`s2snd_stop()` in `leave()`, which waits for a running read of
+the ring) and starts again with the next race, which costs the 170 ms of its first fill while the loading screen is up. A
+restart of the race on the same track (Select + Start) keeps its song. A frame as slow as 1 s would still not run the ring dry.
+
+What is open: the original's volume balance is not known (the CD drive's analogue mix is not in the program; the two thirds are
+Screamer 1's choice), the pan law of the effects is HMI's as Screamer 1's `sound.c` has it, the car against car knock is the
+firmware's closing speed, the cones' knock and the scenery's sounds (`ANIMATIONS` rows with a sound, `AMBIENT*.DTR`) are not
+done, no menu sounds (there is no menu), no pause.
 
 ## PC renderer
 
@@ -295,6 +352,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py` | the Screamer 2 track image on the PC (the reference) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks, natively under the sanitizers; the windows' reflection picture in the image against the original's |
 | `tools/s2/check_params.sh`, `tools/s2/check_params.py`, `tools/s2/check_params.c` | the car's numbers: `firmware/s2params.c` (CAR_PARAMS of `DATA/GAME.DAT`, TRACK_DATA with the road kinds of `DATA/MAPn.DAT`) natively against an independent reading in Python, every field of 20 cars and 7 tracks |
+| `tools/s2/check_sound.sh`, `tools/s2/check_sound.py`, `tools/s2/check_sound.c` | the race's sound rules `firmware/s2snd.c` natively in Docker: `DATA/SOUND.DAT`'s `GAME.DTR` (the 33 samples: where their bytes are in the container, length, rate, volume, loop, CRC-32 of the bytes) and `CD_TRACKS` read by the firmware's code and by an independent reading in Python, line by line; an engine's rate, volume and pan over a sweep of revs, distance, last distance and side (223,560 cases), the tyres' rule (13,650 cases) and the knocks' thresholds against the game's routine as OpenScreamer's notes have it in double precision (the constants checked in `STARTL.EXE`) |
 | `tools/s2/check_car.sh`, `tools/s2/check_car.c`, `tools/s2/car_scenarios/` | the car physics `firmware/s2car.c` natively in float32 on the track images against the reference traces of OpenScreamer's routines (the folder `ref/` next to the repository, or `$REF_DIR`; scenarios in its `scn/`, traces in `traces*/`), the place cut as the game does and kept as a float; per quantity the largest and the mean difference; also the car alone from each track's grid place and the trigonometry and ground looks a step costs. `car_scenarios/` holds the scenarios heading towards the origin (`a_origin` ..., traces made with `tools/s2/ref_trace/ref_run.sh` into `ref/traces_benign/`) |
 | `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene, the lone car and the race on the PC from the firmware's own code (`NOLOD=1`: no level of detail; `g<k>`: the race, laps and places of the four cars as a table) |
 | `tools/s2/framestats.sh`, `tools/s2/perf_patch.py`, `tools/s2/perf_model.py`, `tools/s2/lod_report.py` | the study's counting build (counters in copies of the firmware) and cost model, `docs/screamer2/performance.md` |
