@@ -72,6 +72,8 @@ int main(int argc, char **argv)
         uint32_t csize;
         const uint8_t *file = slurp(argv[1], cont, &csize);
         struct s2_car *c = &cars[f.ncars];
+        c->team = (uint8_t)team;
+        c->car = (uint8_t)car;
         if(!s2_car_unpack(file, csize, car, (uint8_t *)blobs + f.ncars * S2_CAR_ROOM, S2_CAR_ROOM, c)) {
             printf("FAIL: team %d car %d is not in %s\n", team, car, cont);
             return 1;

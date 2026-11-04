@@ -31,9 +31,10 @@
 #define DATA_MAX    0x40000u
 #define ENV_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D40000))                  /* GFX/ENVPn01.DAT (up to 20 KB) */
 #define ENV_MAX     0x20000u
-#define BLOB_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))                  /* the grid's four cars, unpacked (0xE0000) */
-#define SCRATCH_MEM ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000 + S2_CARS_ROOM))
-#define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000u + S2_CARS_ROOM))
+#define BLOB_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))                  /* the grid's cars, unpacked */
+#define BLOB_ROOM   (RACE_CARS * S2_CAR_ROOM)                                         /* 0xE0000 */
+#define SCRATCH_MEM ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000 + BLOB_ROOM))
+#define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000u + BLOB_ROOM))
 
 /* the simulation's own slots (core/data.json does not have them; tools/sim.sh): a finished image offered
    instead of the build, the frames to run, the track */
@@ -164,9 +165,9 @@ static int load_track(struct zip *z, int n, const char **what)
         fmt_str(fmt_udec(fmt_str(data_name, "DATA/MAP"), (uint32_t)n), ".DAT");
         fmt_str(fmt_udec(fmt_str(env_name, "GFX/ENVP"), (uint32_t)n), "01.DAT");
         uint32_t cars_t0 = rdcycle();
-        f.car = s2_cars_load(z, race_grid, 0, CARS_MEM, CARS_MAX, BLOB_MEM, &read_bytes, what);
+        f.car = s2_cars_load(z, race_grid, RACE_CARS, 0, CARS_MEM, CARS_MAX, BLOB_MEM, &read_bytes, what);
         if (!f.car) return 0;
-        f.ncars = S2_CARS;
+        f.ncars = RACE_CARS;
         read_cycles += rdcycle() - cars_t0;              /* (the first load: with the cars' unpacking) */
         f.gfx = GFX_MEM;
         f.data = DATA_MEM;

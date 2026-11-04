@@ -430,13 +430,15 @@ static void wrf(uint8_t *p, float f)
     wr32(p, v);
 }
 
-/* CARS_DATA's one row, a stand-in (the cars' physics is new in Screamer 2): char name[12], int32 livery,
-   float maxspd, maxrpm, grip, accel, int32 automatic, nshift, float ratio[7] */
-static void stand_in_car(uint8_t *p)
+/* CARS_DATA's row of a car model, a stand-in (the cars' physics is new in Screamer 2) that names the car by its
+   livery word (team * 256 + car): char name[12], int32 livery, float maxspd, maxrpm, grip, accel, int32 automatic,
+   nshift, float ratio[7] */
+static void stand_in_car(uint8_t *p, const struct s2_car *c)
 {
     static const float f1[4] = { 150.0f, 9000.0f, 1.0f, 1.0f }, f2[7] = { 0.0f, 3.0f, 2.0f, 1.5f, 1.2f, 1.0f, 0.8f };
     memset(p, 0, 68);
     memcpy(p, "S2 STANDIN", 10);
+    wr32(p + 12, (uint32_t)c->team << 8 | c->car);
     for(int i = 0; i < 4; i++) wrf(p + 16 + 4 * i, f1[i]);
     wr32(p + 32, 1);
     wr32(p + 36, 4);
@@ -522,9 +524,9 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     len = tb_mmp_ground(mmp, mmp_n, at(&b), room(&b), &count);
     if(!section(&b, len, count, "ground index")) return 0;
     empty(&b);                                  /* the markers */
-    if(room(&b) < 68) return (uint32_t)fail(&b, "cars");
-    stand_in_car(at(&b));
-    if(!section(&b, 68, 1, "cars")) return 0;
+    if(room(&b) < 68 * (uint32_t)ncars) return (uint32_t)fail(&b, "cars");
+    for(int k = 0; k < ncars; k++) stand_in_car(at(&b) + 68 * k, &f->car[k]);
+    if(!section(&b, 68 * (uint32_t)ncars, (uint32_t)ncars, "cars")) return 0;
 
     /* the car models: each .3DX to its place, its faces onto the car materials */
     {

@@ -46,14 +46,16 @@ uint32_t track_build(const struct track_files *f, int n, uint8_t *out, uint32_t 
  * the reflection picture (the first material of ENV.MLB, its frames tiled 2 x 2 into 256 x 256, 64 KB each)
  * with the windows' materials pointing to it; no camera path, markers, race screen or opponents; the player
  * starts at the first road point; the header holds the far plane (TRACK_DATA). Car model k of the image is
- * car[k]: the race draws grid slot k with it. The scratch needs about 1.2 MB for track 4's map and
- * ENV.MLB; the image 3.5 to 5.4 MB (14 to 21 blocks of 256 KB; 28 at most). env may be 0: the windows then keep
- * the cars' own (placeholder) picture.
+ * car[k]: the race draws grid slot k with it. The cars section has a row for each (a stand-in, CARS.DTR's
+ * numbers are the physics' own), whose livery word names the car: team * 256 + car, as the files number them
+ * (s2car.c finds a car's wheels by it). The scratch needs 0.6 MB for track 4, the largest; the image 3.5 to 5.4 MB
+ * (14 to 21 blocks of 256 KB; 28 at most). env may be 0: the windows then keep the cars' own (placeholder) picture.
  */
-#define S2_CARS     4                   /* the cars of a grid: at most this many models in the image */
+#define S2_CARS     5                   /* models an image may hold: a race has four, the physics checks use a team's five */
 struct s2_car {                         /* AUTO<car>.MLB and .3DX of GFX/CARS<team>01.DAT, unpacked */
     const uint8_t *mlb, *x3d;
     uint32_t mlb_size, x3d_size;
+    uint8_t team, car;                  /* 1..4, 1..5 as the files number them */
 };
 struct s2_files {
     const uint8_t *gfx, *data, *env;

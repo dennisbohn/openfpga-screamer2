@@ -1219,12 +1219,27 @@ static int load_data(int track)
     return 1;
 }
 
-/* the wheel blocks of the image's car model: "flx", "blx", "frx", "brx" for wheels 0 .. 3; their place in the
+/* the image's car model of a car (team 0 .. 3, car 0 .. 4): the cars section has a row for each model whose livery word
+   names its car (team * 256 + car, from 1: track_build_s2()); a car not in the image takes a model of the same car
+   number (any team's: the wheels are the car's), and an image that names none (the rows' livery is 0) has the cars
+   AUTO1 .. 5 in turn */
+static int image_model(int team, int car)
+{
+    int n, same = -1;
+    const struct car_spec *rows = track_cars(&n);
+    for(int k = 0; k < n; k++) {
+        if(rows[k].livery == (team + 1) * 256 + car + 1) return k;
+        if((rows[k].livery & 255) == car + 1 && same < 0) same = k;
+    }
+    return same >= 0 ? same : car;
+}
+
+/* the wheel blocks of the car's model in the image: "flx", "blx", "frx", "brx" for wheels 0 .. 3; their place in the
    car (the block's frame x, y, z) */
-static int wheel_places(int model, int32_t pos[4][3])
+static int wheel_places(int team, int car, int32_t pos[4][3])
 {
     static const char *const names[4] = { "flx", "blx", "frx", "brx" };
-    int nm;
+    int nm, model = image_model(team, car);
     track_models(&nm);
     if(model < 0 || model >= nm) return 0;
     const uint8_t *m = track_model_mesh(model);
@@ -1293,7 +1308,7 @@ static int init_car(struct s2car_state *s, int team, int car, int track, int gri
     if(!load_data(track)) return 0;
     index_track();
     int32_t wp[4][3];
-    if(!wheel_places(car, wp)) return 0;
+    if(!wheel_places(team, car, wp)) return 0;
     G.wall = 0;
     G.road_found = 0;
     G.road_heading = 0.0f;

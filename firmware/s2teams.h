@@ -17,16 +17,15 @@
 struct s2_pick { uint8_t team, car; };
 
 #define S2_CAR_ROOM     0x38000u                    /* bytes for a car's unpacked .MLB and .3DX (the largest pair: 211,000) */
-#define S2_CARS_ROOM    (S2_CARS * S2_CAR_ROOM)
 
-/* The cars of the grid (S2_CARS picks), look 0 (day) or 1 (night), unpacked into blobs (S2_CARS_ROOM bytes,
-   4-aligned): the .MLB and the .3DX of each, which track_build_s2() takes. Only the two entries of each car are
+/* The cars of the grid (n picks, 1 to S2_CARS), look 0 (day) or 1 (night), unpacked into blobs (n * S2_CAR_ROOM
+   bytes, 4-aligned): the .MLB and the .3DX of each, which track_build_s2() takes. Only the two entries of each car are
    read from the ZIP when it is stored (method 0): the container's directory and the entries, about 60 KB a car
    instead of 0.4 to 0.8 MB. A deflated container can only be read whole. stage (4-aligned, stage_max >= the
    largest container + 8, 1 MB) is the place for those bytes. The cars loaded stay: a call with the same grid and
-   look reads nothing. bytes: the bytes read from the ZIP are added. Returns the cars (S2_CARS of them, static),
-   or 0 and in *what the file or entry that failed. */
-const struct s2_car *s2_cars_load(struct zip *z, const struct s2_pick *grid, int look, uint8_t *stage,
+   look reads nothing. bytes: the bytes read from the ZIP are added. Returns the n cars (static), or 0 and in
+   *what the file or entry that failed. */
+const struct s2_car *s2_cars_load(struct zip *z, const struct s2_pick *grid, int n, int look, uint8_t *stage,
                                   uint32_t stage_max, uint8_t *blobs, uint32_t *bytes, const char **what);
 
 /* The cars AUTO<car>.MLB and .3DX of a whole container (file, size bytes) unpacked into to (room bytes), the

@@ -12,7 +12,7 @@
 #include "s2teams.h"
 
 #define RACE_CARS   4
-_Static_assert(RACE_CARS == S2_CARS, "the track image holds one car model per grid slot");
+_Static_assert(RACE_CARS <= S2_CARS, "the track image holds one car model per grid slot");
 #define RACE_LAPS   3                   /* the arcade race's default (the options' 1, 3, 5, 10) */
 
 /* what the screen shows of the race */

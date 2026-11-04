@@ -66,22 +66,22 @@ static int load_one(struct zip *z, const struct zip_entry *e, int car, uint8_t *
     return 1;
 }
 
-const struct s2_car *s2_cars_load(struct zip *z, const struct s2_pick *grid, int look, uint8_t *stage,
+const struct s2_car *s2_cars_load(struct zip *z, const struct s2_pick *grid, int n, int look, uint8_t *stage,
                                   uint32_t stage_max, uint8_t *blobs, uint32_t *bytes, const char **what)
 {
     static struct s2_car cars[S2_CARS];
     static struct s2_pick have[S2_CARS];                    /* what is in the blobs (team 0: nothing) and its look */
     static uint8_t have_look;
     static char name[24];
-    if(look < 0 || look > 1) {
-        *what = "the look";
+    if(look < 0 || look > 1 || n < 1 || n > S2_CARS) {
+        *what = "the look or the grid";
         return 0;
     }
     if(look != have_look) {                                 /* the other look: nothing of the blobs is right */
         memset(have, 0, sizeof have);
         have_look = (uint8_t)look;
     }
-    for(int i = 0; i < S2_CARS; i++) {
+    for(int i = 0; i < n; i++) {
         const struct s2_pick p = grid[i];
         if(p.team < 1 || p.team > 4 || p.car < 1 || p.car > 5) {
             *what = "the grid's cars";
@@ -98,6 +98,8 @@ const struct s2_car *s2_cars_load(struct zip *z, const struct s2_pick *grid, int
             return 0;
         }
         have[i] = p;
+        cars[i].team = p.team;
+        cars[i].car = p.car;
     }
     return cars;
 }
