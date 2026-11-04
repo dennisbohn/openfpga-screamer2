@@ -239,8 +239,16 @@ static void load_skills(void)
    the driver's, and stops when its time is up), given a fifth of a second for each car behind it */
 static void lap_done(int i, int by)
 {
-    (void)i;                                            /* (the laps are not counted yet) */
-    (void)by;
+    struct s2car_state *c = &R.car[i];
+    I(c, 0x4a8) += by;
+    if(I(c, 0x4a8) <= I(c, 0x4ac)) return;
+    I(c, 0x4ac) = I(c, 0x4a8);
+    if(!(F(c, 0xc3c) >= F(c, 0xc40))) F(c, 0xc40) = F(c, 0xc3c);
+    if(I(c, 0x4a8) == RACE_LAPS) {
+        I(c, 0x4c) |= 3;
+        F(c, 4) = (float)(R.n - I(c, 0xc30)) * 0.2f;
+    }
+    F(c, 0xc3c) = 0.0f;
 }
 
 /* Where the car is along the road (0x153c6): the line's four points half a node apart round where the car was last
