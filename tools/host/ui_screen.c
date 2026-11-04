@@ -226,7 +226,7 @@ static void check_text(const char *ref, const char *prefix)
     /* the width of a string is what the drawing advances */
     CHECK(s2gfx_text(0, S2G_FONT_MEDIUM, 1, 2, 0, 0, "") == 0, "empty string has a width");
     int w1 = s2gfx_text(0, S2G_FONT_MEDIUM, 1, 2, 0, 0, "RESUME"), w2 = s2gfx_text(0, S2G_FONT_MEDIUM, 1, 3, 0, 0, "RESUME");
-    CHECK(w2 == w1 + 6, "spacing 3 instead of 2 widens six characters by six pixels (%d, %d)", w1, w2);
+    CHECK(w2 == w1 + 5, "spacing 3 instead of 2 widens six characters by five pixels, one a gap (%d, %d)", w1, w2);
     static uint32_t pal[256];                                       /* the picture to look at: the cases over a blue grid's palette */
     if (s2gfx_bkk("BKG_2L.BKK", s2gfx_pic(1), pal)) {
         for (int i = 0; i < 256; i++) VID_PAL[i] = pal[i];

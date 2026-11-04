@@ -65,7 +65,7 @@ def fonts(fnt):
                 row = fnt[px + off + r * bw:px + off + (r + 1) * bw]
                 rows.append([(row[c >> 1] >> (0 if c & 1 else 4)) & 15 for c in range(w)])
             glyphs.append((w, rows))
-        out.append({"height": h[0], "first": h[1], "count": h[2], "glyphs": glyphs, "widest": max([g[0] for g in glyphs] + [1])})
+        out.append({"height": h[0], "first": h[1], "count": h[2], "glyphs": glyphs, "cell": h[3] - 2})
     return out
 
 
@@ -84,29 +84,40 @@ class Canvas:
                 if px[r * w + c]:
                     self.put(x + sx + c, y + sy + r, px[r * w + c])
 
-    def text_width(self, font, space, s):
-        f, cell, fixed, x = font, font["widest"] + space, 0, 0
+    @staticmethod
+    def layout(font, space, s):
+        """The engine's text routine (STARTL.EXE 0xc67f0 draws, 0xc6c88 measures), one step at a time as the machine code does it: the pointer
+        advances by the glyph's width, and by `space` more before every glyph but the first; after the control byte 1 a glyph sits in a cell of
+        (the font's fourth number - 2) pixels, centred by an arithmetic shift of the cell less the glyph's width, and the cell grows by `space`
+        once the first glyph is through. Returns [(char, glyph x offset)] and the width."""
+        f, cell, fixed, started, x, out = font, font["cell"], False, False, 0, []
         for ch in s.encode("latin-1"):
             if not f["first"] <= ch < f["first"] + f["count"]:
-                fixed = 1 if ch == 1 else 0 if ch == 2 else fixed
+                fixed = True if ch == 1 else False if ch == 2 else fixed
                 continue
             w = f["glyphs"][ch - f["first"]][0]
-            x += cell if fixed else w + space
-        return x
+            if fixed:
+                out.append((ch, x + ((cell - w) >> 1)))
+                x += cell
+            else:
+                at = x + space if started else x
+                out.append((ch, at))
+                x = at + w
+            if not started:
+                cell += space
+            started = True
+        return out, x
+
+    def text_width(self, font, space, s):
+        return self.layout(font, space, s)[1]
 
     def text(self, font, colour, space, x, y, s):
-        f, cell, fixed = font, font["widest"] + space, 0
-        for ch in s.encode("latin-1"):
-            if not f["first"] <= ch < f["first"] + f["count"]:
-                fixed = 1 if ch == 1 else 0 if ch == 2 else fixed
-                continue
-            w, rows = f["glyphs"][ch - f["first"]]
-            gx = x + ((cell - (w + 1)) // 2 if fixed else 0)
+        for ch, gx in self.layout(font, space, s)[0]:
+            w, rows = font["glyphs"][ch - font["first"]]
             for r, row in enumerate(rows):
                 for c, shade in enumerate(row):
                     if shade:
-                        self.put(gx + c, y + r, colour * 16 + shade)
-            x += cell if fixed else w + space
+                        self.put(x + gx + c, y + r, colour * 16 + shade)
 
 
 def read_png_rgb(path):

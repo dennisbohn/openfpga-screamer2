@@ -11,6 +11,7 @@
  *   +0x60000  sprites, fonts 0.57 MB        MENUL.SPR as the file is, then the fonts' glyphs one byte a pixel
  * A deflated ZIP cannot be read by range: its GRAF1.DAT (4.2 MB) is inflated once, whole, at 0x1100_0000 (the files screen's read
  * test region, free by then).
+ * The race screen's set (s2gfx_game_init) has its own 0.5 MB at 0x10C0_0000 (GAMEL.SPR as the file is, 0x40000 of it, then the glyphs).
  */
 #pragma once
 #include <stdint.h>
@@ -62,6 +63,17 @@ void s2gfx_sprite_centred(struct blit_list *l, int n, int y);
 int s2gfx_text(struct blit_list *l, int font, int colour, int space, int x, int y, const char *s);
 /* The same centred on the screen (0x3327c: x = (320 - width) / 2) */
 void s2gfx_text_centred(struct blit_list *l, int font, int colour, int space, int y, const char *s);
+
+/* The race screen's sprites and fonts: GAMEL.SPR and GAMEL.FNT of GFX/GAME1.DAT (the formats of MENUL's; 115 sprites and 9 fonts, font 0 is the menu's
+   font 1: docs/screamer2/menus.md). Its own tables and memory (SDRAM_BASE + 0xC00000, 0.5 MB), independent of s2gfx_init(); the calls are the menu's
+   with the same meaning. A stored ZIP is read by range, a deflated one inflates GAME1.DAT (0.45 MB) at SDRAM_BASE + 0x1500000 for the read only.
+   1 if the sprites and fonts are there (the log says what is not). */
+#define S2G_GAME_MEM    0xC00000u
+int s2gfx_game_init(struct zip *z);
+void s2gfx_game_sprite(struct blit_list *l, int n, int x, int y);
+void s2gfx_game_sprite_centred(struct blit_list *l, int n, int y);
+int s2gfx_game_text(struct blit_list *l, int font, int colour, int space, int x, int y, const char *s);
+void s2gfx_game_text_centred(struct blit_list *l, int font, int colour, int space, int y, const char *s);
 
 /* The darkening of the original (it builds a table for the palette every picture is darkened with): for each colour the palette entry
    nearest to 0.67 of it (the first of equals), and where that is the colour itself, the nearest to 0.7 of that again. Entries from
