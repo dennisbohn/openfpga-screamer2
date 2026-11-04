@@ -36,6 +36,10 @@ void race_step(const struct s2car_input *in);
 void race_step_player(const struct s2car_input *in);
 void race_step_others(uint32_t count);
 
+/* The hardest touch of the player's car with another since the last call (the speed the two close at, in the physics' units a
+   second), 0 if none: the sound's knock (s2snd.h). */
+float race_knock_take(void);
+
 /* The cars: 0 is the player's. The state stays where it is until the next race_step / race_init. */
 struct s2car_state *race_car(int i);
 int race_cars(void);
