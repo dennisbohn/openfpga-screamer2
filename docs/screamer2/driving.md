@@ -138,8 +138,13 @@ reference's to its last digit while the place's cut-off does not matter, and the
 steps a second is gone.
 
 Cost of a step, counted natively per step (tracks 1 to 7 alike): 4 ground looks (each the game's 9-cell search), about
-20 `atanf`, 2 `sinf`, 4 `cosf` and the `sincosf` of the corners' turns; the time on the Pocket's CPU is in the report of
-the simulation (`docs/development.md`).
+20 `atanf`, 2 `sinf`, 4 `cosf` and the `sincosf` of the corners' turns. On the Pocket's CPU (the simulation of the
+driving mode, `SIM_KEYS=8000`, track 1, 160 frames, run of 2026-11-04 with the real physics): no trap, 50.0 pictures a
+second, 9.0 ms mean and 9.5 ms worst for the frame (492 faces and 140 pieces a frame: the draw-distance fix made the
+scene bigger than the 332 faces and 60 pieces of the stand-in's run, 5.5 ms), the first mark of the frame timeline (one
+physics step, the chase camera and the objects of the scene) 65,600 cycles = 0.88 ms, of which the stand-in took about
+0.1 ms. The Pocket and the host agree: 10, 22, 33, 44 mph after 25, 50, 75, 100 steps and the place to 1 unit over 100 steps
+(the picolibc and glibc `sinf` differ in the last bit; a steering flick shows it later). Stack of the program: 4.4 KB.
 
 ## Open points
 
@@ -148,5 +153,4 @@ the simulation (`docs/development.md`).
   what the check measures.
 - The pose of a tilted car (`s2car_look`) and the wheels' sign of turning have not been seen on a slope, and the camera
   of view 3 only in the numbers.
-- Cost per step: see the report of the branch (measured on the Pocket by the simulation of the viewer).
 - Not done: other cars, laps, the road kind's effects on the look, the dust, damage shown, the camera's other views.
