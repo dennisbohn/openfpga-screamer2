@@ -2,7 +2,8 @@
 # Frame statistics from the firmware's own C models in Docker (docs/screamer2/performance.md).
 #   tools/s2/framestats.sh build
 #       copies firmware/ to build/stats/src_s2, puts the counters of perf_patch.py into the copies and builds
-#       framestats_s2 (tools/s2/framestats.c); NOLOD=1: every block at level 0 (-DTRACK_NO_LOD)
+#       framestats_s2 (tools/s2/framestats.c); NOLOD=1: every block at level 0 (-DTRACK_NO_LOD); NOVIS=1: without
+#       the cells' visibility lists, everything in reach looked at (-DTRACK_NO_VIS)
 #   tools/s2/framestats.sh sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]   (ROAD_S=185,370: the viewer's frames at those places instead)
 #       the frames along the road, see framestats.c
 # The firmware is never changed; the counters live in the copies. Game data only under build/.
@@ -40,7 +41,7 @@ open(p, "w").write(t)
 PY
     python -I "$root/tools/s2/perf_patch.py" "$src"
     docker_sh -v "$mount:/b" --entrypoint sh $img -c "
-        cd /b/stats/src_s2 && gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} -o ../framestats_s2 framestats.c perf.c $LIST -lm"
+        cd /b/stats/src_s2 && gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../framestats_s2 framestats.c perf.c $LIST -lm"
     ;;
 sweep)
     v=$1; image=$2; label=$3; out=$4; step=$5; cars=$6; grid=$7

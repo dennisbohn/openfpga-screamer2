@@ -1,9 +1,10 @@
 /*
  * The track (track.h). The file (Screamer 2: tools/s2/make_track_s2.py, "SCRK" version 7; Screamer 1's
  * was tools/make_track.py, version 6): the car materials, MAPn.MLB with the cars' libraries after it
- * and MAPn.UNR unchanged, the palette, the placements, the camera path (empty), the ground index, the
- * markers (empty), the cars, the car models, road points and walls, the start, the race screen
- * (empty), the backdrop and its ground colour, the opponents (empty); the far plane in the header.
+ * and MAPn.UNR unchanged, the palette, the placements (then the cells' visibility table, VIS_MAGIC), the
+ * camera path (empty), the ground index, the markers (empty), the cars, the car models, road points and
+ * walls, the start, the race screen (empty), the backdrop and its ground colour, the opponents (empty);
+ * the far plane in the header.
  *
  * The game's structures (openscreamer docs/NOTES.md, "How the track is built"):
  *   UNR    int32 blob size, int32 count, count offsets into the blob; an object's block at
@@ -144,10 +145,20 @@ static float radius[MAX_OBJ];           /* of each mesh around its origin */
    values), its mesh's reach (-1: no mesh) and class key */
 static struct cpiece { float x, y, h, rad; } cpieces[MAX_PIECES];
 static int16_t cpiece_key[MAX_PIECES];
-/* the placements in groups of 16 as they lie in the file (cell by cell, so close together),
-   each group's box round their places: a group out of reach is passed over at once */
+/* The placements in cells, as they lie in the file (a cell's placements together, the cells row by row), each
+   cell's box round their places: a cell out of reach is passed over at once. The cells and the lists of cells
+   that may be seen from each one come from the visibility table after the placements (tb_mmp.h,
+   tb_mmp_vis(): the original's cells and their run 4); an image without it gets groups of 16 placements as
+   cells and no lists (everything in reach is looked at) */
+#define VIS_MAGIC   0x31534956u     /* "VIS1" */
+#define MAX_CELLS   1024            /* 251 to 843 on Screamer 2's seven tracks */
 #define GROUP       16
-static struct { float x0, y0, x1, y1; } groups[MAX_PIECES / GROUP + 1];
+struct vcell { uint16_t key, first, count, list, nlist; };      /* the table's cell: key = row << 8 | column */
+static const struct vcell *vcells;
+static const uint16_t *vlist;
+static int nvcells;
+static struct { float x0, y0, x1, y1; uint16_t first, count; } cells[MAX_CELLS];
+static int ncells;
 
 int track_mode;
 void (*track_hw_piece)(const struct gu_piece *p);
@@ -418,16 +429,33 @@ int track_init(void)
         class_key[k] = (int16_t)track_class_key(obj);
     }
     for(int i = 0; i < npieces; i++) {
-        float x = (float)pieces[i].x, y = (float)pieces[i].y;
-        int g = i / GROUP;
-        if(i % GROUP == 0) { groups[g].x0 = groups[g].x1 = x; groups[g].y0 = groups[g].y1 = y; }
-        if(x < groups[g].x0) groups[g].x0 = x;
-        if(x > groups[g].x1) groups[g].x1 = x;
-        if(y < groups[g].y0) groups[g].y0 = y;
-        if(y > groups[g].y1) groups[g].y1 = y;
         int k = pieces[i].obj, ok = k >= 0 && k < unr_count;
-        cpieces[i] = (struct cpiece){ x, y, (float)pieces[i].h, ok ? radius[k] : -1.0f };
+        cpieces[i] = (struct cpiece){ (float)pieces[i].x, (float)pieces[i].y, (float)pieces[i].h, ok ? radius[k] : -1.0f };
         cpiece_key[i] = ok ? class_key[k] : 0;
+    }
+    /* the cells: the table's, if the image has one and it fits, else groups of 16 placements */
+    const uint32_t *vh = (const uint32_t *)(pieces + npieces);
+    nvcells = vh[0] == VIS_MAGIC && vh[1] > 0 && vh[1] <= MAX_CELLS ? (int)vh[1] : 0;
+#ifdef TRACK_NO_VIS                             /* the PC tools' NOVIS=1: as before the lists (everything in reach is looked at) */
+    nvcells = 0;
+#endif
+    vcells = (const struct vcell *)(vh + 3);
+    vlist = (const uint16_t *)(vcells + nvcells);
+    ncells = nvcells ? nvcells : (npieces + GROUP - 1) / GROUP;
+    for(int g = 0; g < ncells; g++) {
+        int first = nvcells ? vcells[g].first : g * GROUP;
+        int n = nvcells ? vcells[g].count : npieces - first < GROUP ? npieces - first : GROUP;
+        if(first + n > npieces) return 0;
+        cells[g].first = (uint16_t)first;
+        cells[g].count = (uint16_t)n;
+        cells[g].x0 = cells[g].x1 = n ? cpieces[first].x : 0.0f;
+        cells[g].y0 = cells[g].y1 = n ? cpieces[first].y : 0.0f;
+        for(int i = first + 1; i < first + n; i++) {
+            if(cpieces[i].x < cells[g].x0) cells[g].x0 = cpieces[i].x;
+            if(cpieces[i].x > cells[g].x1) cells[g].x1 = cpieces[i].x;
+            if(cpieces[i].y < cells[g].y0) cells[g].y0 = cpieces[i].y;
+            if(cpieces[i].y > cells[g].y1) cells[g].y1 = cpieces[i].y;
+        }
     }
     return npieces;
 }
@@ -783,6 +811,20 @@ void track_view(const struct rs_clip *clip, struct su_view *v)
     v->far8 = (int32_t)((far_z + EYE_BACK) * 256.0f);  /* depths from the eye */
 }
 
+/* The cell the camera is in (the table's number of it), -1 if the map has none there or the image no table:
+   the original's cell of a position is ((x + 2^20) >> 13, (y + 2^20) >> 13) of its whole-number place */
+static int camera_cell(float x, float y)
+{
+    if(!nvcells || x < -1048576.0f || x >= 1048576.0f || y < -1048576.0f || y >= 1048576.0f) return -1;
+    uint32_t key = (uint32_t)(((int32_t)y + 0x100000) >> 13) << 8 | (uint32_t)(((int32_t)x + 0x100000) >> 13);
+    int lo = 0, hi = nvcells;                   /* the first cell whose key is not below ours */
+    while(lo < hi) {
+        int mid = (lo + hi) / 2;
+        if(vcells[mid].key < key) lo = mid + 1; else hi = mid;
+    }
+    return lo < nvcells && vcells[lo].key == key ? lo : -1;
+}
+
 /* the list drawn: key << 16 | i, i (the low half) a piece, or npieces + an object */
 #define MAX_OBJS    64
 static int32_t vis[MAX_PIECES + MAX_OBJS];
@@ -960,35 +1002,45 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
     float nearest = 1e30f;
     /* the game's key (0x8a7b0): -(sqrt(dist^2 >> 2), rounded, >> 2) */
 #define KEY(d2) (-((int32_t)lrintf(sqrtf((d2) * 0.25f)) >> 2))
-    for(int i = 0; i < npieces; i++) {
-        if(i % GROUP == 0) {                        /* the whole group out of reach (in the plane) */
-            int g = i / GROUP;
-            int wx = cx < groups[g].x0, ex = cx > groups[g].x1, sy = cy < groups[g].y0, ny = cy > groups[g].y1;
+    /* The cells to look at, in the order of the file (so the pieces come in the order of their numbers): the
+       original's walk over the map (STARTL.EXE 0x76d80, docs/screamer2/draw_distance.md) takes only the cells
+       that the list of the cell the camera is in names, if that cell has a list (most of the road's cells
+       do), else every cell in reach */
+    const uint16_t *list = 0;
+    int ncl = ncells, cc = camera_cell(cx, cy);
+    if(cc >= 0 && vcells[cc].nlist) {
+        list = vlist + vcells[cc].list;
+        ncl = vcells[cc].nlist;
+    }
+    for(int q = 0; q < ncl; q++) {
+        const int g = list ? list[q] : q;
+        if(!cells[g].count) continue;
+        {                                           /* the whole cell out of reach (in the plane) */
+            int wx = cx < cells[g].x0, ex = cx > cells[g].x1, sy = cy < cells[g].y0, ny = cy > cells[g].y1;
             INT_NOW4(wx, ex, sy, ny);
-            float gx = wx ? groups[g].x0 - cx : ex ? cx - groups[g].x1 : 0.0f;
-            float gy = sy ? groups[g].y0 - cy : ny ? cy - groups[g].y1 : 0.0f;
-            if(gx * gx + gy * gy >= REACH2) {
-                i += GROUP - 1;
-                continue;
-            }
+            float gx = wx ? cells[g].x0 - cx : ex ? cx - cells[g].x1 : 0.0f;
+            float gy = sy ? cells[g].y0 - cy : ny ? cy - cells[g].y1 : 0.0f;
+            if(gx * gx + gy * gy >= REACH2) continue;
         }
-        const struct cpiece *pc = &cpieces[i];
-        int32_t no_mesh;                                /* (its reach -1, as a whole number) */
-        memcpy(&no_mesh, &pc->rad, sizeof no_mesh);
-        if(no_mesh < 0) continue;
-        float rad = pc->rad, dx = pc->x - cx, dy = pc->y - cy, dh = pc->h - ch;
-        float d2 = dx * dx + dy * dy + dh * dh;
-        float vf = dx * fx + dy * fy + dh * fh + EYE_BACK, vr = dx * rx + dy * ry + dh * rh;
-        float vu = dx * ux + dy * uy + dh * uh;
-        /* the nearest so far, and out of reach or out of view: all the comparisons asked for at
-           once, then one wait for their answers */
-        int nearer = d2 < nearest, o0 = d2 >= REACH2, o1 = vf + rad < NEAR, o2 = vf - rad > far_eye;
-        int o3 = vr - rad > half_w * (vf + rad), o4 = vr + rad < -half_w * (vf + rad);
-        int o5 = vu - rad > up * (vf + rad), o6 = vu + rad < -down * (vf + rad);
-        INT_NOW8(nearer, o0, o1, o2, o3, o4, o5, o6);
-        if(nearer) nearest = d2;
-        if(o0 | o1 | o2 | o3 | o4 | o5 | o6) continue;
-        vis[nv++] = (KEY(d2) + cpiece_key[i]) * 65536 + i;
+        for(int i = cells[g].first, end = i + cells[g].count; i < end; i++) {
+            const struct cpiece *pc = &cpieces[i];
+            int32_t no_mesh;                                /* (its reach -1, as a whole number) */
+            memcpy(&no_mesh, &pc->rad, sizeof no_mesh);
+            if(no_mesh < 0) continue;
+            float rad = pc->rad, dx = pc->x - cx, dy = pc->y - cy, dh = pc->h - ch;
+            float d2 = dx * dx + dy * dy + dh * dh;
+            float vf = dx * fx + dy * fy + dh * fh + EYE_BACK, vr = dx * rx + dy * ry + dh * rh;
+            float vu = dx * ux + dy * uy + dh * uh;
+            /* the nearest so far, and out of reach or out of view: all the comparisons asked for at
+               once, then one wait for their answers */
+            int nearer = d2 < nearest, o0 = d2 >= REACH2, o1 = vf + rad < NEAR, o2 = vf - rad > far_eye;
+            int o3 = vr - rad > half_w * (vf + rad), o4 = vr + rad < -half_w * (vf + rad);
+            int o5 = vu - rad > up * (vf + rad), o6 = vu + rad < -down * (vf + rad);
+            INT_NOW8(nearer, o0, o1, o2, o3, o4, o5, o6);
+            if(nearer) nearest = d2;
+            if(o0 | o1 | o2 | o3 | o4 | o5 | o6) continue;
+            vis[nv++] = (KEY(d2) + cpiece_key[i]) * 65536 + i;
+        }
     }
     for(int k = 0; k < nobj && k < MAX_OBJS; k++) {
         const struct track_object *ob = &objs[k];

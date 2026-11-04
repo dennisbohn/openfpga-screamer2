@@ -3,6 +3,7 @@
 # Docker (as tools/render.sh does for Screamer 1), tools/s2/render_s2.c: the viewer's scene (firmware/road.c).
 # Usage: tools/s2/render_s2.sh <image> <out prefix> <camera>...      (cameras: see render_s2.c)
 #   NOLOD=1: every block at level 0 (-DTRACK_NO_LOD); default: the original's level of detail, as the firmware
+#   NOVIS=1: without the cells' visibility lists (-DTRACK_NO_VIS): everything in reach is looked at, as before them
 # Writes <out prefix><k>.rgb (320 x 200 x 3) per camera; python -I tools/rgb2png.py makes a PNG of one.
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -32,6 +33,6 @@ outdir=$(dirname "$2")
 shift 2
 LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c"
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" --entrypoint sh verilator/verilator:v5.050 -c "
-    cd /b/s2host/src && gcc -O2 -w ${NOLOD:+-DTRACK_NO_LOD} -o ../render_s2 render_s2.c $LIST -lm &&
+    cd /b/s2host/src && gcc -O2 -w ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../render_s2 render_s2.c $LIST -lm &&
     cd /b/s2host && ./render_s2 $img $prefix $*"
 mv "$root/build/s2host/$prefix"*.rgb "$outdir/"

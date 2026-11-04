@@ -22,14 +22,15 @@ def edit(path, pairs):
 def main():
     d = sys.argv[1]
     track = [
-        ("            int g = i / GROUP;\n", "            int g = i / GROUP;\n            perf_c.groups++;\n"),
-        ("                i += GROUP - 1;\n                continue;\n",
-         "                i += GROUP - 1;\n                perf_c.grp_skipped++;\n                continue;\n"),
-        ("        const struct cpiece *pc = &cpieces[i];\n        int32_t no_mesh;",
-         "        const struct cpiece *pc = &cpieces[i];\n        perf_c.tested++;\n        int32_t no_mesh;"),
-        ("        if(no_mesh < 0) continue;\n", "        if(no_mesh < 0) continue;\n        perf_c.tested_mesh++;\n"),
-        ("        vis[nv++] = (KEY(d2) + cpiece_key[i]) * 65536 + i;\n",
-         "        vis[nv++] = (KEY(d2) + cpiece_key[i]) * 65536 + i;\n        perf_c.visible++;\n"),
+        # groups = the cells looked at (the camera cell's visibility list, or all), grp_skipped the ones out of reach
+        ("        const int g = list ? list[q] : q;\n", "        const int g = list ? list[q] : q;\n        perf_c.groups++;\n"),
+        ("            if(gx * gx + gy * gy >= REACH2) continue;\n",
+         "            if(gx * gx + gy * gy >= REACH2) { perf_c.grp_skipped++; continue; }\n"),
+        ("            const struct cpiece *pc = &cpieces[i];\n            int32_t no_mesh;",
+         "            const struct cpiece *pc = &cpieces[i];\n            perf_c.tested++;\n            int32_t no_mesh;"),
+        ("            if(no_mesh < 0) continue;\n", "            if(no_mesh < 0) continue;\n            perf_c.tested_mesh++;\n"),
+        ("            vis[nv++] = (KEY(d2) + cpiece_key[i]) * 65536 + i;\n",
+         "            vis[nv++] = (KEY(d2) + cpiece_key[i]) * 65536 + i;\n            perf_c.visible++;\n"),
         ("        st->objects++;\n", "        st->objects++;\n        perf_c.obj_visible++;\n"),
         ("            if(ob->make) ob->make(ob->id, cam, ob);\n",
          "            if(ob->make) ob->make(ob->id, cam, ob);\n            perf_c.obj_blocks += (uint32_t)ob->n;\n"),
