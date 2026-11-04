@@ -1,0 +1,74 @@
+/*
+ * The player's car of Screamer 2 on the track: the game's own car model (docs/screamer2/driving.md),
+ * ported from OpenScreamer's hand-written routines (its docs/NOTES2.md) to single-precision C. One
+ * step is 20 ms (50 Hz); the track is the image set up with track_open() / track_init() (track.h).
+ *
+ * THIS HEADER IS THE CONTRACT between the physics (s2car.c) and the viewer's driving mode: names and
+ * meaning stay as they are. Units are the game's: lengths in the track's units, angles in radians,
+ * speeds in km/h as the game counts them (speed x 3600 / 400000 of units a second; mph = km/h x 0.6214).
+ *
+ * Angles of the car (the game's record +0x4e4 .. +0x4ec):
+ *   yaw    the heading: forward = (sin yaw, -cos yaw) in the track's (x, y), as track_cam and car_look
+ *   pitch  + nose up
+ *   roll   + the car's right-hand side (+X of the game's x) up
+ * body_pitch, body_roll: the body's own lean on its springs (small, record +0xc18 / +0xc20), same senses.
+ * The wheels are numbered as the game has them: 0 front +X, 1 rear +X, 2 front -X, 3 rear -X.
+ */
+#pragma once
+#include <stdint.h>
+
+struct track_cam;                       /* track.h */
+struct car_look;                        /* car.h */
+struct track_image;                     /* (opaque, unused: the image of track_open() / track_init() is the one used) */
+
+struct s2car_input {
+    float throttle;                     /* 0 .. 1 */
+    float brake;                        /* 0 .. 1 */
+    float steer;                        /* -1 (left) .. 1 (right); the game's keys give +-1 and ease */
+    int gear_up, gear_down;             /* edge-triggered (1 for the one step on which the button went down); used only
+                                           with s2car_state.manual (the gearbox of the player's car is automatic by default) */
+    int handbrake;                      /* 0 / 1 */
+};
+
+struct s2car_state {
+    /* ---- output: read after s2car_step() ---- */
+    float pos[3];                       /* x, y, height (up), as track.c / car_look use them */
+    float yaw, pitch, roll;             /* see above */
+    float body_pitch, body_roll;
+    float rot[9];                       /* the orientation as rows of the world axes (x, y, up) in the car's
+                                           (right, up, forward) columns: world = o + rot . local (track_block.m) */
+    float vel[3];                       /* world units a second (x, y, up) */
+    float speed_kmh, speed_mph;         /* speed along the ground */
+    float rpm;                          /* the engine's revs in the game's units (most = max_rpm of CAR_PARAMS) */
+    int gear;                           /* 0 neutral, 1 .. */
+    float wheel_steer;                  /* the front wheels' angle on the car, radians (+ towards +X, to the right) */
+    float wheel_spin[4];                /* cumulative turn of each wheel in radians (rolls forward when growing) */
+    float susp[4];                      /* each wheel's spring compression in units (0 at rest) */
+    int on_ground;                      /* wheels on the ground, 0 .. 4 */
+    int skid_flags;                     /* bit w set: wheel w skids (smoke); bit 4: the tyres squeal */
+    int hit_wall;                       /* 1 on a step on which the car touched a wall */
+    int off_track;                      /* 1 if the car's middle has no drivable ground under it (for a reset rule) */
+    float cam[6];                       /* the game's chase camera (view 3): x, y, height, yaw, pitch, roll, as track_cam */
+    /* ---- input to the physics from the caller ---- */
+    int manual;                         /* 1: gears by gear_up / gear_down (the game's MANUAL option); default 0 */
+    /* ---- private ---- */
+    uint32_t rec[0xcc0 / 4];            /* the game's car record, word for word where the port keeps its layout */
+    float cam_yaw, cam_pitch;           /* the chase camera's eased angles */
+    int cam_started;
+};
+
+/* Car number 0 .. 4 of team 0 .. 3 (the fifth is the team's bonus car) on track 1 .. 7: CAR_PARAMS
+   read (s2car_params()), the car put on the start line, heading along the road, wheels on the ground,
+   the race clock running (the 3 s of the grid hold are the caller's business). img may be NULL.
+   1 if it worked, 0 if the track has no start or the params are missing. */
+int s2car_init(struct s2car_state *s, int team, int car, int track, const struct track_image *img);
+
+/* ONE 20 ms step of the car; fills the outputs. */
+void s2car_step(struct s2car_state *s, const struct s2car_input *in);
+
+/* The car as car.h draws it (struct car_look): place, heading, tilt, body lean, the wheels' turn and
+   steering, the texture phase of braking. */
+void s2car_look(const struct s2car_state *s, struct car_look *lk);
+
+/* The chase camera as a track_cam (the same as cam[]) */
+void s2car_camera(const struct s2car_state *s, struct track_cam *cam);

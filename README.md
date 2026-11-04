@@ -25,4 +25,9 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   path with the original's level of detail at DETAIL HIGH (placed meshes 6,000 / 9,000 units, cars 2,000 /
   6,000; far plane from TRACK_DATA). A timing overlay (B) and `debug.txt` give the frame times to hold against the
   forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
-  gaps: white car windows, no shadows, smoke, props, fade, night, mirror, menus, physics, sound, music.
+  gaps: white car windows, no shadows, smoke, props, fade, night, mirror, menus, sound, music.
+- **Driving mode:** Start in the viewer puts the player's car on the start line and lets you drive it with
+  Screamer 1's buttons (B gas, Y brake, d-pad steering, L / R gears), from the physics' chase camera, with speed
+  and gear on the screen. The car physics sits behind `firmware/s2car.h`; until the real physics
+  (`firmware/s2car.c`) is merged a kinematic stand-in (`firmware/s2car_stub.c`) drives the car: it is not
+  the game's car. Docs: docs/development.md, "Driving mode".

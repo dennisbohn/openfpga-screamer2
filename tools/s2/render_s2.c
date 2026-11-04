@@ -10,6 +10,9 @@
  *           r<i>            road point i of the map (MMP array 2, in the map's order), the camera over the
  *                           drivable surface there, looking along the road's heading
  *           c<x>,<y>,<h>,<yaw>,<pitch>   free camera (yaw 0 = towards -y, radians)
+ *           d<k>            the driving mode (firmware/s2car.h: the physics, or the stand-in) after k steps of 20 ms from the
+ *                           start on the buttons of the simulation (viewer.c sim_keys: gas to step 130, left from 25 to 100,
+ *                           right to 120, then the brake), the physics' chase camera over its car
  * Writes <prefix><k>.rgb (320 x 200 x 3) per camera and prints what the renderer reports.
  */
 #define _GNU_SOURCE
@@ -22,6 +25,7 @@
 #include "track.h"
 #include "blit.h"
 #include "road.h"
+#include "s2car.h"
 
 #define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as the viewer */
 
@@ -75,6 +79,18 @@ int main(int argc, char **argv)
             if (*end == 'f') { s *= road_length(); end++; }
             if (*end == ',') ncars = atoi(end + 1);
             nobj = road_scene((float)s, ncars, &cam, objs);
+        } else if (argv[a][0] == 'd') {
+            static struct s2car_state car;
+            int steps = atoi(argv[a] + 1);
+            s2car_init(&car, 0, 0, 1, 0);
+            for (int k = 0; k < steps; k++) {
+                struct s2car_input in = { .throttle = k < 130, .brake = k >= 130, .steer = k >= 100 && k < 120 ? 1.0f : k >= 25 && k < 100 ? -1.0f : 0.0f };
+                s2car_step(&car, &in);
+                if (k % 25 == 0 || k == steps - 1)
+                    printf("step %d: %.1f mph gear %d yaw %.2f at %.0f %.0f %.0f%s\n", k + 1, car.speed_mph, car.gear, car.yaw,
+                           car.pos[0], car.pos[1], car.pos[2], car.off_track ? " (off the track)" : "");
+            }
+            nobj = road_drive_scene(&car, &cam, objs);
         } else if (argv[a][0] == 'r') {
             int nd;
             const struct track_dir *d = track_dirs(&nd);

@@ -457,7 +457,7 @@ static int check_run(Sim &s, const std::string &prefix, int frames, bool done, c
         if (text.find("windows of 2048 bytes") == std::string::npos) { printf("FAIL: the log does not name the simulation windows\n"); fails++; }
         // the race (the game's files) checks its whole picture, without them the program says
         // which files it misses
-        const char *check = s.viewer ? "viewer: track " : s.race ? "track check: ok" : "game files: ";
+        const char *check = s.viewer ? " ms: read " : s.race ? "track check: ok" : "game files: ";
         if (!negative && text.find(check) == std::string::npos) { printf("FAIL: no \"%s\" in the log\n", check); fails++; }
     }
     return fails;

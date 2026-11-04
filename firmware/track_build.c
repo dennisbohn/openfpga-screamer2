@@ -21,6 +21,14 @@ int track_build_difficulty = 1;         /* NORMAL, as make_track.py */
 #define SECTIONS    16
 #define MODELS      7           /* AUTO00.3DX .. AUTO06.3DX */
 
+/* The header's block CRC-32s are for the native check (byte-identical with tools/make_track*.py); on the Pocket
+   nothing reads them and they take over a second, so there the words stay 0 */
+#ifdef __riscv
+#define BLOCK_CRC(p, e) 0u
+#else
+#define BLOCK_CRC(p, e) crc32(p, e)
+#endif
+
 #ifdef __riscv
 static inline uint32_t now(void)
 {
@@ -223,7 +231,7 @@ uint32_t track_build(const struct track_files *f, int n, uint8_t *out, uint32_t 
     wr32(out + 0x8C, blocks);
     for(uint32_t k = 0; k < blocks; k++) {
         uint32_t o = FIRST + k * BLOCK, e = size - o < BLOCK ? size : o + BLOCK;
-        wr32(out + 0x90 + 4 * k, crc32(out + o, out + e));
+        wr32(out + 0x90 + 4 * k, BLOCK_CRC(out + o, out + e));
     }
     info->cycles = now() - t0;
     return size;
@@ -530,7 +538,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     wr32(out + 0x8C, blocks);
     for(uint32_t k = 0; k < blocks; k++) {
         uint32_t s = FIRST + k * BLOCK, z = size - s < BLOCK ? size : s + BLOCK;
-        wr32(out + 0x90 + 4 * k, crc32(out + s, out + z));
+        wr32(out + 0x90 + 4 * k, BLOCK_CRC(out + s, out + z));
     }
     info->cycles = now() - t0;
     return size;
