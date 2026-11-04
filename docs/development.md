@@ -39,15 +39,15 @@ ZIP with `firmware/zip.c` (the central directory only: Windows writes sizes 0 in
 names are matched on the end of the path, ignoring case, so a folder in front does not matter).
 `tools/check_zip.sh` tests the reader natively against the real ZIP and broken ones.
 
-The core reads the container files inside the ZIP unchanged. The firmware reads three containers whole
-with `zip_read` (`GFX/MAPnH01.DAT`, `GFX/CARS101.DAT`, `DATA/MAPn.DAT`), unpacks their entries with
+The core reads the container files inside the ZIP unchanged. The firmware reads four containers whole
+with `zip_read` (`GFX/MAPnH01.DAT`, `GFX/CARS101.DAT`, `DATA/MAPn.DAT`, `GFX/ENVPn01.DAT`), unpacks their entries with
 `firmware/dat.c` and builds each track's image at load time (`track_build_s2()` in
 `firmware/track_build.c`): the placements, the palette, the drivable parts per grid cell, the road points
 and walls, the background and TRACK_DATA's far plane, and the cars AUTO1..5 of team 1 with their material
 libraries merged after the track's (the face's material is a signed 16-bit offset from the MLB's start, so the
 cars' material records are collected in a section in front of the MLB and the cars' faces point there; the
-texture records and pixels stay in the cars' own `.MLB` files, appended after the track's). The image is
-3.5 to 5.4 MB of the 7 MB window at `0x1210_0000`. There is no camera path, no markers, no race screen and
+texture records and pixels stay in the cars' own `.MLB` files, appended after the track's), and the picture of
+the cars' windows (below). The image is 3.7 to 5.5 MB of the 7 MB window at `0x1210_0000`. There is no camera path, no markers, no race screen and
 no opponents yet. Nothing is converted on the PC.
 
 `tools/s2/make_track_s2.py <game folder> <n> <out.bin>` builds the same image on the PC. It only serves
@@ -134,10 +134,25 @@ the units' busy clocks at each stage, 1 KB) once, 5 s into the first visit. A vi
 has no line: the first line is its last state. The load no longer checks the image's CRC-32s (they cost 1.4 s; the
 native check of the build has them, and the firmware's builder leaves them 0).
 
-Known gaps (accepted): the cars' windows are white (no environment map: routine 160 reads `ENV.MLB`),
-no shadows, smoke, props or animated scenery, no fade by depth, no night or fog, no mirror, the S1
+Known gaps (accepted): the cars' windows show the original's environment picture (routine 160 reads the
+first material of `ENV.MLB`, `GFX/ENVPn01.DAT`; no hardware change, see "The windows" below) but the picture
+neither slides with the car's travel nor changes by the road's kind (the tunnels' ceiling frames of tracks 3, 4, 6, 7:
+the viewer's objects carry no reflection accumulators and phase 0), the palette of tracks 2 and 5 is the track's,
+not `ENV.COL`'s, no shadows, smoke, props or animated scenery, no fade by depth, no night or fog, no mirror, the S1
 see-through table (64 rows) where Screamer 2 has 112, the sky and ground colour of `TRACK_DATA` only
 where the backdrop picture ends.
+
+The windows: the game draws a car's glass (routine 160, a material of 8 x 8 with a placeholder picture in the car's
+`.MLB`) with the picture of the first material of the track's `ENV.MLB` (128 x 128, 1 to 3 frames; the frame of an
+object is n x phase >> 16) and masks the texel's address with `0x7f7f` (`STARTL.EXE` 0xcd771), where the hardware
+masks u and v with 0xff and reads a window's u, v as whole texels (0xcd118 shifts the reflection's value left by 3: one
+texel each, as `firmware/geom.c`). So the builder stores each frame tiled 2 x 2 as 256 x 256 (64 KB) after the cars'
+libraries, inside the MLB section, with a texture record of its own, and the records of the cars' routine-160
+materials point to it (`track_build_s2()`, `make_track_s2.py`; image version stays 7: no new section). That costs
+64 KB a frame in the image (tracks 1, 2, 5: one frame, 64.3 KB; tracks 4, 6, 7: two, 128.3 KB; track 3: three,
+192.3 KB; the largest image, track 6, is 5.5 MB), and 6 to 20 KB read from the ZIP at the load (`GFX/ENVPn01.DAT`, at
+`0x12D4_0000`). `tools/s2/check_env_s2.py` (run by `check_track_build_s2.sh`) compares every texel the reflection can
+address (u, v in -512 to 511) with the original's wrap-128 read.
 
 What to expect: `docs/screamer2/performance.md`, section 6, forecasts for the four-car case with the level of
 detail, mean / worst ms of the game's frame including its physics (about 1.7 ms) and the race screen's
@@ -249,7 +264,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
-| `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c` | the Screamer 2 track image on the PC (the reference) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks, natively under the sanitizers |
+| `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py` | the Screamer 2 track image on the PC (the reference) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks, natively under the sanitizers; the windows' reflection picture in the image against the original's |
 | `tools/s2/check_params.sh`, `tools/s2/check_params.py`, `tools/s2/check_params.c` | the car's numbers: `firmware/s2params.c` (CAR_PARAMS of `DATA/GAME.DAT`, TRACK_DATA with the road kinds of `DATA/MAPn.DAT`) natively against an independent reading in Python, every field of 20 cars and 7 tracks |
 | `tools/s2/check_car.sh`, `tools/s2/check_car.c`, `tools/s2/car_scenarios/` | the car physics `firmware/s2car.c` natively in float32 on the track images against the reference traces of OpenScreamer's routines (the folder `ref/` next to the repository, or `$REF_DIR`; scenarios in its `scn/`, traces in `traces*/`), the place cut as the game does and kept as a float; per quantity the largest and the mean difference; also the car alone from each track's grid place and the trigonometry and ground looks a step costs. `car_scenarios/` holds the scenarios heading towards the origin (`a_origin` ..., traces made with `tools/s2/ref_trace/ref_run.sh` into `ref/traces_benign/`) |
 | `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene and the driving mode on the PC from the firmware's own code (`NOLOD=1`: no level of detail) |

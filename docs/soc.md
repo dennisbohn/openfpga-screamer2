@@ -66,7 +66,7 @@ controller, caches, clock phase): `docs/memory.md`. Overall architecture:
 SDRAM layout (set by the firmware and the data slot addresses in `core/data.json`). The Screamer 2
 program uses, for the files screen, the ZIP's directory scratch at `0x12D6_0000` and 8 MB at `0x1100_0000`
 for the read test, and, for the viewer (`firmware/viewer.c`), the track image at `0x1210_0000` (7 MB window,
-3.5 to 5.4 MB used) with the three containers of the track read whole from the ZIP above it (rows below) and the
+3.7 to 5.5 MB used) with the four containers of the track read whole from the ZIP above it (rows below) and the
 build's scratch; the rows that name Screamer 1's slots (3 to 20, 25) describe the Screamer 1
 game code still in the tree, which is replaced step by step and not reached now. Data slot 3 is
 `SCREAMER2.zip` (all the game's `DATA`, `GFX` and `ANIMS` files, read with `firmware/zip.c`), 21 and 22
@@ -84,7 +84,7 @@ the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
 | `0x11E0_0000` | music ring (256 KB, from the CD image, slot 22) |
 | `0x11F4_0000` | `MUSIC.DAT` (slot 25, up to 256 KB; 200 KB: the FM music's songs and instrument banks, read when the FM music is first needed) |
 | `0x1210_0000` | track image (built by the firmware, `track_build_s2()`: car materials, MLB with the cars' libraries, meshes, ...; up to 7 MB, 28 blocks of 256 KB) |
-| `0x1280_0000` | the viewer's containers, read whole from the ZIP: `GFX/MAPnH01.DAT` `0x1280_0000` (up to 4 MB, 2.2 to 2.6 MB used), `GFX/CARS101.DAT` `0x12C0_0000` (up to 1 MB, 0.76 MB), `DATA/MAPn.DAT` `0x12D0_0000` (up to 256 KB, 5 to 20 KB) |
+| `0x1280_0000` | the viewer's containers, read whole from the ZIP: `GFX/MAPnH01.DAT` `0x1280_0000` (up to 4 MB, 2.2 to 2.6 MB used), `GFX/CARS101.DAT` `0x12C0_0000` (up to 1 MB, 0.76 MB), `DATA/MAPn.DAT` `0x12D0_0000` (up to 256 KB, 5 to 20 KB), `GFX/ENVPn01.DAT` `0x12D4_0000` (up to 128 KB, 6 to 20 KB: the windows' reflection picture; Screamer 1's `main.c` slot table, not reached, put `GEN.DAT` and `LOCAL.DAT` there) |
 | `0x12D6_0000` | working memory of the track build (up to the program: 2.75 MB, about 1.7 MB used); the directory scratch of `zip_open` (72 KB) |
 | `0x1300_0000` | the program (slot 2, at most 1 MB) |
 | `0x13F0_0000` | saved game `CHOICE.DAT` (slot 23, nonvolatile) |

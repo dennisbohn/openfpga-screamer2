@@ -439,6 +439,11 @@ body vertices 95 are equal, the rest differ by one; in the rear window 65 of 125
 (84 % equal to a neighbour); with the stored u, v it was 9. The cost in the simulation:
 geometry unit +36,000 clocks, start frame 1,338,092 clocks = 18.0 ms.
 
+In Screamer 2 the picture is not the glass material's own (a placeholder of 8 x 8) but the first material of the
+track's `ENV.MLB`, 128 x 128, which the game's filler wraps at 128 (`& 0x7f7f`). The unit and the rasterizer stay as
+they are: the image builder stores each frame of that picture tiled 2 x 2 as 256 x 256 and points the windows'
+materials at it (docs/development.md, "The windows").
+
 ## Sound
 
 **Mixer in hardware** (after OpenScreamer's notes section 17 and the EXE): the game's driver runs
