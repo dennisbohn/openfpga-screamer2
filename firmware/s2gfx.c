@@ -39,6 +39,13 @@ static struct blit_image img[IMAGES];           /* MENUL.SPR's sprites, then the
 static struct blit_font font[FONTS];
 static uint32_t nsprites, nfonts;
 
+static int ready;
+
+int s2gfx_ready(void)
+{
+    return ready;
+}
+
 static uint32_t rd32(const uint8_t *p)
 {
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
@@ -183,6 +190,7 @@ int s2gfx_init(struct zip *z)
 {
     uint32_t t0 = rdcycle();
     zip = z;
+    ready = 0;
     graf = zip_find(z, "GFX/GRAF1.DAT");
     if (!graf) {
         dlog_str("ui: GFX/GRAF1.DAT is not in the ZIP\n");
@@ -223,7 +231,7 @@ int s2gfx_init(struct zip *z)
     dlog_str(" text lines, ");
     dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
     dlog_str(" ms\n");
-    return 1;
+    return ready = 1;
 }
 
 /* ------------------------------------------------------------------------------------------------ a frame */

@@ -33,6 +33,9 @@ enum { S2G_FONT_TITLE, S2G_FONT_MEDIUM, S2G_FONT_SMALL, S2G_FONT_SMALL2, S2G_FON
    of DATA/LOCAL.DAT. 1 if the pictures, sprites and fonts are there (the log says what is not). */
 int s2gfx_init(struct zip *z);
 
+/* 1 once s2gfx_init() has found the pictures, the sprites and the fonts (the menu pages are not shown without them) */
+int s2gfx_ready(void);
+
 /* The picture buffers (S2G_PIC_BYTES, 4-aligned, in the SDRAM) */
 uint8_t *s2gfx_pic(int k);
 

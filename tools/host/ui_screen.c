@@ -11,6 +11,9 @@
 #include "../s2page.h"
 #include "../s2load.h"
 #include "../s2pause.h"
+#include "../s2arcade.h"
+#include "../s2menu.h"
+#include "../s2save.h"
 #include "../s2snd.h"
 #include "../frame.h"
 #include "../hw.h"
@@ -31,13 +34,21 @@ static int failures;
 
 static int front;                       /* the buffer on show */
 static uint32_t calls;                  /* wait_swap_done() calls so far: the video frame counter */
-static const char *script;              /* the buttons of each call: one character a frame, ' ' or '.' none, U D L R A B S(tart) s(elect) X */
+static const char *script;              /* the buttons of each call: one character a frame, ' ' or '.' none, U D L R A B S(tart) s(elect) X, < > the shoulders */
 static uint32_t script_at;
 static const char *shot_prefix;
 static struct { uint32_t at; const char *name; } shots[16];
 static int nshots;
 static uint32_t pal_trace[128][2];       /* for the fade tests: palette entries 17 and 241 as each frame left them */
 static uint32_t swaps;
+/* frames to compare with a reference when they are on show: the page's frame of tick t is on show in call t + 1 */
+struct expect { uint32_t at; char name[96]; int shot; };
+static struct expect expects[40];
+static int nexpects, expect_hits;
+static const char *expect_ref;
+static uint8_t *slurp(const char *path, uint32_t *n);
+static void check_frame(const struct expect *e);
+static void save(const char *name);
 
 /* hw.h's registers are plain memory here: the swap request is a store to VID_SWAP */
 static void save(const char *name)
@@ -66,6 +77,8 @@ uint32_t wait_swap_done(void)
         swaps++;
         for (int i = 0; i < nshots; i++)
             if (shots[i].at == calls) save(shots[i].name);
+        for (int i = 0; i < nexpects; i++)
+            if (expects[i].at == calls) check_frame(&expects[i]);
     }
     uint32_t keys = 0;
     char c = script && script[script_at] ? script[script_at++] : '.';
@@ -79,6 +92,8 @@ uint32_t wait_swap_done(void)
     case 'S': keys = KEY_START; break;
     case 's': keys = KEY_SELECT; break;
     case 'X': keys = KEY_X; break;
+    case '<': keys = KEY_L; break;
+    case '>': keys = KEY_R; break;
     default: break;
     }
     IN_KEY = keys;
@@ -100,7 +115,7 @@ void pal_faded(const uint32_t *pal, int32_t f)         /* main.c's */
 }
 
 /* the music and the effects: what the pause asks of them */
-static int music_frames, effects_calls, clicks[16], nclicks;
+static int music_frames, effects_calls, clicks[64], nclicks;
 static int32_t effects_last, effects_min = 0x8000;
 void music_frame(void) { music_frames++; }
 void s2sound_effects(int32_t f)
@@ -111,7 +126,7 @@ void s2sound_effects(int32_t f)
 }
 void s2sound_menu(int id)
 {
-    if (nclicks < 16) clicks[nclicks++] = id;
+    if (nclicks < 64) clicks[nclicks++] = id;
 }
 
 static void begin_run(const char *keys, const char *prefix)
@@ -125,6 +140,7 @@ static void begin_run(const char *keys, const char *prefix)
     shot_prefix = prefix;
     music_frames = effects_calls = nclicks = 0;
     effects_min = 0x8000;
+    nexpects = 0;
 }
 
 static void shot_at(uint32_t call, const char *name)
@@ -420,6 +436,198 @@ static void check_runner(void)
     printf("ui: page runner: key repeat, fade in and out and the cut checked\n");
 }
 
+/* ------------------------------------------------------------------------------------------------ the arcade pages */
+
+/* the frame that is on show against the reference of tools/ui_arcade_ref.py: every pixel and the whole palette */
+static void check_frame(const struct expect *e)
+{
+    char path[512];
+    uint32_t n, np;
+    snprintf(path, sizeof path, "%s/arc_%s.idx", expect_ref, e->name);
+    uint8_t *idx = slurp(path, &n);
+    snprintf(path, sizeof path, "%s/arc_%s.pal", expect_ref, e->name);
+    uint8_t *pal = slurp(path, &np);
+    expect_hits++;
+    if (!idx || !pal || n != S2G_PIC_BYTES || np != 1024) {
+        CHECK(0, "%s: reference frame missing", e->name);
+    } else {
+        const volatile uint8_t *fb = FB(front);
+        int differ = 0, first = -1;
+        for (int i = 0; i < S2G_PIC_BYTES; i++)
+            if (fb[i] != idx[i] && differ++ == 0) first = i;
+        CHECK(!differ, "%s: %d pixels differ from the model, first at x %d y %d (%02x, expected %02x)", e->name, differ, first % 320, first / 320,
+              first >= 0 ? fb[first] : 0, first >= 0 ? idx[first] : 0);
+        int bad = 0;
+        for (int i = 0; i < 256; i++) bad += (VID_PAL[i] & 0xFFFFFF) != ((const uint32_t *)pal)[i];
+        CHECK(!bad, "%s: %d palette entries differ from the model", e->name, bad);
+        if (e->shot) save(e->name);
+    }
+    free(idx);
+    free(pal);
+}
+
+/* a page with the save's state set up as the case says */
+static void arcade_save(int unlock, int nopen, int car5)
+{
+    s2save_reset();
+    s2save_unlock_all = unlock;
+    if (!unlock) s2save_set(S2S_TRACKS_OPEN, nopen - 3);
+    for (int t = 1; t <= 4; t++) s2save_set_car5(t, car5);
+}
+
+static void check_arcade_cases(const char *ref, const char *prefix)
+{
+    char path[512];
+    snprintf(path, sizeof path, "%s/arcade.txt", ref);
+    FILE *f = fopen(path, "r");
+    CHECK(f != 0, "no arcade.txt");
+    static char line[2048];
+    int runs = 0, frames = 0;
+    while (f && fgets(line, sizeof line, f)) {
+        char name[64], script[512], click_text[128], frame_text[1024];
+        int page, track, team, car, manual, unlock, nopen, car5, res, ftrack, fteam, fcar, fmanual, calls_want;
+        if (sscanf(line, "case %63s %d %d %d %d %d %d %d %d %511s %d %d %d %d %d %d %127s %1023s", name, &page, &track, &team, &car, &manual, &unlock,
+                   &nopen, &car5, script, &res, &ftrack, &fteam, &fcar, &fmanual, &calls_want, click_text, frame_text) != 18) {
+            CHECK(0, "arcade.txt: line not understood: %s", line);
+            continue;
+        }
+        arcade_save(unlock, nopen, car5);
+        struct s2_menu_cfg c = { .track = track, .team = team, .car = car, .laps = 1, .skill = 1, .manual = manual };
+        begin_run(script, prefix);
+        expect_ref = ref;
+        expect_hits = 0;
+        if (strcmp(frame_text, "-"))
+            for (char *p = frame_text; *p && nexpects < 40;) {
+                int tick = atoi(p);
+                char *end = strchr(p, ',');
+                expects[nexpects].at = (uint32_t)tick + 1;
+                snprintf(expects[nexpects].name, sizeof expects[nexpects].name, "%s_%d", name, tick);
+                expects[nexpects].shot = strchr(p, '*') && (!end || strchr(p, '*') < end);
+                nexpects++;
+                p = end ? end + 1 : p + strlen(p);
+            }
+        int want_frames = nexpects;
+        front = 0;
+        int r = s2arcade_page(page, &c);
+        CHECK(r == res, "%s: the page ended with %d, expected %d", name, r, res);
+        CHECK(c.track == ftrack && c.team == fteam && c.car == fcar && c.manual == fmanual, "%s: ends with track %d team %d car %d gear %d, expected %d %d %d %d",
+              name, c.track, c.team, c.car, c.manual, ftrack, fteam, fcar, fmanual);
+        CHECK((int)calls == calls_want, "%s: the page took %u frames (calls), expected %d", name, calls, calls_want);
+        CHECK(expect_hits == want_frames, "%s: %d of %d frames were compared", name, expect_hits, want_frames);
+        char got[128] = "";
+        for (int i = 0; i < nclicks; i++) snprintf(got + strlen(got), sizeof got - strlen(got), "%s%d", i ? "," : "", clicks[i]);
+        CHECK(!strcmp(nclicks ? got : "-", click_text), "%s: sounds %s, expected %s", name, nclicks ? got : "-", click_text);
+        runs++;
+        frames += want_frames;
+    }
+    if (f) fclose(f);
+    s2save_reset();
+    printf("ui: arcade pages: %d scripted runs, %d frames equal to the model pixel for pixel (title, track page, car page, transmission page)\n", runs, frames);
+}
+
+/* the chain: the pages one after the other from one script. A page that ends with ENTER fades out over 25 frames (so the next page starts
+   25 frames after the press), one that ends with ESC or the car page's ENTER is a cut (the next starts the frame after) */
+static void check_arcade_chain(const char *prefix)
+{
+    static char s[400];
+    s2save_reset();
+    struct s2_menu_cfg c = { .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1, .manual = 0 }, rd;
+    /* forward: title ENTER, TRACK: R shoulder (the fourth place, FINLAND) and ENTER, CAR: DOWN (team 2) RIGHT (car 2) ENTER, TRANSMISSION: RIGHT
+       (manual) ENTER */
+    memset(s, '.', sizeof s - 1);
+    s[5] = 'B'; s[35] = '>'; s[45] = 'S'; s[75] = 'D'; s[80] = 'R'; s[85] = 'B'; s[90] = 'R'; s[95] = 'B';
+    begin_run(s, prefix);
+    int r = s2arcade_run(&c);
+    CHECK(r == S2ARC_NEXT, "the chain ends with %d (the race)", r);
+    CHECK(c.track == 5 && c.team == 2 && c.car == 2 && c.manual == 1, "the chain left track %d team %d car %d gear %d", c.track, c.team, c.car, c.manual);
+    CHECK(calls == 120, "the chain took %u frames, expected 120", calls);
+    static const int want[] = { 1, 0, 2, 4, 4, 0, 3 };
+    CHECK(nclicks == 7 && !memcmp(clicks, want, sizeof want), "the chain's sounds: %d, first %d", nclicks, nclicks ? clicks[0] : -1);
+    /* kept: the choices go into the save and come back */
+    s2menu_store(&c);
+    s2menu_load(&rd);
+    CHECK(rd.track == 5 && rd.team == 2 && rd.car == 2 && rd.manual == 1 && rd.laps == 1 && rd.skill == 1, "the chain's choices are kept: %d %d %d %d", rd.track, rd.team, rd.car, rd.manual);
+    CHECK(s2save_get(S2S_TRACK) == 5 && s2save_get(S2S_TRANS) == 1, "the save holds the track and the gearbox");
+
+    /* the way back: TRACK ENTER, CAR ESC (back to TRACK), TRACK ESC (out of the chain, to the start menu, which is the original's options room) */
+    c = (struct s2_menu_cfg){ .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1, .manual = 0 };
+    memset(s, '.', sizeof s - 1);
+    s[5] = 'B'; s[35] = 'B'; s[65] = 'A'; s[70] = 'A';
+    begin_run(s, prefix);
+    r = s2arcade_run(&c);
+    CHECK(r == S2ARC_BACK && calls == 71, "ESC out of the TRACK page: result %d after %u frames (expected -1, 71)", r, calls);
+    static const int back[] = { 1, 2 };
+    CHECK(nclicks == 2 && !memcmp(clicks, back, sizeof back), "back: %d sounds", nclicks);
+    /* the transmission page's ESC goes to the CAR page, its ESC to the TRACK page, its ESC out */
+    memset(s, '.', sizeof s - 1);
+    s[5] = 'B'; s[35] = 'B'; s[65] = 'B'; s[70] = 'A'; s[75] = 'A'; s[80] = 'A';
+    begin_run(s, prefix);
+    r = s2arcade_run(&c);
+    CHECK(r == S2ARC_BACK && calls == 81, "ESC along the chain: result %d after %u frames (expected -1, 81)", r, calls);
+    /* ESC on the title leaves at once */
+    memset(s, '.', sizeof s - 1);
+    s[3] = 'A';
+    begin_run(s, prefix);
+    CHECK(s2arcade_run(&c) == S2ARC_BACK && calls == 4 && nclicks == 0, "ESC on the title: %u frames, %d sounds", calls, nclicks);
+    /* select and start do what A and B do */
+    memset(s, '.', sizeof s - 1);
+    s[2] = 'S'; s[30] = 's';
+    begin_run(s, prefix);
+    CHECK(s2arcade_run(&c) == S2ARC_BACK && calls == 31, "Start goes on, Select goes back: %u frames", calls);
+    printf("ui: arcade chain: forward, ESC back along it, the sounds, the kept choices checked\n");
+}
+
+/* every track is reachable from every other with at most two presses of left / right / L / R, for every number of open tracks (3 to 7) */
+static void check_arcade_reach(const char *prefix)
+{
+    static char s[64];
+    int worst_all = 0;
+    for (int nopen = 3; nopen <= 7; nopen++) {
+        int worst = 0;
+        for (int from = 0; from < nopen; from++) {
+            int dist[7], prev[7], how[7], queue[7], head = 0, tail = 0;
+            for (int i = 0; i < 7; i++) dist[i] = -1;
+            dist[from] = 0;
+            queue[tail++] = from;
+            while (head < tail) {                                       /* a search over the places: LEFT, RIGHT (not round), L and R (round) */
+                int p = queue[head++];
+                for (int k = 0; k < 4; k++) {
+                    int q = k == 0 ? p - 1 : k == 1 ? p + 1 : k == 2 ? ((p - 3) % nopen + nopen) % nopen : (p + 3) % nopen;
+                    if (q < 0 || q >= nopen || dist[q] >= 0) continue;
+                    dist[q] = dist[p] + 1;
+                    prev[q] = p;
+                    how[q] = k;
+                    queue[tail++] = q;
+                }
+            }
+            for (int to = 0; to < nopen; to++) {
+                CHECK(dist[to] >= 0, "place %d cannot be reached from %d with %d open", to, from, nopen);
+                if (dist[to] > worst) worst = dist[to];
+                int moves[8], n = 0;
+                for (int q = to; q != from; q = prev[q]) moves[n++] = how[q];
+                memset(s, '.', sizeof s - 1);
+                int at = 2;
+                while (n) {
+                    static const char key[4] = { 'L', 'R', '<', '>' };
+                    s[at] = key[moves[--n]];
+                    at += 4;
+                }
+                s[at + 4] = 'B';
+                arcade_save(0, nopen, 0);
+                struct s2_menu_cfg c = { .track = s2save_track_at(from), .team = 1, .car = 1, .laps = 1, .skill = 1 };
+                begin_run(s, prefix);
+                front = 0;
+                CHECK(s2arcade_page(S2ARC_TRACK, &c) == S2ARC_NEXT && c.track == s2save_track_at(to),
+                      "%d open: from place %d the script %.12s gave track %d, expected %d", nopen, from, s, c.track, s2save_track_at(to));
+            }
+        }
+        if (worst > worst_all) worst_all = worst;
+        CHECK(worst <= (nopen == 7 ? 2 : 3), "%d open tracks: some track is %d presses away", nopen, worst);
+    }
+    s2save_reset();
+    printf("ui: track page: every track reachable from every other (3 to 7 open) by scripted presses, at most %d each\n", worst_all);
+}
+
 /* ------------------------------------------------------------------------------------------------ the menu sounds */
 
 static void check_sounds(struct zip *z, const char *ref)
@@ -466,6 +674,9 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_loading(prefix);
     check_pause(ref, prefix);
     check_runner();
+    check_arcade_cases(ref, prefix);
+    check_arcade_chain(prefix);
+    check_arcade_reach(prefix);
     check_sounds(z, ref);
     if (deflated) {                                                 /* GRAF1.DAT inflated whole at the start, the pictures out of that */
         CHECK(s2gfx_init(deflated), "s2gfx_init on the deflated ZIP");

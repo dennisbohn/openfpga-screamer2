@@ -10,6 +10,7 @@ Writes into <out dir> (never committed):
   cases.idx        the same cases drawn by this script's own renderer into a 320 x 200 index frame (pixel = colour * 16 + shade)
   frame_<k>.idx/.pal   race pictures (docs/screamer2/*.png of the repository) quantized to a track's palette, for the pause screens
   graf_deflated.zip    GFX/GRAF1.DAT and DATA/LOCAL.DAT in a deflated ZIP, for the firmware's path for a compressed ZIP
+  arcade.txt, arc_*    the arcade pages' scripted runs and the frames they must draw (tools/ui_arcade_ref.py)
 The readers here (LZW, the S2 .SPR / .FNT layout, the text routine) are written from the file formats and the original's routines, not
 from the firmware.
 """
@@ -214,7 +215,9 @@ def main():
     with zipfile.ZipFile(os.path.join(out, "graf_deflated.zip"), "w", zipfile.ZIP_DEFLATED) as z:
         z.write(os.path.join(game, "GFX", "GRAF1.DAT"), "GFX/GRAF1.DAT")
         z.write(os.path.join(game, "DATA", "LOCAL.DAT"), "DATA/LOCAL.DAT")
-    print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames -> {out}")
+    import ui_arcade_ref
+    n_runs, n_frames = ui_arcade_ref.build(game, graf, spr, fnt, out, {"bkk": bkk, "container": container, "datfile": datfile, "Canvas": Canvas})
+    print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames, {n_runs} arcade page runs with {n_frames} frames -> {out}")
 
 
 main()
