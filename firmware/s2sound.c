@@ -99,7 +99,7 @@ void s2snd_race_start(int track)
     knock_age = 100;
     knock_rank = knock_next = 0;
     frames = 0;
-    fading = faded = cost_logged = 0;
+    fading = faded = 0;                         /* cost_logged stays: the cost line once per power-up (the log is 4 KB) */
     fade = 0x8000;
     sum_fx = sum_music = 0;
     max_fx = max_music = 0;
