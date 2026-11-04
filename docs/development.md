@@ -470,5 +470,5 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/platform_image.py` | makes the platform image (`.bin`) from a PNG and back |
 | `tools/gen_pll_sdram.sh` | regenerates the SDRAM clock PLL (Intel `ip-generate` in the Quartus image) |
 | `tools/sta_sdram.tcl`, `tools/check_budget.py` | after every build: the four SDRAM I/O paths, resource use and I/O registers (called by `tools/build.sh`) |
-| `tools/make_budget_svg.py`, `tools/make_timeline_svg.py` | draw `docs/resources.svg` and `docs/frame_timeline.svg` |
+| `tools/make_budget_svg.py`, `tools/make_timeline_svg.py` | draw `docs/resources.svg` and `docs/frame_timeline.svg`; the timeline from a race simulation (`tools/s2/sim_race.sh <dir> build/s2/track4.bin 4 220 <name>`, about 9 minutes), then `python tools/make_timeline_svg.py build/sim/<name>.log docs/frame_timeline.svg "<scene text>"`; refresh it after every change that moves the frame time |
 | `tools/vexriscv/` | the CPU's configuration and generator, see [tools/vexriscv/README.md](../tools/vexriscv/README.md) |
