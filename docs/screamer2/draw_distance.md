@@ -173,3 +173,32 @@ frames are identical, the key is the same arithmetic with other constants); not 
 **Open**: the S1 backlog "building drawn through the side barrier" was not looked at on S2's pictures beyond the start lines;
 no DOS picture of S2 to compare the order with; the bias of an object (car) mesh is read through `track_class_key()` (0 for the
 four car meshes of the image).
+
+## A car behind a wall (2026-11-04, branch `carsort`)
+
+Pocket screenshot, track 1 (race time 14.5 s, drive mode): a computer car ahead round the left bend is drawn over the stone wall
+and bank that lie between it and the camera. **The original's order does it too: nothing was changed.**
+
+**The rule** (c, `STARTL.EXE 0x7e70c`..`0x7e9b7`, `0x75570`..`0x75620`): the cars are not drawn by the cell they stand in or per
+block. The moving-object walk (`0x7e70c`) appends them to the same list as the map's pieces, flagged in bit 30, with the same
+d^2 >> 3 of their position; the key loop (`0x7e8c0`) gives them `-(sqrt(d^2 >> 3) >> 2) + 300` less the bias of their mesh (0 for
+the four car meshes), a piece `-(sqrt(d^2 >> 3) >> 2)` less its bias; one sort (`0x77130`), one draw (`0x7ed44`). Nothing in the key
+uses a radius or a polygon's depth. (The code after the sorted draw, `0x7e68c` to `0x7815c`, was read only as far as to see that it
+transforms and projects one object's vertex list; it is no ordering rule.) So a car comes after every piece whose place is not at least 3,394 units nearer than the car's
+(300 key units x 11.3: the head start that keeps the road piece under it from covering it), however near the piece's walls are:
+a piece 2,000 units across has its place up to 2,000 units behind its near face. The backdrop panels (`a)03.tcp`, radius 10,000
+to 14,000, bias 300) sort 3,394 units further back still, so a car up to 6,788 units behind a panel's place is drawn over all
+of it, wall loop included. Ours is the same arithmetic (`depth_key()`, `+ 300`), so the same cases come out.
+
+**Measured** (`tools/s2/report_carsort_s2.sh`, a per-pixel depth map of every polygon the geometry unit is given, patched
+copies only; the robot's cameras every 10th step of 300 to 1700, a computer car taken 30 to 130 steps later, 2,538 poses a
+track): the car is drawn through a nearer piece in 17 poses of track 1 (cars 14,500 to 23,000 units away, 16 to 46 pixels
+each, 15 of them behind the panel `a)032tcp`, the first left-bend wall of the route at steps 740 to 800), 8 of track 2
+(trees), 11 of track 5 (trees), 2 each of tracks 6 and 7, none on tracks 3 and 4; a car is never covered by a piece that lies
+behind it. Without the sort bias the count for track 1 was 15 (13 behind the panel): the bias widens the band a little (the panel
+sorts 3,394 units further back), it is not the cause.
+
+**Not done**: a rule of our own (the car after a piece only where no nearer polygon covers it) needs the depth buffer of the
+backlog or a test of the car's bounding box against the pieces' faces; the original has neither. If the user wants cars hidden
+behind walls more than he wants the original's picture, that is the way.
+
