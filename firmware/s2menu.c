@@ -9,6 +9,7 @@
 #include "zip.h"
 #include "dat.h"
 #include "s2save.h"
+#include "s2pages.h"
 #include <string.h>
 
 const uint8_t s2_menu_laps[S2M_LAPS] = { 1, 3, 5, 10 };
@@ -155,7 +156,8 @@ int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press)
     default: break;
     }
     if (press & KEY_X) return S2M_WATCH;
-    if (press & (KEY_A | KEY_START)) return *cursor == S2M_ROW_WATCH ? S2M_WATCH : S2M_RACE;
+    if (press & (KEY_A | KEY_START))
+        return *cursor == S2M_ROW_WATCH ? S2M_WATCH : *cursor == S2M_ROW_SETTINGS ? S2M_SETTINGS : *cursor == S2M_ROW_SCORES ? S2M_SCORES : S2M_RACE;
     return S2M_NONE;
 }
 
@@ -205,20 +207,22 @@ void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor)
     row(fb, 9, cursor == S2M_ROW_RACE, "START RACE", GREEN, 0, 0);
     row(fb, 10, cursor == S2M_ROW_WATCH, "WATCH", CYAN, 0, 0);
     con_text(fb, 12, 10, "the ride round the track", GREY, cursor == S2M_ROW_WATCH ? BAR : BG);
+    row(fb, 11, cursor == S2M_ROW_SETTINGS, "GAME SETTINGS", CYAN, 0, 0);
+    row(fb, 12, cursor == S2M_ROW_SCORES, "HI SCORES", CYAN, 0, 0);
 
     struct s2_pick g[4];
     s2menu_grid(c, g);
     fmt_udec(fmt_str(fmt_str(v, team_name[g[0].team - 1]), " "), g[0].car);
-    con_text(fb, 2, 12, "YOU", GREY, BG);
-    con_text(fb, 12, 12, v, WHITE, BG);
+    con_text(fb, 2, 14, "YOU", GREY, BG);
+    con_text(fb, 12, 14, v, WHITE, BG);
     p = o;
     *p = 0;
     for (int k = 1; k < 4; k++) {
         if (k > 1) p = fmt_str(p, "  ");
         p = fmt_udec(fmt_str(fmt_str(p, team_name[g[k].team - 1]), " "), g[k].car);
     }
-    con_text(fb, 2, 13, "AGAINST", GREY, BG);
-    con_text(fb, 12, 13, o, WHITE, BG);
+    con_text(fb, 2, 15, "AGAINST", GREY, BG);
+    con_text(fb, 12, 15, o, WHITE, BG);
 
     con_text(fb, 2, 16, "d-pad: up/down row, left/right value", GREY, BG);
     con_text(fb, 2, 17, "L / R: track -3 / +3 from any row", GREY, BG);
@@ -256,6 +260,15 @@ int s2menu_run(struct s2_menu_cfg *c)
         if (held >= REPEAT_FIRST && (held - REPEAT_FIRST) % REPEAT_EVERY == 0) press |= keys & dirs;
         keys_before = keys;
         int r = s2menu_key(c, &cursor, press);
+        if (r == S2M_SETTINGS || r == S2M_SCORES) {     /* a page of GAME SETTINGS / HI SCORES (s2pages.h): the choices go in, and come back as it left them */
+            s2menu_store(c);
+            if (r == S2M_SETTINGS) s2_page_settings();
+            else s2_page_hiscores();
+            s2menu_load(c);
+            keys_before = in_keys();
+            held = 0;
+            continue;
+        }
         if (r) {
             s2menu_store(c);
             return r;

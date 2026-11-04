@@ -23,6 +23,9 @@
 #include "s2gfx.h"
 #include "s2load.h"
 #include "s2pause.h"
+#include "s2end.h"
+#include "s2save.h"
+#include "music.h"
 #include "prof.h"
 #include <string.h>
 
@@ -395,7 +398,7 @@ static int race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg, int offer)
         fmt_time(fmt_str(l, "BEST "), h.best_lap);
         con_text(fb, 0, 5, l, fg, bg);
     }
-    if (h.finished) {                                   /* the end: the place, the time */
+    if (h.finished && !ui_ready) {                      /* the end without the toolkit's screen (s2end.h): the place, the time */
         con_big(fb, 160 - 3 * 32 + 3, 53, 4, "FINISH", bg);
         con_big(fb, 160 - 3 * 32, 50, 4, "FINISH", fg);
         p = fmt_str(l, ord[h.place < 5 ? h.place : 4]);
@@ -407,6 +410,19 @@ static int race_text(volatile uint8_t *fb, uint8_t fg, uint8_t bg, int offer)
         if (offer) con_text(fb, 20 - 12, 14, " A: race again   B: menu ", fg, bg);
     }
     return h.finished;
+}
+
+/* what the end screen asked for (s2end.h): S2END_AGAIN, S2END_EXIT, or none */
+static int end_choice;
+
+/* the end of the race over the picture (the original's, s2end.h) once the player has finished; the race's own text is under it */
+static void end_screen(int n, volatile uint8_t *fb, const uint32_t *pal, uint32_t fin_frames, uint32_t vf, uint32_t press)
+{
+    struct race_hud h;
+    race_get_hud(&h);
+    struct s2_end_in in = { n, race_laps, h.place, h.time, h.best_lap, race_grid[0].team, race_grid[0].car };
+    end_choice = s2end_frame(fb, (int)draw_buf, pal, &in, fin_frames, vf, press);
+    (void)fb;
 }
 
 static int other_track(int n, uint32_t press)
@@ -468,7 +484,17 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 leave(n, mode, &st_all);
                 return 0;
             }
-            if (fin_frames > OFFER_FRAMES) {            /* after the finish: A the race again, B the menu */
+            if (end_choice == S2END_EXIT) {             /* the end screen's choices */
+                leave(n, mode, &st_all);
+                end_choice = 0;
+                return 0;
+            }
+            if (end_choice == S2END_AGAIN) {
+                end_choice = 0;
+                race_start(n, floor_z);
+                fin_frames = 0;
+            }
+            if (!ui_ready && fin_frames > OFFER_FRAMES) {   /* without the toolkit, after the finish: A the race again, B the menu */
                 if (press & KEY_B) {
                     leave(n, mode, &st_all);
                     return 0;
@@ -629,7 +655,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             p = pc->gear > 0 ? fmt_udec(p, (uint32_t)pc->gear) : fmt_str(p, "N");
             fmt_str(p, manual ? " MAN" : " AUTO");
             con_text(fb, CON_COLS - (int)__builtin_strlen(l), 0, l, col_text, col_bg);
-            fin_frames = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES) ? fin_frames + 1 : 0;
+            int finished = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES);
+            if (finished && ui_ready) end_screen(n, fb, pal, fin_frames, vf, press);
+            fin_frames = finished ? fin_frames + 1 : 0;
         }
         tl_mark(TL_HUD);
 
@@ -721,6 +749,8 @@ static void apply_cfg(void)
     race_laps = s2_menu_laps[cfg.laps];
     race_level = 2 - cfg.skill;
     manual = cfg.manual;
+    s2car_damages = s2save_get(S2S_DAMAGE);             /* the other GAME SETTINGS that act in the race (s2pages.h) */
+    music_on = s2save_get(S2S_MUSIC) == 0;
 }
 
 void __attribute__((noreturn)) viewer_run(uint32_t boot_results)

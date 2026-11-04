@@ -36,10 +36,11 @@ struct s2_menu_cfg {
 extern const uint8_t s2_menu_laps[S2M_LAPS];
 
 /* what the menu ends with */
-enum { S2M_NONE, S2M_RACE, S2M_WATCH };
+enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_SETTINGS, S2M_SCORES };     /* (the last two: a page was asked for, s2menu_run() opens it itself) */
 
 /* The rows, top to bottom */
-enum { S2M_ROW_TRACK, S2M_ROW_TEAM, S2M_ROW_CAR, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_GEAR, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROWS };
+enum { S2M_ROW_TRACK, S2M_ROW_TEAM, S2M_ROW_CAR, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_GEAR, S2M_ROW_RACE, S2M_ROW_WATCH,
+       S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROWS };
 
 /* The names and labels from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the
    built-in English text, which is the same. Once, before the first menu. Returns how many of the 12 texts (the tracks, the teams, the

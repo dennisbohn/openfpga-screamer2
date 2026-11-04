@@ -14,9 +14,9 @@
 #define S2PAGE_ESC      (KEY_A | KEY_SELECT)
 
 /* The menu samples of SOUND.DAT's MENU.DTR (s2sound.h). What the original plays differs from page to page; these are the ones read
-   from its pages' code (STARTL.EXE 0x41d3c .. 0x41dc1, 0x3f9ba .. 0x3fac5): the TRANSMISSION page's cursor moves and its ENTER, the
-   GAME SETTINGS page's row moves and its way out. */
-enum { S2PAGE_SND_MOVE = 0, S2PAGE_SND_SELECT = 2, S2PAGE_SND_ROW = 12, S2PAGE_SND_BACK = 13 };
+   from its pages' code (STARTL.EXE 0x41d3c .. 0x41dc1, 0x4228a .. 0x42718): the TRANSMISSION page's cursor moves and its ENTER, the
+   GAME SETTINGS page's cursor moves (S2PAGE_SND_CURSOR), a value stepped (S2PAGE_SND_ROW) and VIEW HIGH SCORES (S2PAGE_SND_BACK). */
+enum { S2PAGE_SND_MOVE = 0, S2PAGE_SND_SELECT = 2, S2PAGE_SND_CURSOR = 10, S2PAGE_SND_ROW = 12, S2PAGE_SND_BACK = 13 };
 
 struct s2_page {
     const uint8_t *picture;             /* the 320 x 200 background (an opaque copy), 0: nothing under the drawing */

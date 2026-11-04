@@ -70,6 +70,10 @@ struct s2car_state {
     int cam_started;
 };
 
+/* GAME SETTINGS' DAMAGES (the original's 0x130d54): 0 and a knock from a wall marks nothing and hurts nothing (0x19aaa returns at once), 1 the
+   marks and the damage. 1 until a menu sets it (the tools and tests), the viewer sets it from the save when a race is set up. */
+extern int s2car_damages;
+
 /* Car number 0 .. 4 of team 0 .. 3 (the fifth is the team's bonus car) on track 1 .. 7: CAR_PARAMS
    read (s2car_params()), the car put on the start line, heading along the road, wheels on the ground,
    the race clock running (the 3 s of the grid hold are the caller's business). img may be NULL.
