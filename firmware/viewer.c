@@ -601,6 +601,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         hw_idle = 0;
         tl_scene = 0;
         tl_mark(TL_SCENE);
+        /* the race screen (s2hud.c): its blitter list is made and handed on now, the blitter draws it over the finished scene as soon as
+           the 3D units are done, while the CPU goes on with the computers' steps; the timing overlay's two lines come after it, and
+           the screen's elements near them move down 16 rows while the overlay is on */
+        const int hud = *drive && s2hud_ready();
+        if (hud) s2hud_draw(&cam, &view, hud_steps, *overlay ? 16 : 0);
         if (*drive) {                                   /* the computers' cars' steps (what is left of them) while the rasterizer finishes the picture */
             uint32_t t_o = rdcycle();
             if (RACE_OVERLAP > 1) while (race_others_slice())
@@ -615,15 +620,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         tl_mark(TL_WAIT);
         uint32_t work = rdcycle() - t_frame, faces = GU_FACES;
 
-        /* the race screen (s2hud.c): the blitter draws it over the finished scene; the timing overlay's two lines come after it, and the
-           screen's elements near them move down 16 rows while the overlay is on */
-        const int hud = *drive && s2hud_ready();
-        if (hud) {
-            s2hud_draw(&cam, &view, hud_steps, *overlay ? 16 : 0);
-            while (RS_DRAW & RS_BUSY)
-                ;
-        }
-        /* the timing, drawn over the picture once the rasterizer is done; in the driving mode without the race screen also the
+        /* the timing, drawn over the picture once the rasterizer and the blitter are done; in the driving mode without the race screen also the
            speed and the gear (top right) */
         if (*overlay) {
             char l[40], *p;
