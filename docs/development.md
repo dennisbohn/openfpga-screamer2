@@ -79,32 +79,44 @@ far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). T
 
 ### Start menu
 
-A list in the console's text style (`firmware/s2menu.c`, 40 x 25 characters; the original's own menu screens are in
+A list in the console's text style (`firmware/s2menu.c`, 40 x 25 characters), the stand-in for the original's options room (the original's own menu screens are in
 docs/screamer2/menus.md). Everything is open from the start: all seven tracks, all four teams and their five cars, no championship.
 
-| Row | Values |
+| Row | |
 |---|---|
-| TRACK SELECTION | 1 ENGLAND, 2 COLUMBIA, 3 EGYPT, 4 CALIFORNIA, 5 FINLAND, 6 SWITZERLAND, 7 THE TUNNEL (the names are read from `STRINGS.TXT` in `DATA/LOCAL.DAT` of the ZIP; the built-in text is the same, so a ZIP without it still works) |
-| TEAM SELECTION, CAR SELECTION | the player's team (CONDOR, ANGELS, WASP, ZEUS) and car 1 to 5 (5 is the team's bonus car): slot 0 of `race_grid` (`race.h`); the three computers get the three other teams, each with the car of its own number (team 1 car 1 gives the old default grid) |
-| NUMBER OF LAPS | 1, 3, 5, 10 (the original's options; `race_laps`) |
-| ARCADE ENEMIES SKILL | ROOKIE, NORMAL, PRO (the original's levels; `race_level = 2 - skill`, the row of `SKILLS` the computers' pace is read from) |
-| TRANSMISSION | AUTOMATIC, MANUAL |
-| START RACE / WATCH | the race (driving mode), or the viewer's ride (for timing) |
+| ARCADE | the original's arcade pages (below), then the race |
+| NUMBER OF LAPS | 1, 3, 5, 10 (the original's options; `race_laps`; a GAME SETTINGS row) |
+| ARCADE ENEMIES SKILL | ROOKIE, NORMAL, PRO (the original's levels; `race_level = 2 - skill`, the row of `SKILLS` the computers' pace is read from; a GAME SETTINGS row) |
+| START RACE | the race at once with the choices as they are; left / right change the track (1 ENGLAND, 2 COLUMBIA, 3 EGYPT, 4 CALIFORNIA, 5 FINLAND, 6 SWITZERLAND, 7 THE TUNNEL: the files' numbers, names read from `STRINGS.TXT` in `DATA/LOCAL.DAT` of the ZIP, the built-in text is the same) |
+| WATCH | the viewer's ride (for timing) |
 
 | Button (menu) | |
 |---|---|
 | d-pad up / down | row (wraps) |
-| d-pad left / right | the row's value (wraps); a docked controller's stick works as the d-pad |
-| L / R | the track three back / on, from any row: every track is at most two moves from every other, so with Start at most three presses (track 4 from track 1: R, then A or Start) |
-| A or Start | START RACE (WATCH on its row); X: WATCH |
+| d-pad left / right | the row's value (wraps); on START RACE the track; a docked controller's stick works as the d-pad |
+| L / R | the track three back / on, from any row: every track is at most two moves from every other, so with B or Start at most three presses (track 4 from track 1: R, then B or Start on START RACE) |
+| A, B or Start | the row's action: the arcade pages on ARCADE, WATCH on its row, the race on the others; X: WATCH |
+
+**The arcade pages** (`firmware/s2arcade.c`, details in docs/screamer2/menus.md section 6): title (ARCADE_L, ACCELERATE TO CONTINUE blinking) -> TRACK (the tracks' pictures with their banners,
+the lit frame) -> CAR (a 2D stand-in for the 3D page: team, car and its name plate) -> TRANSMISSION (AUTOMATIC / MANUAL) -> the race. B or Start go on (the picture fades out over half a
+second, with the page's click), A or Select go back (a cut): the TRACK page's A leaves to the start menu, the CAR page's to TRACK, the TRANSMISSION page's to CAR.
+
+| Button (arcade pages) | |
+|---|---|
+| B or Start | forward |
+| A or Select | back |
+| d-pad left / right | TRACK: the track before / after (the original's order England, Egypt, California, Finland, Switzerland, Columbia, The Tunnel); CAR: the car; TRANSMISSION: automatic / manual |
+| d-pad up / down | CAR: the team (the original chooses it on an earlier page, not built) |
+| L / R | TRACK: three places back / on, round |
 
 The choices are kept: in the session, and across power-ups in the nonvolatile `CHOICE.DAT` (data slot 23), Screamer 2's save in a layout of its
-own (`firmware/s2save.c`, docs/screamer2/menus.md section 7.1; `s2menu_store()` sets the track, team and car, and the laps, level and gearbox settings), which the
+own (`firmware/s2save.c`, docs/screamer2/menus.md section 7.1; `s2menu_store()` sets the track, team and car, and the laps, level and gearbox settings, also after the arcade pages
+are left with A), which the
 Pocket writes back when the core exits (the first start with the new firmware reads the old 1,120-byte file once and turns it into the 19,348-byte one). After the files screen the menu shows the last choices, so the usual start is two presses (A on the
-files screen, Start). The grid is applied when the track image is built (`load_track()`), so every start from the menu loads the track again
+files screen, then B or Start with the cursor on START RACE; the cursor starts on ARCADE and stays where it was left in a session). The grid is applied when the track image is built (`load_track()`), so every start from the menu loads the track again
 (3 to 5 s; the cars that did not change are not read again). The log gets one line per start: `menu: race T4 CONDOR 1 3L NORMAL AUTO`.
 `tools/menu_screens.sh` runs the menu's code on the PC: tests of the keys, the grid, the kept choices and the texts read from the real ZIP,
-and pictures of the list in `build/check/menu/`.
+and pictures of the list in `build/check/menu/`; the arcade pages are compared with a model (below, Tools).
 
 Back to the menu: EXIT in the race's pause menu (Start, "Loading screen and pause menu" below), Select + B in the ride (the music stops), and after
 the player has finished a race (a second later, so that the gas held across the line does nothing) A starts the race again and B goes to the menu; the
@@ -448,8 +460,9 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/dat_sizes.py <file.DAT>...` | lists a game container with unpacked sizes (`-v`: every file) |
 | `tools/datfile.py` | reads the containers (shared by the other scripts) |
 | `tools/check_zip.sh`, `tools/check_zip.py`, `tools/check_zip.c` | the ZIP reader `firmware/zip.c` natively in Docker: the real `SCREAMER2.zip` (every file's size and CRC-32 against Python's `zipfile`), archives made on the fly (deflated at levels 1, 6, 9, wrong CRC, damaged, cut, other methods, wrong top folder, too many files), a fuzz of damaged copies under the address sanitizer, and the speed of the inflate on the PC |
-| `tools/menu_screens.sh`, `tools/host/menu_screen.c`, `tools/host/ui_screen.c`, `tools/ui_reference.py` | the 2D toolkit (`s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`) on the PC with the blitter's C model and scripted buttons, against references made from the game's files by `ui_reference.py` (its own LZW, `.SPR` / `.FNT` and text readers): the 28 `L` pictures of `GRAF1.DAT` (CRC-32 of pixels and palette, on the stored ZIP and on a deflated one made on the fly), 20 text and sprite cases pixel for pixel, the loading screens of the seven tracks, the pause menu (keys, clicks, the easing of the effects, the darkened still pixel for pixel, the darkening table against a double-precision search) on three of the repository's race pictures quantized to their track's palette, the page runner's key repeat and fades, the 15 samples of `MENU.DTR`; pictures in `build/check/menu/` (`menu_load*.png`, `menu_pause*.png`). And the start menu `firmware/s2menu.c` with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 12 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
+| `tools/menu_screens.sh`, `tools/host/menu_screen.c`, `tools/host/ui_screen.c`, `tools/ui_reference.py`, `tools/ui_arcade_ref.py` | the 2D toolkit (`s2gfx.c`, `s2page.c`, `s2load.c`, `s2pause.c`, the arcade pages `s2arcade.c`) on the PC with the blitter's C model and scripted buttons, against references made from the game's files by `ui_reference.py` (its own LZW, `.SPR` / `.FNT` and text readers): the 28 `L` pictures of `GRAF1.DAT` (CRC-32 of pixels and palette, on the stored ZIP and on a deflated one made on the fly), 20 text and sprite cases pixel for pixel, the loading screens of the seven tracks, the pause menu (keys, clicks, the easing of the effects, the darkened still pixel for pixel, the darkening table against a double-precision search) on three of the repository's race pictures quantized to their track's palette, the page runner's key repeat and fades, the 15 samples of `MENU.DTR`; pictures in `build/check/menu/` (`menu_load*.png`, `menu_pause*.png`). The arcade pages: 17 scripted runs of the four pages (button scripts of one character a frame, the page's result, the choices and sounds it leaves, the frames it takes) with 105 frames compared pixel for pixel and palette entry for palette entry with `ui_arcade_ref.py`'s model (picture, sprites, text, the eased scroll in float32, the blinking, the fade; made from the game's files and a reading of `STARTL.EXE`), with 3, 5 and 7 tracks open and a bonus car or not, the whole chain forward and back (sounds, kept choices) and every track reachable from every other by scripted presses; pictures of the frames marked in `ui_arcade_ref.py` (`menu_<case>_<tick>.png`). And the start menu `firmware/s2menu.c` with the real ZIP: tests (every track within two moves, the grid for each team and car, the kept choices, the 7 texts read from `DATA/LOCAL.DAT`) and pictures of the list, `build/check/menu/*.png` |
 | `tools/s2/check_save_s2.sh`, `tools/s2/check_save_s2.c` | the save `firmware/s2save.c` natively in Docker under the sanitizers, with a fake data slot and the SDRAM window of `CHOICE.DAT` at its address: the defaults and the layout's bytes (against the table in docs/screamer2/menus.md 7.1), the interface and its clamping, the unlocks, the best-times ranking against a plain model (ties, the 15 rows, kinds / tracks / lists apart, time attack's one total list, 20,000 random insertions), a round trip through a "power-off", the migration of the old layout (with and without its marker, values out of range), and broken files: empty, short, foreign, random, oversized, a failing read, every byte of a valid file damaged in turn (the damaged part falls back to the defaults and the other keeps its data), damage with a matching checksum but values out of range, random damage; after every load the save is sealed and in range and nothing outside the layout was touched |
+| `tools/s2/dosbox_arcade.py [extra tracks] [--check]` | the original's arcade pages in the game's own DOSBox (Windows, SendInput; the owner's game folder is not written to: a private copy `build/dosgame` of junctions and its own `CONFIG` with a `CHOICE.DAT` that has the extra tracks open): types its way through TEAM SELECTION, the name and the OPTIONS ROOM to ARCADE, takes Ctrl+F5 screenshots (raw 320 x 200 palette indices, `build/check/dosbox/`) on the title, the TRACK page (a key press, then screenshots at once: the easing in flight), the CAR page and the TRANSMISSION page, and compares each with the frames of `ui_arcade_ref.py`'s model (the TRACK page whole; for the others the parts the model draws, the original also has 3D cars there). The window must stay in front for the 3 minutes; `--check` repeats the comparison on the last run's screenshots |
 | `tools/files_screens.sh`, `tools/files_screens.py`, `tools/host/files_screen.c` | the files screen of `firmware/files.c` on the PC for the real ZIP and made-up ones (missing file, deflated, unsupported method, other top folder, not a ZIP, not there): `build/check/screens/*.png` |
 | `tools/s2/make_track_s2.py`, `tools/s2/check_track_build_s2.sh`, `tools/s2/check_track_build_s2.c`, `tools/s2/check_env_s2.py`, `tools/s2/check_cars_s2.py` | the Screamer 2 track image on the PC (the reference; `S2CARS=team:car,...` chooses the grid's cars) and the firmware's builder `track_build_s2()` compared with it byte for byte, seven tracks and three grids, natively under the sanitizers; the windows' reflection picture and the cars' materials, textures and colours in the image against the original's |
 | `tools/s2/check_cars_s2.sh`, `tools/s2/check_cars_s2.c` | the cars' loader `firmware/s2teams.c` natively under the sanitizers on a stored and a deflated ZIP of the team containers: the cars equal the containers' own entries, the bytes read are counted, a repeated or partly changed grid reads nothing or only the changed cars |

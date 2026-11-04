@@ -33,6 +33,9 @@ enum { S2G_FONT_TITLE, S2G_FONT_MEDIUM, S2G_FONT_SMALL, S2G_FONT_SMALL2, S2G_FON
    of DATA/LOCAL.DAT. 1 if the pictures, sprites and fonts are there (the log says what is not). */
 int s2gfx_init(struct zip *z);
 
+/* 1 once s2gfx_init() has found the pictures, the sprites and the fonts (the menu pages are not shown without them) */
+int s2gfx_ready(void);
+
 /* The picture buffers (S2G_PIC_BYTES, 4-aligned, in the SDRAM) */
 uint8_t *s2gfx_pic(int k);
 
@@ -60,7 +63,8 @@ void s2gfx_sprite_centred(struct blit_list *l, int n, int y);
    cell's left; a control byte 1 sets fixed pitch (every character the font's widest + space, centred in its cell), 2 proportional.
    Draws at (x, y) and returns the width in pixels; with l = 0 it only measures. */
 int s2gfx_text(struct blit_list *l, int font, int colour, int space, int x, int y, const char *s);
-/* The same centred on the screen (0x3327c: x = (320 - width) / 2) */
+/* The same centred on the screen (0x3327c: x = (320 - width) / 2, the width as the original measures it, 0xc6c88: the characters and the gaps
+   between them, none after the last; checked against the running original on the ARCADE page) */
 void s2gfx_text_centred(struct blit_list *l, int font, int colour, int space, int y, const char *s);
 
 /* The darkening of the original (it builds a table for the palette every picture is darkened with): for each colour the palette entry
