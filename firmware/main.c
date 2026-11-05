@@ -198,9 +198,30 @@ void su_view_regs(const struct su_view *v)
     SU_FAR = (uint32_t)v->far8;
 }
 
+static void push_piece(const struct gu_piece *g);
+
 /* a piece into the geometry unit's buffer: its place in view space and its mesh; a word
-   waits only while the buffer is full */
+   waits only while the buffer is full. A block over the unit's limits (512 vertices, 1,024
+   faces a row: geom.h) goes in as the runs of its face row, one after the other (gu_split). */
 void hw_piece(const struct gu_piece *g)
+{
+    if (!gu_oversize(g)) {
+        push_piece(g);
+        return;
+    }
+    static struct gu_piece run[GU_CUT_RUNS];
+    static uint32_t failures_told;
+    const int n = gu_split(g, run);
+    while (!(MEM_STATUS & MEM_WRITES_IDLE))     /* (the runs just cut are in the SDRAM for the unit) */
+        ;
+    for (int i = 0; i < n; i++) push_piece(&run[i]);
+    if (gu_cut_failures != failures_told) {
+        failures_told = gu_cut_failures;
+        dlog_str("geom: a block over the unit's limits could not be cut, it is not drawn\n");
+    }
+}
+
+static void push_piece(const struct gu_piece *g)
 {
     if (tl_scene) {
         if (tl_pieces++ == 0)

@@ -89,10 +89,12 @@ static void draw_maps(struct blit_list *l, const struct item *it, int n, int a1,
 {
     const int buffer = l->buffer;
     const struct track_cam cam = s2tp_camera();
-    static struct track_block b[2 * S2MAP_PIECES], bb[S2MAP_PIECES];     /* (not on the stack: up to 48 pieces of 60 bytes) */
-    static float key[2 * S2MAP_PIECES], kk[S2MAP_PIECES];
+    struct track_block b[2 * S2MAP_BLOCKS];
+    float key[2 * S2MAP_BLOCKS];
     int m = 0;
     for (int i = 0; i < n; i++) {
+        struct track_block bb[S2MAP_BLOCKS];
+        float kk[S2MAP_BLOCKS];
         const int got = s2map_blocks(it[i].track, &cam, (float)it[i].pos[0], (float)it[i].pos[1], (float)it[i].pos[2], a1, bb, kk);
         for (int k = 0; k < got; k++) {
             int j = m++;

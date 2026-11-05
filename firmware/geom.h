@@ -37,9 +37,19 @@
 #include "setup.h"
 
 #ifndef GU_MAX_VERT
-#define GU_MAX_VERT     512             /* vertices of a mesh; more: the piece is left out (a build of the tests may take more: tools/trackmap.sh) */
+#define GU_MAX_VERT     512             /* vertices of a block the unit takes (a build of the tests may take more: tools/trackmap.sh); a block over it is cut, gu_split() */
 #endif
-#define GU_MAX_FACES    1024            /* faces of a row; the rest is left out */
+#define GU_MAX_FACES    1024            /* faces of a row the unit takes; a block with more is cut as well */
+
+/* A block over the unit's limits (gu_oversize: more than GU_MAX_VERT vertices or GU_MAX_FACES faces) is drawn as runs, one after the other: the faces of its row in the row's
+   order, taken in turn while their vertices and faces stay within the limits, each run a block of its own (the header, the faces, their vertices and texture coordinates
+   compacted, all 16 rows its one list). Drawn in turn they paint the faces in exactly the order the whole block's row has; the picture is the whole block's. Every piece goes
+   through this: hw_piece() (the hardware) and gu_draw() (the model) call gu_split(); nothing else needs to know the limit. The runs of a (block, row) are cut on the first use and
+   kept in GU_CUT_SLOTS slots of GU_CUT_BYTES, the least recently used given up. A block that cannot be cut (its normals are its own, it needs more than a slot or GU_CUT_RUNS
+   runs) is not drawn, as before, and counted in gu_cut_failures. */
+#define GU_CUT_RUNS     6               /* the most runs of a block's row */
+#define GU_CUT_SLOTS    8               /* (block, row) pairs kept cut */
+#define GU_CUT_BYTES    0x10000u        /* the memory of one: all runs of the pair */
 
 struct gu_piece {
     int32_t m[9];                       /* local to view: rows r, u, f of columns x, y, z; 16 fraction bits */
@@ -58,6 +68,15 @@ struct gu_piece {
 };
 
 struct gu_stats { uint32_t faces, triangles, see_through, vertices; };
+
+extern uint32_t gu_cut_failures;        /* blocks over the limits that could not be cut (once for each (block, row)) */
+int gu_oversize(const struct gu_piece *g);      /* 1 if the piece's block is over the unit's limits */
+/* The runs a piece is drawn as: copies of *g whose obj and blk are the runs' (self-contained) blocks, in drawing order; returns how many (0 if the row has no faces or the block
+   could not be cut). Only for a piece gu_oversize() says is over the limits. */
+int gu_split(const struct gu_piece *g, struct gu_piece out[GU_CUT_RUNS]);
+/* The cutting itself (gu_split's, with the limits as arguments for the tests): the row `row` of the block at `blk` (of the object `mesh`) as runs written to dst (room bytes,
+   4-aligned), their blocks in out[] (at most cap). Returns how many runs (0: the block has no such row), -1 if it cannot be cut or does not fit. */
+int gu_cut(const uint8_t *mesh, const uint8_t *blk, int row, int max_vert, int max_faces, uint8_t *dst, uint32_t room, const uint8_t *out[], int cap);
 
 /* One piece through the models of the geometry unit, the setup unit and the rasterizer
    into fb; mlb is the track's material file. Adds to *st, returns the pixels drawn. */

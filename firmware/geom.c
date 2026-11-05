@@ -1,12 +1,170 @@
 /*
  * Geometry unit C model (geom.h). Every >> of a signed value rounds down, as in the
- * hardware.
+ * hardware. Also the cutting of the blocks that are over the unit's limits (gu_split):
+ * the hardware's driver (hw_piece) and the model (gu_draw) both go through it.
  */
 #include "geom.h"
+#include <string.h>
 
 static int32_t rd32(const uint8_t *p) { return *(const int32_t *)p; }
 static int16_t rd16(const uint8_t *p) { return *(const int16_t *)p; }
 static uint16_t ru16(const uint8_t *p) { return *(const uint16_t *)p; }
+static void wr32(uint8_t *p, int32_t v) { *(int32_t *)p = v; }
+static void wr16(uint8_t *p, uint32_t v) { *(uint16_t *)p = (uint16_t)v; }
+
+/* ---------------------------------------------------------------------------------------- blocks over the unit's limits */
+
+#define CUT_ROW_MAX     4096u           /* the longest row, the most vertices of a block the cut takes */
+#define CUT_VERT_MAX    4096u
+#define CUT_HEAD        0x80u           /* the block header copied into a run */
+#define CUT_FACE        36u             /* a face record */
+
+uint32_t gu_cut_failures;
+
+int gu_oversize(const struct gu_piece *g)
+{
+    return rd32(g->blk + 0x10) > GU_MAX_VERT || rd32(g->blk + 0x14) > GU_MAX_FACES;
+}
+
+int gu_cut(const uint8_t *mesh, const uint8_t *blk, int row, int max_vert, int max_faces, uint8_t *dst, uint32_t room, const uint8_t *out[], int cap)
+{
+    const int nv = rd32(blk + 0x10);
+    const int32_t ro = rd32(blk + 0x28 + 4 * row);
+    if(nv < 1 || nv > (int)CUT_VERT_MAX) return -1;
+    if(ro <= 0) return 0;
+    if(rd32(blk + 0x18) & 0x2000) return -1;                    /* (normals of its own, the reflecting kind: its reflections are of the whole block; no such block is over the limits) */
+    if(cap > 255) cap = 255;                                    /* (a run's number is a byte) */
+    const uint8_t *verts = mesh + rd32(blk + 0x1C), *uvs = mesh + rd32(blk + 0x24);
+    static uint16_t fo[CUT_ROW_MAX], list[CUT_VERT_MAX];
+    static uint8_t fgroup[CUT_ROW_MAX];
+    static int16_t vnew[CUT_VERT_MAX];
+    unsigned nf = 0;
+    for(const uint8_t *e = blk + ro; ru16(e) != 0xFFFF; e += 2) {
+        if(nf >= CUT_ROW_MAX) return -1;
+        fo[nf++] = ru16(e);
+    }
+    if(nf == 0) return 0;
+
+    /* the runs: the row's faces in order while their vertices and faces stay within the limits */
+    int groups = 1, count = 0, faces_in = 0;
+    memset(vnew, -1, sizeof(int16_t) * (size_t)nv);
+    for(unsigned i = 0; i < nf; i++) {
+        const uint8_t *fc = blk + fo[i];
+        const int nc = rd16(fc + 6);
+        if(nc < 3 || nc > 4) {                                  /* (the unit skips it, but it takes a place in the row) */
+            fgroup[i] = (uint8_t)(groups - 1);
+            faces_in++;
+            continue;
+        }
+        int fresh = 0, seen[4];
+        for(int j = 0; j < nc; j++) {
+            seen[j] = ru16(fc + 8 + 2 * j) / 6;
+            if(seen[j] >= nv) return -1;
+            int again = 0;
+            for(int q = 0; q < j; q++) again |= seen[q] == seen[j];
+            fresh += vnew[seen[j]] < 0 && !again;
+        }
+        if(count + fresh > max_vert || faces_in >= max_faces) {
+            if(groups >= cap) return -1;
+            groups++;
+            count = faces_in = 0;
+            memset(vnew, -1, sizeof(int16_t) * (size_t)nv);
+        }
+        for(int j = 0; j < nc; j++)
+            if(vnew[seen[j]] < 0) vnew[seen[j]] = (int16_t)count++;
+        fgroup[i] = (uint8_t)(groups - 1);
+        faces_in++;
+    }
+
+    /* each run a block of its own */
+    uint32_t at = 0;
+    for(int g = 0; g < groups; g++) {
+        unsigned faces = 0, nvg = 0;
+        memset(vnew, -1, sizeof(int16_t) * (size_t)nv);
+        for(unsigned i = 0; i < nf; i++) {
+            if(fgroup[i] != g) continue;
+            faces++;
+            const uint8_t *fc = blk + fo[i];
+            const int nc = rd16(fc + 6);
+            if(nc < 3 || nc > 4) continue;
+            for(int j = 0; j < nc; j++) {
+                const unsigned v = ru16(fc + 8 + 2 * j) / 6u;
+                if(vnew[v] < 0) {
+                    vnew[v] = (int16_t)nvg;
+                    list[nvg++] = (uint16_t)v;
+                }
+            }
+        }
+        const uint32_t list_at = CUT_HEAD, faces_at = (list_at + 2u * (faces + 1u) + 3u) & ~3u;
+        const uint32_t verts_at = (faces_at + CUT_FACE * faces + 3u) & ~3u, uvs_at = verts_at + 6u * nvg, end = (uvs_at + 6u * nvg + 3u) & ~3u;
+        if(faces_at + CUT_FACE * faces > 0xFFFFu || at + end > room) return -1;
+        uint8_t *b = dst + at;
+        memset(b, 0, end);
+        memcpy(b, blk, CUT_HEAD);
+        wr32(b + 0x0C, 0);                                      /* (no position record: the caller places the piece) */
+        wr32(b + 0x10, (int32_t)nvg);
+        wr32(b + 0x14, (int32_t)faces);
+        wr32(b + 0x1C, (int32_t)verts_at);
+        wr32(b + 0x20, -1);
+        wr32(b + 0x24, (int32_t)uvs_at);
+        for(int q = 0; q < 16; q++) wr32(b + 0x28 + 4 * q, (int32_t)list_at);   /* (whichever row the eye picks, this is the run) */
+        for(unsigned i = 0; i < nvg; i++) {
+            memcpy(b + verts_at + 6 * i, verts + 6 * list[i], 6);
+            memcpy(b + uvs_at + 6 * i, uvs + 6 * list[i], 6);
+        }
+        unsigned nth = 0;
+        for(unsigned i = 0; i < nf; i++) {
+            if(fgroup[i] != g) continue;
+            uint8_t *dfc = b + faces_at + CUT_FACE * nth;
+            memcpy(dfc, blk + fo[i], CUT_FACE);
+            const int nc = rd16(dfc + 6);
+            if(nc >= 3 && nc <= 4)
+                for(int j = 0; j < nc; j++) wr16(dfc + 8 + 2 * j, (uint32_t)vnew[ru16(blk + fo[i] + 8 + 2 * j) / 6] * 6u);
+            wr16(b + list_at + 2 * nth, faces_at + CUT_FACE * nth);
+            nth++;
+        }
+        wr16(b + list_at + 2 * nth, 0xFFFF);
+        out[g] = b;
+        at += end;
+    }
+    return groups;
+}
+
+static struct {
+    const uint8_t *blk;                                         /* 0: free */
+    int row, n;                                                 /* the runs of (blk, row): how many, */
+    const uint8_t *run[GU_CUT_RUNS];                            /* and where */
+    uint32_t age;
+} cut_slot[GU_CUT_SLOTS];
+static uint8_t cut_pool[GU_CUT_SLOTS][GU_CUT_BYTES] __attribute__((aligned(4)));
+
+int gu_split(const struct gu_piece *g, struct gu_piece out[GU_CUT_RUNS])
+{
+    static uint32_t tick;
+    int s = -1, victim = 0;
+    for(int i = 0; i < GU_CUT_SLOTS; i++) {
+        if(cut_slot[i].blk == g->blk && cut_slot[i].row == g->row) {
+            s = i;
+            break;
+        }
+        if(cut_slot[i].age < cut_slot[victim].age) victim = i;
+    }
+    if(s < 0) {                                                 /* the first time: cut it into the least recently used slot */
+        s = victim;
+        cut_slot[s].blk = 0;
+        const int n = gu_cut(g->obj, g->blk, g->row & 15, GU_MAX_VERT, GU_MAX_FACES, cut_pool[s], GU_CUT_BYTES, cut_slot[s].run, GU_CUT_RUNS);
+        if(n < 0) gu_cut_failures++;
+        cut_slot[s].blk = g->blk;
+        cut_slot[s].row = g->row;
+        cut_slot[s].n = n < 0 ? 0 : n;                          /* (a failure is kept too: it is not tried again every frame) */
+    }
+    cut_slot[s].age = ++tick;
+    for(int i = 0; i < cut_slot[s].n; i++) {
+        out[i] = *g;
+        out[i].obj = out[i].blk = cut_slot[s].run[i];
+    }
+    return cut_slot[s].n;
+}
 
 static int32_t clamp_size(int32_t v)
 {
@@ -94,6 +252,12 @@ uint32_t gu_draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
                  const uint8_t *mlb, const struct gu_piece *p, struct gu_stats *st)
 {
     uint32_t pixels = 0;
+    if(gu_oversize(p)) {                        /* over the unit's limits: drawn as the runs of its row, in order (gu_split) */
+        struct gu_piece run[GU_CUT_RUNS];
+        const int n = gu_split(p, run);
+        for(int i = 0; i < n; i++) pixels += gu_draw(fb, clip, v, mlb, &run[i], st);
+        return pixels;
+    }
     static struct su_fixed vt[GU_MAX_VERT];     /* the vertices in view space */
     const uint8_t *verts = p->obj + rd32(p->blk + 0x1C), *uvs = p->obj + rd32(p->blk + 0x24);
     int32_t nvert = rd32(p->blk + 0x10), ro = rd32(p->blk + 0x28 + 4 * p->row);

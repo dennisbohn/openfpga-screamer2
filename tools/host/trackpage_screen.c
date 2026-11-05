@@ -3,7 +3,7 @@
  * has the stand-ins of the hardware (the swap, the scripted buttons, the sounds) and the geometry unit's C model of pages3d_screen.c. What is tested here is what scripted buttons
  * make of the pages: the maps read from the ZIP and how many pieces each is (the six blocks over 512 vertices cut in two), the keys, the sounds, the frames a page takes (the fade
  * out is 13 frames, a move 13 frames before the next is taken), the results and the choices. The pages' pictures were compared with the running original's screenshots
- * (tools/trackmap.sh, docs/screamer2/menus.md) and the maps with the geometry unit's model in tools/s2/check_map_s2.sh.
+ * (tools/trackmap.sh, docs/screamer2/menus.md) and the cut of the maps' big blocks in tools/s2/check_cut_s2.sh.
  */
 #include "../s2trackpage.h"
 #include "../s2trackmap.h"
