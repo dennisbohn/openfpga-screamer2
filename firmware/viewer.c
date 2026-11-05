@@ -647,7 +647,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 }
             }
             if (press & KEY_X) *overlay = !*overlay;
-            if (press & KEY_UP && !race_replaying()) race_car(0)->manual = manual = !manual;
+            if (press & KEY_UP && !race_replaying() && !fin_frames) race_car(0)->manual = manual = !manual;     /* (only while racing: the end screen has no use for the button, and the choice would carry into the race again) */
         } else {
             if (press & (KEY_LEFT | KEY_RIGHT)) {
                 leave(n, mode, &st_all);
