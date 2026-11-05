@@ -867,16 +867,17 @@ static void check_end(const char *ref, const char *prefix)
 {
     static struct {
         const char *name, *race; struct s2_end_in in; int keep[6], right_at, last;
-    } runs[3] = {
+    } runs[4] = {
         { "A", "s2_track4_city", { 4, 3, 1, 85.5f, 29.5f, 2, 3 }, { 100, 200, 231, 302, 400, -1 }, 300, 400 },
         { "B", "s2_track1_village", { 1, 3, 3, 140.125f, 45.0f, 4, 2 }, { 100, 400, -1 }, -1, 400 },
         { "C", "s2_track5_snow", { 7, 1, 4, 99.0f, 0.0f, 1, 1 }, { 400, -1 }, -1, 400 },
+        { "D", "s2_track1_village", { 1, 3, 1, 78.25f, 26.5f, 1, 1, 0, 1 }, { 100, 400, -1 }, -1, 400 },          /* time attack's end: TOTAL .. LAP TIME, the lists of kind 2 */
     };
     static uint32_t pal[256];
     static uint8_t table[256];
     shot_prefix = prefix;
     fill_save(ref);
-    for (int r = 0; r < 3; r++) {
+    for (int r = 0; r < 4; r++) {
         char name[64];
         snprintf(name, sizeof name, "frame_%s", runs[r].race);
         uint8_t *base = ref_file(ref, name, "idx", S2G_PIC_BYTES);
@@ -922,6 +923,9 @@ static void check_end(const char *ref, const char *prefix)
     CHECK(b->time == 140.125f && b->team == 4 && b->car == 2, "track 1 row 8: %g", b->time);
     CHECK(c->time == 64.0f && s2save_row(S2S_KIND_ARCADE, 7, 0, 0)->time == 50.0f, "a slower time than the fifteenth goes nowhere (row 15 is %g)", c->time);
     CHECK(s2save_row(S2S_KIND_ARCADE, 7, S2S_LAP, 0)->time >= S2S_NO_TIME, "a run without a best lap writes none");
+    const struct s2save_row *ta = s2save_row(S2S_KIND_ATTACK, 1, 1, 1), *tl = s2save_row(S2S_KIND_ATTACK, 1, S2S_LAP, 0);
+    CHECK(ta->time == 78.25f && !strcmp(ta->name, "MIL") && ta->team == 1 && ta->car == 1 && s2save_row(S2S_KIND_ATTACK, 1, 1, 0)->time == 77.7f, "time attack's total went into its list (%g)", ta->time);
+    CHECK(tl->time == 26.5f && s2save_row(S2S_KIND_ARCADE, 1, S2S_LAP, 0)->time != 26.5f, "time attack's best lap went into its lap list, not the arcade's (%g)", tl->time);
     /* a time equal to one in the list goes ahead of it (0x354cf: fcomp, ja): 83.01 against DDD and CCC (the later one went ahead of the first in
        rows.txt) of track 1's 3-lap list; the race's frames up to the choices (200 of them) are enough to put it in */
     struct s2_end_in tie = { 1, 3, 2, (float)83.01, 0.0f, 1, 1 };
@@ -941,7 +945,7 @@ static void check_end(const char *ref, const char *prefix)
     s2_best_get(1, 3, &total, &lap);
     s2_record_text(tx, &total);
     CHECK(!strcmp(tx, "01:20:50 AAA"), "BEST TIME text '%s'", tx);
-    printf("ui: end of the race: three runs of frames equal to the reference, ENTER, the best times and the loading screen's records checked\n");
+    printf("ui: end of the race: four runs of frames (the fourth is time attack's) equal to the reference, ENTER, the best times and the loading screen's records checked\n");
 }
 
 /* the start menu's two rows open the pages and take the settings back */
@@ -969,8 +973,8 @@ static void check_menu_hook(const char *prefix)
     s2save_set(S2S_PROFILE, 1);                                     /* (from here on a save that has been through the team pages) */
     s2menu_row = S2M_ROW_ARCADE;
     s2menu_load(&c);
-    /* six D from ARCADE to GAME SETTINGS, A; in the page D D B (laps 3 -> 5), A out (a cut); D to HI SCORES, A; A out; U U U to START RACE, A */
-    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:D 14:A 18:D 20:D 22:B 24:A 32:D 34:A 42:A 48:U 50:U 52:U 54:A");
+    /* seven D from ARCADE to GAME SETTINGS, A; in the page D D B (laps 3 -> 5), A out (a cut); D to HI SCORES, A; A out; U U U to START RACE, A */
+    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:D 14:D 16:A 20:D 22:D 24:B 26:A 34:D 36:A 44:A 50:U 52:U 54:U 56:A");
     begin_run(script, prefix);
     int r = s2menu_run(&c);
     CHECK(r == S2M_RACE, "the menu ended with %d", r);

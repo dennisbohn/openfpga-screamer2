@@ -81,8 +81,11 @@ int race_laps = 3;
 static struct s2car_state cars[RACE_CARS];
 static float race_clock;
 static int line_nodes = 36;
+int race_kind = RACE_NORMAL;
+static struct race_free free_state;
+const struct race_free *race_free_state(void) { return &free_state; }
 struct s2car_state *race_car(int i) { return &cars[i]; }
-int race_cars(void) { return RACE_CARS; }
+int race_cars(void) { return race_kind == RACE_NORMAL ? RACE_CARS : 1; }
 int race_line_nodes(void) { return line_nodes; }
 
 union word { int32_t i; uint32_t u; float f; };
@@ -120,6 +123,11 @@ void s2_best_get(int track, int laps, struct s2_record *total, struct s2_record 
     (void)laps;
     *total = (struct s2_record){ rec_total_now, "MIL" };
     *lap = (struct s2_record){ rec_lap_now, "MIL" };
+}
+void s2_best_get_kind(int kind, int track, int laps, struct s2_record *total, struct s2_record *lap)
+{
+    (void)kind;
+    s2_best_get(track, laps, total, lap);
 }
 
 /* track.c's camera frame (cam_frame), without its memory of the last angles */

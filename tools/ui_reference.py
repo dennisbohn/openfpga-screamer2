@@ -216,6 +216,8 @@ END_RUNS = [
     ("A", "s2_track4_city", dict(track=4, laps=3, place=1, time=85.5, best=29.5, team=2, car=3), [100, 200, 231, 302, 400], 300),
     ("B", "s2_track1_village", dict(track=1, laps=3, place=3, time=140.125, best=45.0, team=4, car=2), [100, 400], None),
     ("C", "s2_track5_snow", dict(track=7, laps=1, place=4, time=99.0, best=0.0, team=1, car=1), [400], None),
+    # time attack's end (0x48b4c, menus row 7): TOTAL, the time, LAP TIME and the best lap for four seconds, then the list of kind 2 (the three-lap totals)
+    ("D", "s2_track1_village", dict(track=1, laps=3, place=1, time=78.25, best=26.5, team=1, car=1, attack=1), [100, 400], None),
 ]
 
 
@@ -337,18 +339,26 @@ def pages(game, out, graf, game1, spr, fnt):
                 blink += 2
             c = Canvas()
             dk = bytearray(320 * 200)
-            if clock < 400:
+            kind = 2 if cfg.get("attack") else 1
+            if clock < 400 and kind == 2:
+                c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 60, gtxt[21])
+                c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 80, time_text(cfg["time"]))
+                c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 100, gtxt[38])
+                c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 120, time_text(cfg["best"] if cfg["best"] > 0 else 3599.999))
+            elif clock < 400:
                 if place == 1:
                     c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 70, gtxt[5])
                 c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 100, gtxt[place - 1] + " " + gtxt[4])
                 c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 130, time_text(cfg["time"]))
             else:
                 lst = 0 if cfg["laps"] == 1 else 1 if cfg["laps"] == 3 else 2 if cfg["laps"] == 5 else 3
+                if kind == 2:
+                    lst = 1                             # (time attack has only the three-lap totals)
                 if not recorded:
                     recorded = True
-                    rank = lists.add(1, track, lst, cfg["time"], "MIL", cfg["team"], cfg["car"])
+                    rank = lists.add(kind, track, lst, cfg["time"], "MIL", cfg["team"], cfg["car"])
                     if cfg["best"] > 0:
-                        lists.add(1, track, 4, cfg["best"], "MIL", cfg["team"], cfg["car"])
+                        lists.add(kind, track, 4, cfg["best"], "MIL", cfg["team"], cfg["car"])
                 if right_at is not None and j == right_at:
                     choice, blink = 1, 0x20
                 for y in range(180, 200):
@@ -364,7 +374,7 @@ def pages(game, out, graf, game1, spr, fnt):
                     c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 160 * k, 160, 184, gtxt[12 + k])
                 y0 = int(f32(80.0 - f32(12.0 * frac)))
                 c.clip_text, c.clip_spr = (0x51, 0x8C), (0x50, 0x8C)
-                rows = lists.rows(1, track, lst)
+                rows = lists.rows(kind, track, lst)
                 for n, i in enumerate(range(top, min(top + 6, 15))):
                     time, nm, team, car, _r = rows[i]
                     s = "\x01" + (" " if i < 9 else "") + str(i + 1) + ". " + nm + "      " + time_text(time)

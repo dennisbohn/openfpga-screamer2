@@ -111,6 +111,7 @@ void s2menu_load(struct s2_menu_cfg *c)
     c->laps = s2save_get(S2S_LAPS);
     c->skill = s2save_get(S2S_SKILL);
     c->manual = s2save_get(S2S_TRANS);
+    c->free_run = 0;                                        /* (time attack's choice is made every time) */
 }
 
 void s2menu_store(const struct s2_menu_cfg *c)

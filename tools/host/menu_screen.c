@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     int r = zip_open(&zip, 3, SCRATCH, SCRATCH_MAX);
     CHECK(r == ZIP_OK, "zip_open %d", r);
     int found = s2menu_init(&zip);
-    CHECK(found == 8, "texts read from LOCAL.DAT: %d of 8", found);
+    CHECK(found == 9, "texts read from LOCAL.DAT: %d of 9", found);
     static const char *const tracks[S2M_TRACKS] = { "ENGLAND", "COLUMBIA", "EGYPT", "CALIFORNIA", "FINLAND", "SWITZERLAND", "THE TUNNEL" };
     for (int k = 0; k < S2M_TRACKS; k++) CHECK(!strcmp(s2menu_track_name(k + 1), tracks[k]), "track %d is %s", k + 1, s2menu_track_name(k + 1));
     CHECK(!strcmp(s2menu_team_name(1), "CONDOR") && !strcmp(s2menu_team_name(4), "ZEUS"), "teams");
@@ -154,6 +154,14 @@ int main(int argc, char **argv)
     shot(argv[2], "champrow", &c, cursor);
     CHECK(press(&c, &cursor, KEY_B) == S2M_CHAMP && press(&c, &cursor, KEY_START) == S2M_CHAMP && press(&c, &cursor, KEY_A) == S2M_CHAMP,
           "B, Start and A on CHAMPIONSHIP go to the league pages");
+    press(&c, &cursor, KEY_DOWN);
+    CHECK(cursor == S2M_ROW_ATTACK, "down: the TIME ATTACK row");
+    press(&c, &cursor, KEY_LEFT);
+    press(&c, &cursor, KEY_RIGHT);
+    CHECK(c.track == 1 && c.laps == 1 && c.skill == 1, "left / right on TIME ATTACK change nothing");
+    shot(argv[2], "attackrow", &c, cursor);
+    CHECK(press(&c, &cursor, KEY_B) == S2M_ATTACK && press(&c, &cursor, KEY_START) == S2M_ATTACK && press(&c, &cursor, KEY_A) == S2M_ATTACK,
+          "B, Start and A on TIME ATTACK go to its pages");
     press(&c, &cursor, KEY_DOWN);
     CHECK(cursor == S2M_ROW_LAPS, "down: laps row");
     press(&c, &cursor, KEY_RIGHT);

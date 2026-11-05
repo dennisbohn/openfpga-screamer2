@@ -102,6 +102,26 @@ static uint32_t tkg_pal[256];
 #define Y0 36
 #define Y1 172
 
+static uint8_t only3d[S2G_PIC_BYTES];                           /* the map, the picture and the box's darkening, no text: what render() drew */
+
+/* the whole page as its own drawing makes it, with the arrows shown or not (the page's clock 0 or 64 hundredths): the text, banner and arrows are the pixels where it
+   differs from the map alone */
+static void page_full(const uint8_t *pic, int ta, int track, int a1, int arrows, int asking, int yes)
+{
+    struct blit_list *l = s2gfx_begin_on(0);
+    s2gfx_picture(l, pic);
+    if (ta) {
+        int pos = 0;
+        for (int i = 0; i < 7; i++) if (order[i] == track) pos = i;
+        struct ta p = { .cfg = 0, .cur = pos, .prev = pos, .n = 7, .t = 1.0f, .a1 = a1, .now = arrows ? 0 : 32, .t0 = 0, .fresh = 1 };
+        ta_draw(&p, l, 0);
+    } else {
+        struct lg p = { .league = 0, .race = 1, .track = track, .asking = asking, .yes = yes, .a1 = a1, .fresh = 1, .now = arrows ? 0 : 32 };
+        lg_draw(&p, l, 0);
+    }
+    s2gfx_flush();
+}
+
 static void render(const uint8_t *pic, int track, int a1)
 {
     struct blit_list *l = s2gfx_begin_on(0);
@@ -216,7 +236,7 @@ int main(int argc, char **argv)
         if (!lf || fscanf(lf, "%47s", labels[i]) != 1) labels[i][0] = 0;
     }
     if (lf) fclose(lf);
-    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0;
+    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0, sum2d_n = 0, sum2d_same = 0;
     for (int f = 0; f < nn; f++) {
         if (only && !strstr(names[f], only) && !strstr(labels[f], only)) continue;
         const int ta = !strncmp(labels[f], "ta_", 3), league = !strncmp(labels[f], "trackmap", 8);
@@ -249,6 +269,7 @@ int main(int argc, char **argv)
             }
         }
         if (!pic) { printf("%s (%s): palette is not the page's\n", names[f], labels[f]); continue; }
+        s2gfx_dark_table(pp, dark, 256);
         if (ta) {
             for (int n = 1; n <= 7; n++) {
                 const int d = banner_diff(pic, n);
@@ -270,6 +291,24 @@ int main(int argc, char **argv)
         render(pic, track, ba);
         int sil, inner, near, covered;
         outline(pic, &sil, &inner, &near, &covered);
+        memcpy(only3d, (const void *)FB(0), S2G_PIC_BYTES);
+        /* the 2D parts: the title, the banner, the texts and the arrows at the best of the two blink phases */
+        int best2d = -1, best_n = 0, best_arrows = 1;
+        for (int arrows = 1; arrows >= 0; arrows--) {
+            page_full(pic, ta, track, ba, arrows, 0, 0);
+            int n = 0, same = 0;
+            const volatile uint8_t *fb = FB(0);
+            for (int i = 0; i < S2G_PIC_BYTES; i++)
+                if (fb[i] != only3d[i]) {
+                    n++;
+                    same += fb[i] == frame_idx[i];
+                }
+            if (same > best2d) { best2d = same; best_n = n; best_arrows = arrows; }
+        }
+        sum2d_n += best_n;
+        sum2d_same += best2d;
+        printf("%s (%s): 2D parts (title, banner, texts, arrows %s): %d of %d pixels equal\n", names[f], labels[f], best_arrows ? "shown" : "hidden", best2d, best_n);
+        render(pic, track, ba);
         printf("%s (%s): track %d, angle %d: %d of %d map pixels differ (%d at the outline, %d inside, of those %d within a pixel)\n", names[f], labels[f], track, ba, best, covered, sil, inner, near);
         frames++;
         sum_cov += covered;
@@ -285,5 +324,6 @@ int main(int argc, char **argv)
     }
     printf("%d frames: of %d map pixels in the screenshots %.1f %% differ at the outline, %.1f %% inside (%.1f %% of the inside within a pixel of the screenshot's colour)\n", frames, sum_cov,
            sum_cov ? 100.0 * sum_sil / sum_cov : 0.0, sum_cov ? 100.0 * sum_in / sum_cov : 0.0, sum_in ? 100.0 * sum_near / sum_in : 0.0);
+    printf("2D parts of those frames: %d of %d pixels equal\n", sum2d_same, sum2d_n);
     return 0;
 }

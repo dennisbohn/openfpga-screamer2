@@ -228,7 +228,7 @@ static int car_key(void *self, uint32_t press)
         if (p->attack) s2sound_menu(SOUND_ATTACK_ENTER);
         if (!p->state) {
             p->state = 1;
-            p->t0 = p->now;
+            if (p->attack) p->t0 = p->now;
             return 0;
         }
         if (!p->attack) s2sound_menu(SOUND_TRANS);

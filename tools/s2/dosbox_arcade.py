@@ -156,7 +156,7 @@ def make_private(extra, **choice):
 # 0x119300) and entries (0x2c bytes from 0x130c58), the table of places the end screen makes, the standings the report keeps (12 bytes a car from 0x128a6c)
 DUMP = (
     [0x128a10, 0x128a14, 0x128a18, 0x128a1c, 0x128a20, 0x132494, 0x1324c4, 0x130c48, 0x130c4c, 0x130d10, 0x130d48, 0x1289ec]
-    + [0x119300 + 0xcc0 * i + o for i in range(4) for o in (0x4c, 0x4a8, 0xc30, 0xc38)]
+    + [0x119300 + 0xcc0 * i + o for i in range(4) for o in (0x4c, 0x4a8, 0xc30, 0xc38, 0xc40)]
     + [0x130c58 + 0x2c * i + o for i in range(4) for o in (0, 4, 8)]
     + [0x128a6c + 12 * i + o for i in range(4) for o in (0, 4, 8)]
     + list(range(0x132384, 0x1323c8, 4))
@@ -166,6 +166,10 @@ DUMP = (
 # the free run's text tables (0x132fc8 + 11 i: the left column, 0x133000 + 11 i: the right), the best lap's text, the gap message, the lap list timers
 FREE_BYTES = [(0x132fc8, 55), (0x133000, 55), (0x132fa4, 12), (0x132f98, 12), (0x13304c, 4), (0x133078, 4), (0x13307c, 4), (0x130d18, 4), (0x130d1c, 20)] + \
              [(0x119300 + 0xc38, 4), (0x119300 + 0xc3c, 4), (0x119300 + 0xc40, 4), (0x119300 + 0xc44, 20), (0x119300 + 0xc58, 20), (0x119300 + 0x4b0, 8), (0x119300 + 0x4a8, 8)]
+
+
+# time attack's lists (the totals of kind 2 for three laps, the best laps): 300 bytes a track in columns of 15 (times, names, replay numbers, teams, models), the files' track order
+TA_LISTS = [(0x12d388 + 0x4b0 * t, 300) for t in range(7)] + [(0x12f32c + 0x1068 + 0x12c * t, 300) for t in range(7)]
 
 
 class Mem:
@@ -257,6 +261,10 @@ def session(steps):
                     mem.race(work, 8)
                 else:
                     mem.finished()
+        elif st[0] == "T":                      # --timeattack: T<label> time attack's lists to bytes_<label>.txt
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.bytes_at(st[1:], work, TA_LISTS)
         elif st[0] == "B":                      # --timeattack: Bfree<label> the bytes of the free run's text tables to bytes_<label>.txt
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -469,7 +477,7 @@ def timeattack(which):
     """time attack against the running original (see the header): `which` is "" (all seven tracks open: TRACK SELECTION in every state, then the car page), "closed" (a new save: three
     tracks), "race" (England, one lap, the end screen) or "free" (the free run). The keys are the original's (ENTER 0x1c, ESC 0x01, the arrows extended)."""
     global work
-    work = os.path.join(root, "build", "check", "dosbox_ta")
+    work = os.path.join(root, "build", "check", "dosbox_ta" + ("_" + which if which else ""))
     atexit.register(drop_junctions)
     make_private(0 if which == "closed" else 4, team=0, car=1, name="MIL")
     # the attract sequence plays while the game's memory is looked for; ENTER leaves it for TEAM SELECTION, the name, the options room: RIGHT twice to the third station, TIME ATTACK
@@ -488,7 +496,7 @@ def timeattack(which):
         tracks = "Lta_0 r3,0.9 ke4d w1.2 Lta_1 r3,0.9 ke4d w1.2 Lta_2 r3,0.9 ke4d w1 Lta_2_more r3,0.9 ke4d w1 Lta_2_more2 r2,0.9 q"
     elif which == "race":
         tracks = ("Lta_0 r2,0.5 k1c w7 Lta_car0 r1,0.5 k1c w1.5 Lta_car1 r1,0.5 k1c w1.5 Lta_mode r1,0.5 k1c w2 Lta_loading r2,1.0 "
-                  "Xta Lta_race r3,1.5 Xfin w1.2 Lta_end_a r2,0.5 w1.8 Lta_end_b r2,0.5 w1 Dend w2 Lta_end_list r4,0.6 q")
+                  "Xta Lta_race r3,1.5 Xfin w1.2 Lta_end_a r2,0.5 w1.8 Lta_end_b r2,0.5 w1 Dend Tend w2 Lta_end_list r4,0.6 q")
     elif which == "free":
         tracks = ("Lta_0 r1,0.5 k1c w7 k1c w1.5 k1c w1.5 ke4d w0.8 Lta_mode_free r2,0.5 k1c w2 Lta_loading r2,1.0 "
                   "Xfree Lfree_1 r2,0.6 Bfree_1 w6 Lfree_2 r2,0.6 Bfree_2 w9 Lfree_3 r2,0.6 Bfree_3 w9 Lfree_4 r2,0.6 Bfree_4 w9 Lfree_5 r2,0.6 Bfree_5 w9 Lfree_6 r2,0.6 Bfree_6 "
