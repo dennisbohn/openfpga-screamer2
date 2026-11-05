@@ -177,7 +177,7 @@ static int load_track(struct zip *z, int n, const char **what)
     loaded.valid = 0;
     static struct s2_files f;
     static char gfx_name[24], data_name[24], env_name[24];
-    struct track_build_info info = { "", 0, 0, 0 };
+    struct track_build_info info = { "", 0, 0, 0, 0 };
     uint32_t t0 = rdcycle(), read_cycles = 0, read_bytes = 0, road_cycles = 0, image = 0;
     if (sim && slot_size(IMAGE_SLOT)) {
         if (!sim_image()) return *what = "the image", 0;
