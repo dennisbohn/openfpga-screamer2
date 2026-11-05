@@ -10,6 +10,10 @@ running original's own numbers (tools/s2/dosbox_anim.py), compared line by line.
         a row halved) and the comparison must fail
     dosbox_scenario <folder> <scenario.txt>
         the frames recorded in the running original (dosbox_anim.py) as a scenario
+    misc <game> <image> <track>
+        the track image's copy of MISC.MLB (the materials of the animated rows' meshes, in front of the MLB after the cars') against the container's own: every material
+        record the rows' meshes use (every face of every block at every level of detail, with the offset the builder moves it by) has the routine, the extents and every
+        frame's pixels of the original's record
     dosbox <game> <track> <folder> <states_c.txt>
         the firmware's states against the original's rows and object records of the recording (a row is seen at the clock of its frame or of the frames just before it, as the
         recording samples between the game's own steps)
@@ -125,6 +129,81 @@ def dosbox_frames(folder):
     return head, out
 
 
+def mlb_records(m):
+    """the material records of an .MLB: the table of 16-byte records up to the first texture record (make_track_s2.py's, the PC port's mlb_read)"""
+    end, k = len(m), 0
+    while (k + 1) * 16 <= end:
+        ro = struct.unpack_from("<i", m, 16 * k + 4)[0]
+        if ro > 0 and ro + 12 <= len(m) and ro < end:
+            end = ro
+        k += 1
+    return k
+
+
+def mesh_materials(x):
+    """the material offsets (from the mesh's own file) of every face of every block at the three levels of detail"""
+    i32 = lambda o: struct.unpack_from("<i", x, o)[0]
+    out = set()
+    for lvl in range(3):
+        for b in range(i32(0x14)):
+            blk = i32(0x18 + 4 * (b + 13 * lvl))
+            if blk <= 0:
+                continue
+            for r in range(16):
+                ro = i32(blk + 0x28 + 4 * r)
+                j = 0
+                while ro > 0 and struct.unpack_from("<H", x, blk + ro + 2 * j)[0] != 0xFFFF:
+                    fc = blk + struct.unpack_from("<H", x, blk + ro + 2 * j)[0]
+                    out.add(struct.unpack_from("<h", x, fc + 4)[0])
+                    j += 1
+    return out
+
+
+def check_misc(game, image, track):
+    """the report of the `misc` mode: (materials checked, frames checked) or raises"""
+    import datfile
+    img = open(image, "rb").read()
+    mlb_off, = struct.unpack_from("<I", img, 8)
+    g = datfile.read(os.path.join(game, "GFX", "MAP%dH01.DAT" % track))
+    misc = datfile.extract(g, "MISC.MLB")
+    nmisc = mlb_records(misc)
+    rec = lambda m, k: struct.unpack_from("<4i", m, 16 * k)
+    total = (mlb_off - 0x100) // 16
+    start = None
+    for i in range(total - nmisc, -1, -1):                      # the last place where MISC's records are (a routine and the extents each)
+        if all(rec(img[0x100:], i + k)[0::2][0] == rec(misc, k)[0] and rec(img[0x100:], i + k)[2:] == rec(misc, k)[2:] for k in range(nmisc)):
+            start = i
+            break
+    assert start is not None, "MISC.MLB's records are not in the image"
+    delta = 0x100 + 16 * start - mlb_off
+    rows, _ = ar.load(game, track)
+    mlb = img[mlb_off:]
+    names = sorted({r["name"].upper() for r in rows if r["name"][0] != "@"})
+    n_mat = n_fr = 0
+    for nm in names:
+        x = datfile.extract(g, nm + ".3DX")
+        for m in sorted(mesh_materials(x)):
+            k = m // 16
+            assert m % 16 == 0 and 0 <= k < nmisc, (nm, m)
+            a, b = rec(misc, k), rec(img[0x100:], start + k)
+            assert (a[0], a[2], a[3]) == (b[0], b[2], b[3]), (nm, m, a, b)
+            n_mat += 1
+            if a[1] <= 0:                                       # a flat colour: no texture
+                assert b[1] == a[1], (nm, m)
+                continue
+            frames = struct.unpack_from("<i", misc, a[1])[0]
+            frames = frames & 0xFFFF if frames > 0 else 1
+            assert struct.unpack_from("<i", mlb, b[1])[0] == struct.unpack_from("<i", misc, a[1])[0], (nm, m)
+            for f in range(frames):
+                po = struct.unpack_from("<I", misc, a[1] + 8 + 4 * f)[0]
+                pi = struct.unpack_from("<I", mlb, b[1] + 8 + 4 * f)[0]
+                for row in range(a[3]):
+                    assert mlb[pi + 256 * row:pi + 256 * row + a[2]] == misc[po + 256 * row:po + 256 * row + a[2]], (nm, m, f, row)
+                n_fr += 1
+    print("track %d: MISC.MLB's %d records in the image at record %d (the faces move by %d), the %d materials of %s with their %d frames equal the container's" %
+          (track, nmisc, start, delta, n_mat, " ".join(names), n_fr))
+
+
 def main():
     cmd = sys.argv[1]
     if cmd == "scenario":
@@ -148,6 +227,8 @@ def main():
         for f in firsts:
             print("   ", f)
         sys.exit(0 if (bad > 0) == negative else 1)
+    elif cmd == "misc":
+        check_misc(sys.argv[2], sys.argv[3], int(sys.argv[4]))
     elif cmd == "dosbox_scenario":
         _, fr = dosbox_frames(sys.argv[2])
         open(sys.argv[3], "w").write("\n".join("F %.9f %d %d %d" % f[:4] for f in fr) + "\n")

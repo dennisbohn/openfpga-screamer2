@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     snprintf(name, sizeof name, "DATA/MAP%d.DAT", track);
     uint8_t *data = slurp(argv[1], name, &data_n);
     static uint8_t scratch[65536] __attribute__((aligned(4)));
-    int rows = s2anim_load(track, gfx, gfx_n, data, data_n, scratch, sizeof scratch);
+    int rows = s2anim_load(track, gfx, gfx_n, data, data_n, -4096, scratch, sizeof scratch);
     fprintf(stderr, "track %d: %d rows\n", track, rows);
     s2anim_begin();
     char line[256];

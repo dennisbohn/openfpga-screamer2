@@ -211,7 +211,7 @@ static int load_track(struct zip *z, int n, const char **what)
             return 0;
         }
         image = size;
-        s2anim_load(n, GFX_MEM, f.gfx_size, DATA_MEM, f.data_size, SCRATCH_MEM, SCRATCH_MAX);     /* the animated scenery: rows, paths and meshes, from the containers still there */
+        s2anim_load(n, GFX_MEM, f.gfx_size, DATA_MEM, f.data_size, info.misc_delta, SCRATCH_MEM, SCRATCH_MAX);     /* the animated scenery: rows, paths and meshes, from the containers still there */
         while (!(MEM_STATUS & MEM_WRITES_IDLE))     /* (the meshes in the SDRAM for the geometry unit) */
             ;
     }

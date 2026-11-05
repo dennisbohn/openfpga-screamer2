@@ -4,6 +4,7 @@
 #   - tools/s2/anim_ref.py, an independent reading of the original's routines (STARTL.EXE 0x30ec2, 0x31060, 0x2cee4, 0x126ad, 0x129d5) in double precision: a tour of the player
 #     over every track's rows, three laps of 20,000 frames, shown / heard equal, places and angles within 1 (a truncation falling the other way in float); a negative control
 #     (the same comparison with a deliberately wrong reach) must fail;
+#   - the track image's copy of MISC.MLB (the materials of the animated meshes, in front of the MLB: track_build_s2()) against the container's: tools/s2/check_anim_s2.py misc;
 #   - the running original's own numbers, if a recording of dosbox_anim.py is there (build/check/dosbox_anim_t<n>/frames.jsonl): its rows and object records frame by frame.
 # Usage: tools/s2/check_anim_s2.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2" (the unzipped game)
 # Everything it writes stays in build/s2/ (the states hold the game's numbers: never commit them).
@@ -19,6 +20,10 @@ py=python3
 chk="$root/tools/s2/check_anim_s2.py"
 for t in 1 2 3 4 5 6 7; do
     "$py" -I "$chk" scenario "$game" $t "$out/anim_scn_t$t.txt" "$out/anim_exp_t$t.txt"
+done
+for t in 1 2 3 4 5 6 7; do
+    "$py" -I "$root/tools/s2/make_track_s2.py" "$game" $t "$out/anim_image_t$t.bin" > /dev/null
+    "$py" -I "$chk" misc "$game" "$out/anim_image_t$t.bin" $t
 done
 dos=""
 for t in 1 2 3 4 5 6 7; do
@@ -38,7 +43,8 @@ else
 fi
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -v "$mount:/work" -v "$game_mount:/game:ro" -w /work --entrypoint sh "$image" -c "
     gcc -O2 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover \
-        firmware/s2anim.c firmware/s2params.c firmware/dat.c tools/s2/check_anim_s2.c -o build/s2/check_anim -lm &&
+        firmware/s2anim.c firmware/s2params.c firmware/dat.c firmware/track_build.c firmware/s2env.c firmware/tb_mmp.c firmware/tb_spl.c firmware/tb_gfx.c \
+        firmware/tb_hud.c firmware/crc32.c tools/s2/check_anim_s2.c -o build/s2/check_anim -lm &&
     for t in 1 2 3 4 5 6 7; do build/s2/check_anim /game \$t < build/s2/anim_scn_t\$t.txt > build/s2/anim_c_t\$t.txt 2> build/s2/anim_c_t\$t.err || exit 1; done &&
     for t in $dos; do build/s2/check_anim /game \$t < build/s2/anim_dos_scn_t\$t.txt > build/s2/anim_dos_c_t\$t.txt 2> /dev/null || exit 1; done
 "

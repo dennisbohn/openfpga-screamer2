@@ -5,6 +5,7 @@
 #include "s2params.h"
 #include "car.h"
 #include "dat.h"
+#include "track_build.h"
 #include <math.h>
 #include <string.h>
 
@@ -162,7 +163,7 @@ static int row_names(const uint8_t *t, uint32_t size, char names[][12])
 }
 
 /* a row's mesh <NAME>.3DX out of the track's graphics container into the meshes' memory: its index, -1 if it is not there */
-static int mesh_of(const uint8_t *gfx, uint32_t gfx_size, const char *name, uint32_t *used)
+static int mesh_of(const uint8_t *gfx, uint32_t gfx_size, const char *name, int32_t misc_delta, uint32_t *used)
 {
     for(int k = 0; k < nmeshes; k++)
         if(!strcmp(meshes[k].name, name)) return k;
@@ -176,6 +177,7 @@ static int mesh_of(const uint8_t *gfx, uint32_t gfx_size, const char *name, uint
         if(file[i] >= 'a' && file[i] <= 'z') file[i] = (char)(file[i] - 32);
     if(!dat_find(gfx, gfx_size, file, &e) || e.size < 0x100 || *used + ((e.size + 3) & ~3u) > MESH_BYTES) return -1;
     if(dat_extract(gfx, gfx_size, &e, mesh_mem + *used, MESH_BYTES - *used) != e.size) return -1;
+    if(!misc_delta || !s2_faces_onto(mesh_mem + *used, e.size, misc_delta)) return -1;     /* its faces onto the image's copy of MISC.MLB's records */
     struct mesh *m = &meshes[nmeshes];
     m->file = mesh_mem + *used;
     m->radius = rd32(m->file);
@@ -185,7 +187,7 @@ static int mesh_of(const uint8_t *gfx, uint32_t gfx_size, const char *name, uint
     return nmeshes++;
 }
 
-int s2anim_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t *data, uint32_t data_size, uint8_t *scratch, uint32_t cap)
+int s2anim_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t *data, uint32_t data_size, int32_t misc_delta, uint8_t *scratch, uint32_t cap)
 {
     char file[16] = "MAP0DAT.DTR";
     struct dat_entry e;
@@ -222,7 +224,7 @@ int s2anim_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t 
         r->sample = (int)w[7 * i + 6];
         r->mesh = -1;
         if(r->name[0] != '@') {
-            r->mesh = (int8_t)mesh_of(gfx, gfx_size, r->name, &used);
+            r->mesh = (int8_t)mesh_of(gfx, gfx_size, r->name, misc_delta, &used);
             if(r->mesh < 0) r->path = -1;           /* an object that cannot be drawn is not run */
         }
     }

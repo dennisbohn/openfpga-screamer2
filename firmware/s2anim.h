@@ -23,9 +23,10 @@
 #define S2ANIM_SAMPLE_BASE 0x40         /* the numbers of AMBIENT<n>.DTR's samples */
 
 /* Track `track`'s rows, paths and meshes from the game's containers: gfx = GFX/MAP<n>H01.DAT (the meshes), data = DATA/MAP<n>.DAT (MAP<n>DAT.DTR, MAP<n>.PTH), both as the
-   viewer read them whole. scratch (cap bytes, 4-aligned; at least 24 KB) is used while it runs. The rows exist as of the next s2anim_begin(). Returns the rows (0: none, or
-   the data is not there or beyond the limits; then the track has no animated scenery). */
-int s2anim_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t *data, uint32_t data_size, uint8_t *scratch, uint32_t cap);
+   viewer read them whole. The meshes' materials are the track's MISC.MLB's, which the image holds in front of its MLB: misc_delta is what the builder reports
+   (track_build_info.misc_delta; 0: the image has none, and no mesh can be drawn). scratch (cap bytes, 4-aligned; at least 24 KB) is used while it runs. The rows exist as of the
+   next s2anim_begin(). Returns the rows (0: none, or the data is not there or beyond the limits; then the track has no animated scenery). */
+int s2anim_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t *data, uint32_t data_size, int32_t misc_delta, uint8_t *scratch, uint32_t cap);
 
 /* A race begins: the rows as the original sets them up (0x31060): each at the start of its path, the ones that start by the player's coming near not started */
 void s2anim_begin(void);
