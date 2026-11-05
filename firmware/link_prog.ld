@@ -35,7 +35,6 @@ SECTIONS
         *main.o(.text .text.*)
         . = . + CODE_PAD2;          /* (0; tools/fw.sh CODE_PAD2=n: the code after main.c moves n bytes, hw_piece against the track's code) */
         *(.text .text.*)
-        *(.late_text)               /* functions added to files in front of the frame's code, placed after everything so that they move nothing (__attribute__((section(".late_text")))) */
     } > SDRAM
 
     .rodata : {
