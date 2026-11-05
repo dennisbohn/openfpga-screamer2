@@ -34,6 +34,7 @@
 #include "trackmem.h"
 #include "music.h"
 #include "s2hud.h"
+#include "s2fx.h"
 #include "prof.h"
 #include <string.h>
 
@@ -329,6 +330,7 @@ static int race_start(int n, float floor_z)
     int ok = race_init(n, floor_z);
     road_race_reset();
     race_car(0)->manual = manual;
+    s2fx_reset();                                       /* (no puffs left from the race before) */
     static int logged;                                  /* the log has 4 KB: the first start of the run tells how long it took */
     if (!ok) dlog_str("viewer: race_init failed\n");
     else if (!logged++) {
@@ -533,6 +535,8 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     track_mode = TRACK_HW;
     track_hw_piece = hw_piece;
     GU_MLB = (uint32_t)((uintptr_t)track_mlb() - SDRAM_BASE);
+    struct track_fx fx;
+    if (track_fx(&fx)) smg_load(fx.table);              /* the see-through table of the image (smg.h) */
     GU_INVAL = 1;
     RS_CTRL = 1;
     static float resume_s;                              /* where the road was left when only the cars changed */
@@ -675,7 +679,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
 
         /* the scene moves with real time: a video frame is 1/50 s whatever the frame took */
         struct track_cam cam;
-        static struct track_object objs[ROAD_CARS];
+        static struct track_object objs[ROAD_CARS + S2FX_MAX];     /* the cars, and in a race the shadows and the puffs (s2fx.h) */
         int nobj;
         uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
         uint32_t hud_steps = 1;                             /* the 20 ms steps this frame took, for the race screen's timers */
@@ -711,6 +715,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 }
             }
             if (cam_mode) s2cam_frame((const struct s2car_state *const *)rc, race_cars(), (float)hud_steps * STEP_S, &cam);
+            nobj += s2fx_objects(&cam, rc, race_cars(), objs + nobj, ROAD_CARS + S2FX_MAX - nobj);       /* (seen from the camera of this frame) */
             PF_ADD(PF_SCENE, pf); PF_SET(pf);
             s2snd_frame(&cam);                          /* the race's sound (s2sound.h) */
             PF_ADD(PF_SOUND, pf);
@@ -771,6 +776,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             else race_step_others(race_pending);
             others_cycles = rdcycle() - t_o + others_in_scene;
             tl_mark(TL_OTHERS);                         /* (the timeline: the computers' steps after the scene, not a wait) */
+            struct s2car_state *fc[RACE_CARS];          /* the puffs of the steps just taken, from the cars as they stand now (s2fx.h; they show in the next frame) */
+            for (int i = 0; i < race_cars(); i++) fc[i] = race_car(i);
+            s2fx_update(fc, race_cars(), (int)hud_steps, race_steps() * 2, s2cam_get_view() == S2CAM_BACK ? s2cam_get_follow() : -1);
         }
         const uint32_t t_wait = rdcycle();
         while (RS_DRAW & RS_BUSY)
