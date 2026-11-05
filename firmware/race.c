@@ -209,6 +209,7 @@ static struct {
     float skills[3][7];                                 /* MISC.DTR's SKILLS: the pace taken off a computer's car */
     int skills_ok;
     int kind, slot;                                     /* the kind of race (race_kind), the side the player took (time attack) */
+    int replay, stopped;                                /* the race is the replay of the recorded one (race_replay); it was ended before its end (race_replay_stop) */
     const struct s2gh_head *ghost;                      /* time attack: the run being raced, 0 for none */
     uint32_t gsteps;                                    /* the ghost's steps taken: its own count, so that a frame of several steps does not move it */
     float gclock;                                       /* ... and its own clock (the grid's hold ends at 3 s as the player's does) */
@@ -222,6 +223,8 @@ static struct {
 } R;
 
 struct s2_pick race_grid[RACE_CARS] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } };
+int race_replay;
+static int rec_manual0;                                 /* the gearbox the player's car was set up with in the race being recorded (its first gear depends on it) */
 int race_laps = RACE_LAPS;
 int race_level = 1;
 int race_kind = RACE_NORMAL;
@@ -637,6 +640,9 @@ int race_init(int track, float floor_z)
     R.clock = 0.0f;
     R.steps = 0;
     R.kind = race_kind;
+    R.replay = race_replay && R.kind == RACE_NORMAL && s2gh_rec_steps() > 0 && !s2gh_rec_full();     /* (the recording of the race just run is the one to run again) */
+    race_replay = 0;
+    R.stopped = 0;
     R.ghost = race_kind == RACE_ATTACK ? race_ghost : 0;
     R.gsteps = 0;
     R.gclock = 0.0f;
@@ -647,6 +653,8 @@ int race_init(int track, float floor_z)
     /* four cars on the grid, or in time attack the player's and the ghost's side by side, or the free run's one */
     const int ncars = R.kind == RACE_NORMAL ? RACE_CARS : R.ghost ? 2 : 1;
     R.slot = R.kind == RACE_ATTACK ? (R.ghost ? 1 - R.ghost->slot : 1) : 0;     /* (0x339e7: car i of n takes place n - 1 - i; the player the other side than the kept run) */
+    if(R.replay) R.car[0].manual = rec_manual0;
+    else if(R.kind == RACE_NORMAL) rec_manual0 = R.car[0].manual;
     for(int i = 0; i < ncars; i++) {
         R.team[i] = race_grid[i].team - 1;              /* the player's team and car, then the computers' (the physics counts from 0) */
         R.model[i] = race_grid[i].car - 1;
@@ -681,7 +689,7 @@ int race_init(int track, float floor_z)
         FR.list_left = 0.0f;
         FR.msg_left = 0.0f;
     }
-    if(R.kind == RACE_ATTACK) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages);
+    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages);
     return 1;
 }
 
@@ -712,6 +720,14 @@ static void human_step(int i, const struct s2car_input *in, int running)
 void race_step_player(const struct s2car_input *in)
 {
     PF_VAR(pf);
+    if(R.stopped) return;                               /* (a replay ended by the player: the race's frames are no longer run) */
+    struct s2car_input replayed;
+    if(R.replay) {                                      /* the recorded race's controls, by the step: what the player does now is not asked */
+        int manual = R.car[0].manual;
+        replayed = R.steps < s2gh_rec_steps() ? s2gh_unpack(s2gh_rec_data()[R.steps], &manual) : (struct s2car_input){ 0 };
+        R.car[0].manual = manual;
+        in = &replayed;
+    }
     R.clock += DT;
     places_and_pace();
     PF_ADD(PF_PLACES, pf);
@@ -720,7 +736,7 @@ void race_step_player(const struct s2car_input *in)
         for(int i = 0; i < R.n; i++) if(R.kind == RACE_NORMAL || i == 0) R.car[i].hold = 0;
     }
     struct s2car_state *c = &R.car[0];
-    if(R.kind == RACE_ATTACK && !(I(c, 0x4c) & 1)) s2gh_rec_step(in, c->manual);        /* up to the step in which he has done his laps */
+    if((R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay)) && !(I(c, 0x4c) & 1)) s2gh_rec_step(in, c->manual);        /* up to the step in which he has done his laps */
     human_step(0, in, R.running);
     if(R.kind == RACE_FREE) free_frame();
     R.steps++;
@@ -752,7 +768,7 @@ static struct { uint32_t left; int stage; } others;
 
 void race_others_begin(uint32_t count)
 {
-    others.left = count;
+    others.left = R.stopped ? 0 : count;
     others.stage = 1;
 }
 
@@ -807,6 +823,26 @@ void race_step(const struct s2car_input *in)
 {
     race_step_player(in);
     race_step_others(1);
+}
+
+int race_replay_ok(void)
+{
+    return R.n > 0 && R.kind == RACE_NORMAL && s2gh_rec_steps() > 0 && !s2gh_rec_full() && (I(&R.car[0], 0x4c) & 1);
+}
+
+int race_replaying(void)
+{
+    return R.replay;
+}
+
+/* ESC in a replay (0x2d7c0): the rest of it is not run and the player's car is done; unless it already is (the end screen is up) */
+void race_replay_stop(void)
+{
+    struct s2car_state *c = &R.car[0];
+    if(!R.replay || R.stopped || (I(c, 0x4c) & 1)) return;
+    R.stopped = 1;
+    I(c, 0x4c) |= 3;
+    F(c, 4) = 0.0f;
 }
 
 void race_get_results(struct race_result r[RACE_CARS])

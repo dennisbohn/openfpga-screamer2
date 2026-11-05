@@ -87,6 +87,16 @@ uint32_t s2gh_rec_steps(void)
     return rec.steps;
 }
 
+const uint8_t *s2gh_rec_data(void)
+{
+    return rec.data;
+}
+
+int s2gh_rec_full(void)
+{
+    return rec.full;
+}
+
 int s2gh_keep(float time, float best_lap, int laps)
 {
     if (rec.full || rec.steps == 0 || rec.track < 1 || rec.track > S2GH_TRACKS || !(time > 0.0f && time < 3600.0f)) return 0;
