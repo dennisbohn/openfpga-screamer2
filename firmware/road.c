@@ -170,17 +170,18 @@ int road_drive_scene(const struct s2car_state *s, struct track_cam *cam, struct 
     return 1;
 }
 
-/* the race's cars: car k is model AUTO(k+1) with the wheels as its physics has them */
-static const struct s2car_state *race_cars[ROAD_CARS];
+/* the race's cars: car k is model AUTO(k+1) with the wheels as its physics has them. Each car's pose is taken when the scene is
+   set up, not when the drawing comes to the car: the computers' steps run in the gaps of the drawing (viewer.c, race_others_slice),
+   and a car whose blocks were made after its step was one step ahead of one made before it, which it was on some frames and not on
+   others (by when the geometry unit's buffer happened to fill): the nearest computer's car stood still for a frame and then jumped two steps. */
+static struct car_look race_looks[ROAD_CARS];
 
 static int race_make(int id, const struct track_cam *cam, struct track_object *ob)
 {
     static struct track_block rblocks[ROAD_CARS][CAR_BLOCKS];
-    struct car_look lk;
     int nm;
     track_models(&nm);
-    s2car_look(race_cars[id], &lk);
-    return car_draw(nm ? id % nm : 0, &lk, cam, rblocks[id], ob);
+    return car_draw(nm ? id % nm : 0, &race_looks[id], cam, rblocks[id], ob);
 }
 
 int road_race_scene(struct s2car_state *const *cars, int n, struct track_cam *cam, struct track_object *objs)
@@ -188,7 +189,7 @@ int road_race_scene(struct s2car_state *const *cars, int n, struct track_cam *ca
     s2car_camera(cars[0], cam);
     for(int k = 0; k < n && k < ROAD_CARS; k++) {
         const struct s2car_state *s = cars[k];
-        race_cars[k] = s;
+        s2car_look(s, &race_looks[k]);
         objs[k] = (struct track_object){ s->pos[0], s->pos[1], s->pos[2], 1200.0f, 0, 0, race_make, k, 0, 0, 0 };
     }
     return n < ROAD_CARS ? n : ROAD_CARS;

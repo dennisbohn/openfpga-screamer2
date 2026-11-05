@@ -42,5 +42,6 @@ struct s2car_state;
 int road_drive_scene(const struct s2car_state *s, struct track_cam *cam, struct track_object *obj);
 
 /* The race's scene: the camera of car 0 (the player's) and the n cars (at most ROAD_CARS) as objects, car k the model
-   AUTO(k+1). The states must stay where they are until the frame is drawn. Returns the number of objects. */
+   AUTO(k+1), each as it is now: the poses are copied here, so a car's state may change while the frame is drawn (the computers'
+   steps in race.h's slices). Returns the number of objects. */
 int road_race_scene(struct s2car_state *const *cars, int n, struct track_cam *cam, struct track_object *objs);

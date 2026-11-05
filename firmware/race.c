@@ -607,8 +607,8 @@ void race_step_player(const struct s2car_input *in)
 
 /* the second half of `count` steps: the three computer cars (each step's physics and driver), the cars touching, the cars
    off the road. The viewer runs it while the pieces are handed to the hardware and the rasterizer finishes the picture: the
-   computers' cars are drawn from the step before or the one just taken, a 20 ms lag nobody sees, and their physics costs the
-   frame no time where the hardware is the bound. In slices (one car's step, or the rest of a step) so that the viewer can run
+   computers' cars are drawn from the step before (road_race_scene copies the poses before the first slice), a 20 ms lag nobody sees, and their
+   physics costs the frame no time where the hardware is the bound. In slices (one car's step, or the rest of a step) so that the viewer can run
    them while the geometry unit is behind (race_others_slice); the order of the steps is the same as in one go. */
 static struct { uint32_t left; int stage; } others;
 
