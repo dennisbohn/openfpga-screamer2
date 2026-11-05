@@ -19,6 +19,7 @@
 #include "race.h"
 #include "s2teams.h"
 #include "s2sound.h"
+#include "s2anim.h"
 #include "s2menu.h"
 #include "s2gfx.h"
 #include "s2load.h"
@@ -210,6 +211,9 @@ static int load_track(struct zip *z, int n, const char **what)
             return 0;
         }
         image = size;
+        s2anim_load(n, GFX_MEM, f.gfx_size, DATA_MEM, f.data_size, SCRATCH_MEM, SCRATCH_MAX);     /* the animated scenery: rows, paths and meshes, from the containers still there */
+        while (!(MEM_STATUS & MEM_WRITES_IDLE))     /* (the meshes in the SDRAM for the geometry unit) */
+            ;
     }
     /* (no check of the image's block CRC-32s here: the native check of the build has them, tools/s2/check_track_build_s2.sh) */
     int placements = track_init();
@@ -336,6 +340,7 @@ static int race_start(int n, float floor_z)
         dlog_dec((int32_t)((rdcycle() - t0) / MS_CYCLES));
         dlog_str(" ms\n");
     }
+    if (ok) s2anim_begin();                             /* the animated scenery at the start of its paths */
     if (ok) s2snd_race_start(n);                        /* (after the timing: the music's first fill takes 170 ms) */
     if (ok) s2hud_begin(n);
     if (ok) {                                           /* the camera: the player's chase camera, or in a replay the trackside cameras (0x2e1f3: a replay begins in view 1) */
@@ -675,7 +680,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
 
         /* the scene moves with real time: a video frame is 1/50 s whatever the frame took */
         struct track_cam cam;
-        static struct track_object objs[ROAD_CARS];
+        static struct track_object objs[ROAD_CARS + S2ANIM_OBJECTS];     /* the cars, then the track's animated scenery (s2anim.h) */
         int nobj;
         uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
         uint32_t hud_steps = 1;                             /* the 20 ms steps this frame took, for the race screen's timers */
@@ -700,6 +705,8 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
             PF_VAR(pf);
             nobj = road_race_scene(rc, race_cars(), &cam, objs);
+            s2anim_frame((float)race_steps() * STEP_S, (int)rc[0]->pos[0], (int)rc[0]->pos[1], (int32_t)rc[0]->rec[0x4A8 / 4]);       /* the race clock is the steps run (0x13335c) */
+            nobj += s2anim_objects(objs + nobj, S2ANIM_OBJECTS);
             if (!cut_done && attack_mode != 2) {        /* the player has done his laps: the camera cuts to the trackside cameras, following his car (0x201ee; the free run has no end) */
                 struct race_hud hc;
                 race_get_hud(&hc);
