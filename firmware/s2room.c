@@ -36,6 +36,8 @@
 #include "frame.h"
 #include "dlog.h"
 #include "hw.h"
+#include "files.h"
+#include "trackmem.h"
 #include <math.h>
 #include <string.h>
 
@@ -59,7 +61,8 @@
 
 static int32_t mcm[2][S2ROOM_STATIONS][3];     /* [0] the places, [1] the points looked at */
 static int station;                            /* kept from one visit to the next */
-static int cached_team;                        /* the room in the track window (0: none) */
+static int cached_team;                        /* the room in the track window (0: none) ... */
+static uint8_t cached_head[0x100];             /* ... with the header its image has: a track built there since has another */
 
 const int32_t *s2room_station(int k, int aim)
 {
@@ -69,6 +72,14 @@ const int32_t *s2room_station(int k, int aim)
 void s2room_forget(void)
 {
     cached_team = 0;
+}
+
+/* the menu's room (s2menu_room): the memory of the viewer's track window, and the viewer told that its image is gone */
+int s2room_menu(const struct s2_menu_cfg *c)
+{
+    static const struct s2room_mem mem = { GFX_MEM, GFX_MAX, (uint8_t *)(uintptr_t)TEX_BASE, TEX_MAX, SCRATCH_MEM, SCRATCH_MAX };
+    loaded.valid = 0;                                   /* (what the window held is gone: time attack builds its track again) */
+    return s2room_run(files_zip(), &mem, c->team);
 }
 
 /* ------------------------------------------------------------------------------------------------ the camera */
@@ -157,7 +168,7 @@ int s2room_stations(const uint8_t *file, uint32_t size)
 int s2room_load(struct zip *z, const struct s2room_mem *m, int team)
 {
     if (team < 1 || team > 4) return 0;
-    if (cached_team == team) return 1;
+    if (cached_team == team && !memcmp(cached_head, m->image, sizeof cached_head)) return 1;     /* (a track built in the window since has another header: a car section) */
     cached_team = 0;
     const uint32_t t0 = rdcycle();
     char name[24] = "GFX/MENU11.DAT";
@@ -191,6 +202,7 @@ int s2room_load(struct zip *z, const struct s2room_mem *m, int team)
         return 0;
     }
     cached_team = team;
+    memcpy(cached_head, m->image, sizeof cached_head);
     dlog_str("room: T");
     dlog_dec(team);
     dlog_char(' ');

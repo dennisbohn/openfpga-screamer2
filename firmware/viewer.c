@@ -30,28 +30,14 @@
 #include "s2ghost.h"
 #include "s2trackpage.h"
 #include "s2arcade.h"
-#include "s2room.h"
+#include "trackmem.h"
 #include "music.h"
 #include "s2hud.h"
 #include "prof.h"
 #include <string.h>
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
-   ZIP's entries read whole), the build's scratch up to the program */
-#define TEX_FILE    ((const volatile uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))   /* the image, up to 7 MB */
-#define TEX_MAX     0x700000u
-#define GFX_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2800000))                  /* GFX/MAPnH01.DAT */
-#define GFX_MAX     0x400000u
-#define CARS_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2C00000))                  /* the place for the cars' ZIP entries (s2teams.h) */
-#define CARS_MAX    0x100000u
-#define DATA_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D00000))                  /* DATA/MAPn.DAT */
-#define DATA_MAX    0x40000u
-#define ENV_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D40000))                  /* GFX/ENVPn01.DAT (up to 20 KB) */
-#define ENV_MAX     0x20000u
-#define BLOB_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))                  /* the grid's cars, unpacked */
-#define BLOB_ROOM   (RACE_CARS * S2_CAR_ROOM)                                         /* 0xE0000 */
-#define SCRATCH_MEM ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000 + BLOB_ROOM))
-#define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000u + BLOB_ROOM))
+   ZIP's entries read whole), the build's scratch up to the program: trackmem.h */
 
 /* the simulation's own slots (core/data.json does not have them; tools/sim.sh): a finished image offered
    instead of the build, the frames to run, the track */
@@ -178,12 +164,11 @@ static int sim_image(void)
    worked, else 0 and what stopped it in *what. The grid's cars are read and unpacked once (s2teams.h). The log
    gets one line: the bytes read and the milliseconds of each step. */
 static int load_cars = RACE_CARS;       /* the cars of the grid the image holds: four, time attack's two (the ghost) or one */
-static struct { int valid, track, cars; struct s2_pick pick[RACE_CARS]; } loaded;     /* what the image holds, so that time attack does not build it again */
+struct viewer_image loaded;      /* what the image holds, so that time attack does not build it again (trackmem.h) */
 
 static int load_track(struct zip *z, int n, const char **what)
 {
     loaded.valid = 0;
-    s2room_forget();                                    /* (the track takes the window the options room's image may be in) */
     static struct s2_files f;
     static char gfx_name[24], data_name[24], env_name[24];
     struct track_build_info info = { "", 0, 0, 0 };
@@ -831,14 +816,6 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     }
 }
 
-/* the options room (s2room.h), the menu s2menu_run() shows first: its image is built in the track window, where the next track's goes */
-static int room_menu(const struct s2_menu_cfg *c)
-{
-    static const struct s2room_mem mem = { GFX_MEM, GFX_MAX, (uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000), TEX_MAX, SCRATCH_MEM, SCRATCH_MAX };
-    loaded.valid = 0;                                   /* (what the window held is gone: time attack builds its track again) */
-    return s2room_run(files_zip(), &mem, c->team);
-}
-
 /* the menu's choices into the race (race.h): the grid, the laps, the computers' level, the gearbox */
 static struct s2_menu_cfg cfg;
 
@@ -1011,7 +988,6 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     ui_ready = !sim && s2gfx_init(z);                   /* (the simulation has no menus) */
 #endif
     s2hud_init(z);                                      /* the race screen (the simulation has it: its cost is measured there) */
-    if (ui_ready) s2menu_room = room_menu;              /* the options room is the menu (the list is the developer's, behind X) */
     for (;;) {
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
             int go = s2menu_run(&cfg);

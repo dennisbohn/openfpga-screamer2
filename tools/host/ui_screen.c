@@ -20,6 +20,8 @@
 #include "../s2save.h"
 #include "../s2menu.h"
 #include "../frame.h"
+#include "../files.h"
+#include "../trackmem.h"
 #include "../hw.h"
 #include "../blit.h"
 #include "../crc32.h"
@@ -32,6 +34,8 @@
 #include <string.h>
 
 static int failures;
+struct viewer_image loaded;             /* the viewer's record of its image (s2room_menu clears it) and its ZIP, for s2room.c's menu hook */
+struct zip *files_zip(void) { return s2gfx_zip(); }
 #define CHECK(cond, ...) do { if (!(cond)) { failures++; printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
 /* ------------------------------------------------------------------------------------------------ the hardware's stand-ins */
@@ -1013,6 +1017,7 @@ static void draw_banner(int track, uint8_t *out)
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
 {
     failures = 0;
+    s2menu_room = 0;                                                /* (the list is the menu in these tests: the options room's own tests set a stand-in) */
     *(volatile uint32_t *)0xF000000Cu = 0x1Fu;                      /* MEM_STATUS: all writes done, the SDRAM ready */
     IN_KEY = 0;
     dlog_init();

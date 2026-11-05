@@ -259,7 +259,7 @@ void s2menu_log(const struct s2_menu_cfg *c, int go)
 
 int s2menu_row = S2M_ROW_ARCADE;                           /* (the row stays for the next visit) */
 
-int (*s2menu_room)(const struct s2_menu_cfg *c);
+int (*s2menu_room)(const struct s2_menu_cfg *c) = s2room_menu;
 static int developer;                                       /* the list is the menu now (X in the room, or the room could not be shown) until Select goes back */
 
 /* One visit of the options room: what it ends with as the list's results (S2M_NONE: nothing to do here, the room or the list comes next) */

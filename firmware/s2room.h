@@ -39,8 +39,10 @@ struct s2room_mem {
    is this one (s2room_forget() says a track has taken the window since). 1, or 0 if a file is missing or the image does not fit (the log says which). The log has
    `room: T1 3,120,640 bytes in N ms`. */
 int s2room_load(struct zip *z, const struct s2room_mem *m, int team);
-/* the track window holds something else now (a track was built there) */
+/* the room in the window is not kept any more (the tests); a track built there since is noticed by the image's header */
 void s2room_forget(void);
+/* The menu's room: s2menu_room (s2menu.h) when the options room is the menu. The memory is the viewer's track window (trackmem.h), whose record of what its image holds it clears. */
+int s2room_menu(const struct s2_menu_cfg *c);
 
 /* The page until a choice is taken, ESC or X: S2ROOM_*; S2ROOM_FAIL if the room could not be built or the toolkit (s2gfx_init()) is not up (nothing is shown).
    The station the player was at stays for the next visit, as the original keeps it (0x132378: zero when the menu starts). */

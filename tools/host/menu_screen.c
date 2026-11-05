@@ -117,7 +117,11 @@ int main(int argc, char **argv)
     shot(argv[2], "first", &c, cursor);
     CHECK(press(&c, &cursor, KEY_B) == S2M_ARCADE && press(&c, &cursor, KEY_START) == S2M_ARCADE && press(&c, &cursor, KEY_A) == S2M_ARCADE,
           "B, Start and A on ARCADE go on to the pages");
+    int (*room)(const struct s2_menu_cfg *) = s2menu_room;          /* (the options room, when it is the menu: Select in the list goes back to it) */
+    s2menu_room = 0;
     CHECK(press(&c, &cursor, KEY_SELECT) == S2M_NONE && press(&c, &cursor, 0) == S2M_NONE, "Select and no key do nothing");
+    s2menu_room = room;
+    CHECK(room && press(&c, &cursor, KEY_SELECT) == S2M_ROOM && press(&c, &cursor, 0) == S2M_NONE, "Select goes back to the options room, no key does nothing");
 
     /* the player's wish: track 4 in two presses of the menu from START RACE (R is three tracks on, A starts) */
     cursor = S2M_ROW_RACE;

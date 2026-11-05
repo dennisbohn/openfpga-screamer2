@@ -86,8 +86,8 @@ void s2menu_log(const struct s2_menu_cfg *c, int go);
 /* The row the cursor is on (S2M_ROW_*), kept from one visit of the menu to the next; the tests set it */
 extern int s2menu_row;
 
-/* The options room (s2room.h), which the viewer sets when it can show one (the toolkit is up): s2menu_run() shows it first, as the original's menu does after TEAM SELECTION and ENTER
-   YOUR NAME. It returns an S2ROOM_* result (the choice of the station, ESC, X); without it (0, as in the PC tests of the list) the list below is the menu. The list stays as the
+/* The options room (s2room.h, s2room_menu() at the start): s2menu_run() shows it first, as the original's menu does after TEAM SELECTION and ENTER YOUR NAME. It returns an S2ROOM_*
+   result (the choice of the station, ESC, X, or a failure when the toolkit is not up or the room cannot be built: the list is the menu then); 0, as in the PC tests of the list, no room. The list stays as the
    developer's menu: X in the room opens it, Select in it goes back to the room, and so does a YES to EXIT SCREAMER 2? on TEAM SELECTION (where the original leaves the program). */
 extern int (*s2menu_room)(const struct s2_menu_cfg *c);
 
