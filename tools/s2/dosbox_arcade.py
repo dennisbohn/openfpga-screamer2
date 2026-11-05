@@ -57,7 +57,18 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wt.DWORD), ("k", KI), ("pad", ctypes.c_byte * 8)]
 
 
+keyed_pid = None                                # the one process that is ever sent keys (set where the script starts its DOSBox)
+
+
+def foreground_pid():
+    pid = wt.DWORD()
+    user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+    return pid.value
+
+
 def key(sc, up, ext=False):
+    if keyed_pid is not None and foreground_pid() != keyed_pid:     # keys go to the window in front: only ever to the DOSBox this script started
+        sys.exit("the window in front is not the DOSBox this script started (pid %d): no key is sent" % keyed_pid)
     i = INPUT(1, KI(0, sc, 8 | (2 if up else 0) | (1 if ext else 0), 0, 0))
     user32.SendInput(1, ctypes.byref(i), ctypes.sizeof(i))
 
@@ -69,19 +80,22 @@ def press(sc, ext=False):
     time.sleep(0.12)
 
 
-def dosbox_pids():
+def dosbox_pid(marker=None):
+    """the DOSBox this script started (the one whose command line has `marker`, its configuration file) or, without a marker, the first one: another DOSBox may be running (the
+    owner playing), which must never be sent keys or have its memory written"""
+    if marker:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='dosbox.exe'\" | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CommandLine }"],
+                             capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            if marker.replace("/", "\\").lower() in line.replace("/", "\\").lower():
+                return int(line.split()[0])
+        return None
     out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True).stdout
-    pids = []
     for line in out.splitlines():
         f = [x.strip('"') for x in line.split('","')]
         if len(f) > 1 and "dosbox" in f[0].lower():
-            pids.append(int(f[1]))
-    return pids
-
-
-def dosbox_pid(exclude=()):
-    """the first DOSBox process that is not in `exclude` (the ones that were running before ours: a player's own game is never touched)"""
-    return next((p for p in dosbox_pids() if p not in exclude), None)
+            return int(f[1])
+    return None
 
 
 def front(pid):
@@ -281,11 +295,14 @@ def session(steps):
     conf = os.path.join(work, "run.conf")
     open(conf, "w").write('[sdl]\nfullscreen=false\nwindowresolution=original\n[dosbox]\ncaptures=%s\n[autoexec]\n@echo off\nmount C "%s"\n'
                           'imgmount d "%s/GAME.DAT" -t iso\nc:\nSTARTL.EXE\nexit\n' % (work, private, game))
-    others = set(dosbox_pids())                 # (a DOSBox that was running already, a player's own, is neither used nor touched)
     p = subprocess.Popen([game + "/DOSBOX/dosbox.exe", "-conf", game + "/dosbox_screamer2.conf", "-conf", conf, "-noconsole"], cwd=work)
     atexit.register(p.kill)                     # (our own DOSBox goes with the script, also when a step fails)
     time.sleep(2)
-    pid = dosbox_pid(others) or p.pid
+    pid = dosbox_pid(conf) or p.pid             # (only the DOSBox this script started is keyed: found by its configuration file; if it is not there the script stops)
+    if p.poll() is not None:
+        sys.exit("the DOSBox this script started is not running: no key is sent")
+    global keyed_pid
+    keyed_pid = pid
     label, shots, times, mem = "", [], [], None
     for st in steps.split():
         if st[0] == "w":
@@ -536,11 +553,19 @@ def options(which):
     flying in, each station settled, each move), "pages" ENTER on each station (the fade out and the page it leads to) and ESC (back to TEAM SELECTION). Every step that samples
     the game's variables (W) writes poll_<label>.txt with each change of the camera record; the keys are the original's (ENTER 0x1c, ESC 0x01, the arrows extended)."""
     global work
-    work = os.path.join(root, "build", "check", "dosbox_room" + ("_" + which if which else ""))
+    team = int(which[4:]) if which.startswith("team") else 1
+    work = os.path.join(root, "build", "check", "dosbox_room" + ("_t%d" % team if team > 1 else "_pages" if which == "pages" else ""))
     atexit.register(drop_junctions)
-    make_private(0, team=0, car=1, name="MIL")
+    make_private(0, team=team - 1, car=1, name="MIL")
     boot = "w3 M k1c w6 k1c w6 "                # the attract sequence plays while the game's memory is found; ENTER: TEAM SELECTION, ENTER: ENTER YOUR NAME, then the third ENTER:
-    if which == "":
+    if which.startswith("team"):                # another team's room: each station settled, RIGHT to the next (the team is the private CHOICE.DAT's)
+        steps = boot + "k1c w4 "
+        for st in range(5):
+            steps += "Wst%d:2.5:sst%da@1:sst%db@2 " % (st, st, st)
+            if st < 4:
+                steps += "ke4d w4 "
+        steps += "q"
+    elif which == "":
         steps = boot + "k1c Wfly:9:sfly0@0.3:sfly1@0.9:sfly2@1.5:sfly3@2.2:sfly4@3.2:sfly5@5:sfly6@7.5 Zroom "
         for st in range(5):
             steps += "Wst%d:3:sst%da@1:sst%db@2.2 " % (st, st, st)
@@ -794,10 +819,10 @@ def main():
         pages3d()
         return
     if "--options" in sys.argv:
-        which = next((a for a in sys.argv if a in ("pages",)), "")
+        which = next((a for a in sys.argv if a in ("pages", "team2", "team3", "team4")), "")
         if "--check" not in sys.argv:
             options(which)
-        work = os.path.join(root, "build", "check", "dosbox_room" + ("_" + which if which else ""))
+        work = os.path.join(root, "build", "check", "dosbox_room" + ("_t" + which[4:] if which.startswith("team") else "_" + which if which else ""))
         print("%d screenshots in %s: compared by tools/room.sh" % (len(glob.glob(os.path.join(work, "*.png"))), work))
         return
     if "--timeattack" in sys.argv:
