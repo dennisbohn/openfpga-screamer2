@@ -4,6 +4,9 @@ running original's own numbers (tools/s2/dosbox_anim.py), compared line by line.
     scenario <game> <track> <scenario.txt> <expected.txt>
         a tour of the player over the track's rows (to the first place of each in turn, three laps, 20,000 frames of 20 ms) as lines "F <clock> <px> <py> <lap>", and the states
         anim_ref.py's reading gives: "F ..." then one "R <row> <shown> <heard> <x> <y> <height> <heading> <climb>" a row
+    limits <game> <track>
+        the data of the track against the firmware's limits (firmware/s2anim.h: 40 rows, 40 paths, 24 keys a channel, 512 keys in all, 8 meshes, 32 KB of meshes), and what each
+        mesh asks of the geometry unit (512 vertices, 1,024 faces a block): exit status 1 if one is over
     compare <game> <track> <states_c.txt> <expected.txt> [negative]
         the firmware's states (tools/s2/check_anim_s2.c) against the expected ones: shown and heard equal, the places within 1 (float against double, a truncation on the other
         side), the angles within 1 (2048ths of a turn); exit status 1 on a mismatch. With `negative` the expected states are made by a deliberately wrong rule (the reach of
@@ -211,6 +214,29 @@ def check_misc(game, image, track, negative=False):
           (track, nmisc, start, delta, n_mat, " ".join(names), n_fr))
 
 
+def check_limits(game, track):
+    import datfile
+    rows, paths = ar.load(game, track)
+    g = datfile.read(os.path.join(game, "GFX", "MAP%dH01.DAT" % track))
+    names = sorted({r["name"].upper() for r in rows if r["name"][0] != "@"})
+    keys = sum(len(ch) for p in paths.values() for ch in p)
+    most_keys = max((len(ch) for p in paths.values() for ch in p), default=0)
+    mesh_bytes, most_v, most_f = 0, 0, 0
+    for nm in names:
+        x = datfile.extract(g, nm + ".3DX")
+        mesh_bytes += (len(x) + 3) & ~3
+        for lvl in range(3):
+            for b in range(struct.unpack_from("<i", x, 0x14)[0]):
+                blk = struct.unpack_from("<i", x, 0x18 + 4 * (b + 13 * lvl))[0]
+                if blk > 0:
+                    most_v = max(most_v, struct.unpack_from("<i", x, blk + 0x10)[0])
+                    most_f = max(most_f, struct.unpack_from("<i", x, blk + 0x14)[0])
+    bad = len(rows) > 40 or len(paths) > 40 or most_keys > 24 or keys > 512 or len(names) > 8 or mesh_bytes > 32768 or most_v > 512 or most_f > 1024
+    print("track %d: %d rows, %d paths, at most %d keys a channel, %d keys, %d meshes %s of %d bytes, no block over %d vertices, %d faces%s" %
+          (track, len(rows), len(paths), most_keys, keys, len(names), " ".join(names), mesh_bytes, most_v, most_f, "  OVER A LIMIT" if bad else ""))
+    sys.exit(1 if bad else 0)
+
+
 def main():
     cmd = sys.argv[1]
     if cmd == "scenario":
@@ -234,6 +260,8 @@ def main():
         for f in firsts:
             print("   ", f)
         sys.exit(0 if (bad > 0) == negative else 1)
+    elif cmd == "limits":
+        check_limits(sys.argv[2], int(sys.argv[3]))
     elif cmd == "misc":
         try:
             check_misc(sys.argv[2], sys.argv[3], int(sys.argv[4]), len(sys.argv) > 5 and sys.argv[5] == "negative")

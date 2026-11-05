@@ -20,6 +20,7 @@ py=python3
 chk="$root/tools/s2/check_anim_s2.py"
 for t in 1 2 3 4 5 6 7; do
     "$py" -I "$chk" scenario "$game" $t "$out/anim_scn_t$t.txt" "$out/anim_exp_t$t.txt"
+    "$py" -I "$chk" limits "$game" $t
 done
 for t in 1 2 3 4 5 6 7; do
     "$py" -I "$root/tools/s2/make_track_s2.py" "$game" $t "$out/anim_image_t$t.bin" > /dev/null

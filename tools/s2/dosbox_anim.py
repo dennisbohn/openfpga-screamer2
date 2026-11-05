@@ -1,6 +1,7 @@
 """The tracks' animated scenery against the running original (docs/development.md "Animated scenery").
 
-Usage: python -I tools/s2/dosbox_anim.py <track 1..7> [seconds [shot seconds ...]]       (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2")
+Usage: python -I tools/s2/dosbox_anim.py <track 1..7> [seconds [shot seconds ...]] [n<row>,<distance>,<gap>,<count>[,<degrees>] ...]
+       python -I tools/s2/dosbox_anim.py <track 1..7> --voices <seconds>          (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2")
 
 Starts STARTL.EXE in the game folder's own DOSBox on a private copy of the game folder (tools/s2/dosbox_arcade.py make_private: build/dosgame, the data copied,
 never linked, the owner's game folder is only read) whose CHOICE.DAT has DETAIL LEVEL HIGH (the original has the animated rows at HIGH only: 0x3106d), three laps
@@ -10,7 +11,8 @@ the given seconds (default 120), records every frame of the game (the sample is 
 record's place and angles, the ANIMATIONS rows (0x126d5c, 0x4c bytes each, count at 0x126d58) and the engine's object record of each row that has one (the pointer at
 0x11da20 + 0x1c x the row's +0x28). Screenshots (Ctrl+F5, 320 x 200 raw palette indices) are taken at the given seconds after the recording began; their time is a
 line of the recording, so that the frame they show can be found. Output in build/check/dosbox_anim_t<n>/: frames.jsonl (never committed), the screenshots,
-labels.txt. tools/s2/check_anim_s2.sh reads it.
+labels.txt. tools/s2/check_anim_s2.sh reads it. --voices instead samples the game's sound manager every 100 ms for the given seconds into
+build/check/dosbox_voices_t<n>/voices.jsonl: its slot table (+0x6164), the last distances (+0x6064) and the driver's voice records (0xf0 bytes each), to see what a row's sound plays at.
 
 Only the DOSBox this script started is keyed and read (found by its configuration file); another one running (the owner playing) is never touched. The window must
 stay in front for the run (about 3 + the seconds recorded + 1 minutes). The captures go into build/check, not into the game folder.
