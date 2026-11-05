@@ -43,6 +43,8 @@ static struct blit_list *out = &list;           /* where the helpers below draw 
 static int fixed_top = -1, fixed_stale = 1;     /* `top` fixed was made for; the records changed since */
 static int ready, miles, position_x;                        /* miles: the unit's word begins with M (0x2ef4e): the speed shows as km/h / 1.6 */
 static const char *text[TEXTS];
+static int hud_view = 3, hud_follow;            /* the view the scene is drawn in and the car it follows (s2hud_view) */
+static uint8_t band_dark[256];                  /* the darkening table of the race's palette, for the replay's band */
 
 static struct {
     float speed, revs;                          /* the dial's numbers eased towards the car's (0x133098, 0x1330a0) */
@@ -111,6 +113,8 @@ void s2hud_begin(int track)
     struct s2_record total, lap;
     static uint8_t spl[8 + 56 * MAX_BENDS + 8];
     memset(&S, 0, sizeof S);
+    hud_view = 3;
+    hud_follow = 0;
     S.kind = race_kind;
     if (S.kind == RACE_ATTACK) s2_best_get_kind(S2S_KIND_ATTACK, track, 3, &total, &lap);       /* time attack: its own lists, three laps */
     else s2_best_get(track, race_laps, &total, &lap);
@@ -171,10 +175,11 @@ static void checkpoints(const struct s2car_state *const car[], int n)
 static void update(const struct s2car_state *const car[], int n, uint32_t steps, int finished)
 {
     const struct s2car_state *p = car[0];
+    const struct s2car_state *f = car[hud_follow < n ? hud_follow : 0];          /* (the dial shows the car the camera follows) */
     const float dt = (float)steps * 0.02f;
     float k = 1.0f;
     for (uint32_t i = 0; i < steps; i++) k *= 0.75f;            /* the table's row 0x32 at 50 pictures a second: 0.75 to the power of the pictures (0x315a4) */
-    const float speed = RF(p, 0x500) * 1.513f, revs = RF(p, 0x60) != 0.0f ? RF(p, 0xc78) / RF(p, 0x60) : 0.0f;
+    const float speed = RF(f, 0x500) * 1.513f, revs = RF(f, 0x60) != 0.0f ? RF(f, 0xc78) / RF(f, 0x60) : 0.0f;
     S.speed = (S.speed - speed) * k + speed;                    /* 0x111d6 */
     S.revs = (S.revs - revs) * k + revs;
     S.msg_left = S.msg_left > dt ? S.msg_left - dt : 0.0f;
@@ -330,7 +335,7 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
     update(car, n, steps, h.finished);
     blit_start(&list, (int)draw_buf);
     leader_mark(car, n, cam, view);
-    dial(car[0]);
+    if (hud_view != 1) dial(car[hud_follow < n ? hud_follow : 0]);          /* (the trackside cameras: no instrument, 0x46fea) */
     if (!h.finished && S.kind == RACE_FREE) {                   /* the free run: no lap block, no places; the lap's clock, the best lap and the list of the five markers */
         char t[24];
         const struct race_free *fr = race_free_state();
@@ -357,7 +362,7 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
             else txt_centred(FONT_QUICK, 1, -1, 0x23 + top, t);
         }
         if (S.best_left > 0.0f && ((int)(S.best_left * 2.0f) & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_BEST_LAP_NEW]);
-    } else if (!h.finished) {                                   /* (0x45cfb: none of the rest once the player has done his laps) */
+    } else if (!h.finished && hud_view != 1) {                  /* (0x45cfb: none of the rest once the player has done his laps, nor over the trackside cameras, 0x45d17) */
         char t[24], *q;
         if (fixed_stale || fixed_top != top) make_fixed(top);
         append_fixed((int)draw_buf);
@@ -382,7 +387,28 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
         if (S.best_left > 0.0f && ((int)(S.best_left * 2.0f) & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_BEST_LAP_NEW]);
         if (n > 1) bar_marks(car, n, BAR_Y + top);
     }
-    if (((int)S.wrong & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_WRONG_WAY]);
+    if (((int)S.wrong & 1) && hud_view != 1) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_WRONG_WAY]);
     if (h.count >= 0 && !h.finished) centred(SPR_LIGHTS + 3 - h.count, 60);
     hw_blit(&list);
+}
+
+void s2hud_view(int view, int follow)
+{
+    hud_view = view;
+    hud_follow = follow;
+}
+
+void s2hud_band_prepare(const uint32_t *pal)
+{
+    s2gfx_dark_table(pal, band_dark, 256);
+}
+
+/* the replay's band (0x4658c): the bottom 20 rows darkened (0x51868 at (0, 0xb4, 0x140, 0x14)), then the text at (10, 0xb4) in font 0, colour 1, space 2 */
+void s2hud_band(volatile uint8_t *fb, int buffer, const char *text)
+{
+    if (!ready) return;
+    struct blit_list *l = s2gfx_begin_on(buffer);
+    s2gfx_dark_fb(fb, 0, 0xb4, 320, 0x14, band_dark);
+    s2gfx_game_text(l, FONT_TITLE, 1, 2, 10, 0xb4, text);
+    s2gfx_flush();
 }

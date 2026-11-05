@@ -13,6 +13,11 @@
  * player's, CPU for the computers), the car's side view, its time and the points of its place (10 / 6 / 3 / 0), the rows by place; B or Start end
  * it. The player's time and best lap go into the championship's lists (S2S_KIND_LEAGUE) instead of the arcade's.
  *
+ * REPLAY (STARTL.EXE 0x47636, 0x48041: the choice is there when the race was recorded whole, 0x1330b4 / 0x1330d0, or is itself a replay, mode bit 0x100): the arcade's
+ * choices are REPLAY, RACE AGAIN and EXIT in thirds of the band (boxes of 106 from x 0, 106, 212), REPLAY first and lit; the championship's REPLAY and CONTINUE in
+ * halves. The end screen of the replay is the same screen: the times are not put into the lists again (0x353cb is not called in a replay) and the list is
+ * where the race's own screen left it (its row lit, scrolled), the choice starts on REPLAY again.
+ *
  * It draws into the back buffer of the race after the rasterizer is done (darkening what the race drew, then the blitter's text and sprites
  * of the toolkit, s2gfx.h) and costs the race frame nothing until the player has finished.
  */
@@ -36,15 +41,17 @@ struct s2_end_in {
     int team, car;                      /* his team 1 .. 4 and car 1 .. 5 (the files' numbering) */
     int league;                         /* 1: the championship's end: the four cars below are shown, CONTINUE is the only choice */
     int attack;                         /* 1: time attack's end (0x48b4c): TOTAL, the time, LAP TIME and the best lap for the first four seconds, the lists are time attack's */
+    int replay;                         /* 1: the race can be run again: REPLAY is the first choice (never in time attack) */
+    int replaying;                      /* 1: this race is a replay: nothing goes into the lists, the list keeps its row and its scroll */
     struct s2_end_car cars[4];
 };
 
-enum { S2END_NONE, S2END_AGAIN, S2END_EXIT, S2END_CONTINUE };
+enum { S2END_NONE, S2END_AGAIN, S2END_EXIT, S2END_CONTINUE, S2END_REPLAY };
 
 /* One frame of the end screen, drawn into framebuffer `buffer` (fb) of the race with its palette pal (256 x 0x00RRGGBB). fin_frames: the
    frames the player has been finished so far (0 on the first: the screen starts over, the table for darkening is made); vf: the video frame
    counter (the 16 bits of VID_FRAME, 50 a second: the clocks run by it); press: the buttons that went down in this frame. Returns
    S2END_AGAIN or S2END_EXIT once the player has chosen (the race again from the grid, the start menu), S2END_CONTINUE in the championship (the race
-   is over, on to the report), else S2END_NONE. */
+   is over, on to the report), S2END_REPLAY (the race run again from its recording), else S2END_NONE. */
 int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const struct s2_end_in *in, uint32_t fin_frames, uint32_t vf,
                 uint32_t press);

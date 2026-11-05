@@ -26,7 +26,7 @@
 static struct {
     int started;
     uint32_t last_vf, clock, blink;     /* the clocks in hundredths of a second */
-    int choice;                         /* 0 RACE AGAIN, 1 EXIT */
+    int choice;                         /* 0 RACE AGAIN, 1 EXIT; with a replay 0 REPLAY, 1 RACE AGAIN, 2 EXIT (the championship's: 0 REPLAY, 1 CONTINUE) */
     int kind;                           /* the lists' kind of game: S2S_KIND_ARCADE, S2S_KIND_LEAGUE, S2S_KIND_ATTACK */
     int recorded, rank;                 /* the times are in the lists; the row the total time took, -1 if none */
     int first;                          /* the first row of the list in view, and how far it is into the move to the next, 0 .. 1 */
@@ -87,9 +87,16 @@ static void congratulations(struct blit_list *l, const struct s2_end_in *in)
 static void choices(struct blit_list *l, const struct s2_end_in *in)
 {
     s2gfx_sprite_centred(l, s2gfx_banner(in->track), 4);
-    for (int k = 0; k < 2; k++) {
-        int lit = E.choice == k && (E.blink & BLINK_BIT);
-        s2gfx_text_boxed(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, 160 * k, 160, 184, s2gfx_line("RACE AGAIN", k, k ? "EXIT" : "RACE AGAIN"));
+    if (in->replay) {                   /* REPLAY, RACE AGAIN, EXIT in thirds: boxes of 106 from x 0, 106 and 212 (0x47a4f ..) */
+        for (int k = 0; k < 3; k++) {
+            int lit = E.choice == k && (E.blink & BLINK_BIT);
+            s2gfx_text_boxed(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, 106 * k, 106, 184, s2gfx_line("REPLAY", k, k == 0 ? "REPLAY" : k == 1 ? "RACE AGAIN" : "EXIT"));
+        }
+    } else {
+        for (int k = 0; k < 2; k++) {
+            int lit = E.choice == k && (E.blink & BLINK_BIT);
+            s2gfx_text_boxed(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, 160 * k, 160, 184, s2gfx_line("RACE AGAIN", k, k ? "EXIT" : "RACE AGAIN"));
+        }
     }
     int y0 = (int)(80.0f - 12.0f * E.frac), list = s2_laps_list(in->laps);
     s2gfx_clip(0x51, 0x8C, 0x50, 0x8C);
@@ -114,7 +121,14 @@ static void league_choices(struct blit_list *l, const struct s2_end_in *in)
     for (int i = 0; i < 4; i++) n += in->cars[i].done != 0;
     s2gfx_sprite_centred(l, s2gfx_banner(in->track), 4);
     const int lit = (E.blink & BLINK_BIT) != 0;
-    s2gfx_text_centred(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, 184, s2gfx_line("CONTINUE", 0, "CONTINUE"));
+    if (in->replay) {                   /* REPLAY and CONTINUE in halves (0x4849f ..) */
+        for (int k = 0; k < 2; k++) {
+            const int on = E.choice == k && lit;
+            s2gfx_text_boxed(l, on ? SMALL_HOT : SMALL, on ? HOT : WHITE, 2, 160 * k, 160, 184, k ? s2gfx_line("CONTINUE", 0, "CONTINUE") : s2gfx_line("REPLAY", 0, "REPLAY"));
+        }
+    } else {
+        s2gfx_text_centred(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, 184, s2gfx_line("CONTINUE", 0, "CONTINUE"));
+    }
     const int y0 = 81 - 5 * (n - 1);
     s2gfx_text(l, SMALL, WHITE, 2, 38, y0, s2gfx_line("CONTINUE", 1, "   NAME CAR   TIME    PTS"));
     for (int i = 0; i < 4; i++) {
@@ -143,12 +157,21 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
                 uint32_t press)
 {
     if (fin_frames == 0 || !E.started) {                /* the player has just finished */
+        const int again = in->replaying && E.started;   /* the replay's screen: the race's own left the list where it is (0x47790 does not start it over in a replay) */
+        const int rank = E.rank, first = E.first;
+        const float frac = E.frac;
         memset(&E, 0, sizeof E);
         E.started = 1;
         E.last_vf = vf;
         E.blink = BLINK_BIT;
         E.rank = -1;
         E.kind = in->league ? S2S_KIND_LEAGUE : in->attack ? S2S_KIND_ATTACK : S2S_KIND_ARCADE;
+        if (again) {
+            E.recorded = 1;
+            E.rank = rank;
+            E.first = first;
+            E.frac = frac;
+        }
         s2gfx_dark_table(pal, E.dark, 256);
     }
     uint32_t dvf = (vf - E.last_vf) & 0xFFFF;
@@ -161,7 +184,17 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
         congratulations(l, in);
     } else if (in->league) {
         if (!E.recorded) record(in);
-        if (press & S2PAGE_ENTER) result = S2END_CONTINUE;
+        if (in->replay) {
+            if ((press & KEY_LEFT) && E.choice > 0) {
+                E.choice--;
+                E.blink = BLINK_BIT;
+            }
+            if ((press & KEY_RIGHT) && E.choice < 1) {
+                E.choice++;
+                E.blink = BLINK_BIT;
+            }
+        }
+        if (press & S2PAGE_ENTER) result = in->replay && E.choice == 0 ? S2END_REPLAY : S2END_CONTINUE;
         int n = 0;
         for (int i = 0; i < 4; i++) n += in->cars[i].done != 0;
         s2gfx_dark_fb(fb, 0, 180, 320, 20, E.dark);
@@ -173,11 +206,14 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
             E.choice--;
             E.blink = BLINK_BIT;
         }
-        if ((press & KEY_RIGHT) && E.choice < 1) {
+        if ((press & KEY_RIGHT) && E.choice < (in->replay ? 2 : 1)) {
             E.choice++;
             E.blink = BLINK_BIT;
         }
-        if (press & S2PAGE_ENTER) result = E.choice ? S2END_EXIT : S2END_AGAIN;
+        if (press & S2PAGE_ENTER) {
+            const int k = in->replay ? E.choice : E.choice + 1;         /* (0x478d3: without a replay the choices count from RACE AGAIN) */
+            result = k == 0 ? S2END_REPLAY : k == 1 ? S2END_AGAIN : S2END_EXIT;
+        }
         s2gfx_dark_fb(fb, 0, 180, 320, 20, E.dark);     /* the band, then the list's box: 0x51868 works in words, so x 30 is 28 */
         s2gfx_dark_fb(fb, 30, 78, 260, 64, E.dark);
         choices(l, in);

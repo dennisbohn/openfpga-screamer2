@@ -28,3 +28,13 @@ void s2hud_begin(int track);
    down by (0, or 16 where the timing overlay's two lines are), so that both can be read. Builds the blitter list for the back buffer and
    hands it to the blitter, which draws it when the 3D units are done; the caller waits for the blitter (RS_DRAW & RS_BUSY) before the swap. */
 void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_t steps, int top);
+
+/* The view the scene is drawn in (s2cam.h: 1 the trackside cameras, 3 the chase camera, the default) and the car it follows: in view 1 the race screen shows no dial and none of
+   its texts or WRONG WAY (0x45d17, 0x463fc, 0x46fea), only the leader's mark, the start lights and the replay's band; the dial is that of the car followed. Reset by s2hud_begin(). */
+void s2hud_view(int view, int follow);
+
+/* The replay's band (0x4658c, while the player's car is still racing): the bottom 20 rows darkened and `text` ("TEAM - VIEW") in the big letters at (10, 180). Drawn after the
+   rasterizer is done, into the framebuffer fb (buffer is its number) as the end screen is; s2hud_band_prepare() makes the darkening table of the race's palette (70 ms
+   on the Pocket: once, when the replay begins). */
+void s2hud_band_prepare(const uint32_t *pal);
+void s2hud_band(volatile uint8_t *fb, int buffer, const char *text);
