@@ -274,6 +274,8 @@ static void room_scene(struct room *p, struct blit_list *l, const struct track_c
     sky.yaw += 1.5707964f;                                      /* (the room's backdrop turns a quarter of a turn further than the race's: the column is (1023 - a1) / 2, measured) */
     track_backdrop_blit(l, &backdrop, &sky);
     blit_fill(l, 0, BACKDROP_H, FB_W, FB_H - BACKDROP_H, track_ground_colour());
+    struct track_fx fx;
+    if (p->fresh && track_fx(&fx)) smg_load(fx.table);          /* (the room's see-through table: the shadows on its floor) */
     s2scene_begin(track_mlb(), buffer, p->fresh);
     p->fresh = 0;
     track_mode = TRACK_HW;
