@@ -281,6 +281,16 @@ unit has 0.4 ms of work left when the last piece is handed on: the steps (3.2 ms
 Pocket: 14.5 ms mean, 19.6 worst; 13.8 mean in the earlier run with the steps before the scene). The steps now run in slices, whenever the geometry unit's buffer is full
 (`RACE_OVERLAP` 2), and cost 2.9 ms since the physics remembers its sines and cosines (`firmware/trigmemo.h`; `check_car.sh` output equal).
 
+**The start's judder (2026-11-05).** On the Pocket the computer's car beside the player's jerked forward and back as the cars pulled away. The physics
+is not at fault: the simulation of the firmware (`tools/s2/sim_race.sh`, track 1, the gas held) and the host's car agree to 1.2 units over the 69
+frames after the green light, and the speed rises evenly. The drawing was: a car's blocks were made from its state when the drawing came to
+it (`race_make`), and the first slice of the computers' steps, the nearest car's own, runs about then. A probe in the simulation (not kept) found that car
+drawn after its step in 20 of the 69 frames and before it in 49, with no rhythm: what it advanced on screen from one frame to the next was 0 in 7
+frames and two steps in 8 (0 to 126 units against 76 a step); the cars farther off are made before the first slice and were always one step old.
+`road_race_scene` now copies every car's pose before any slice (`race_looks`): all three computers are one step old, always (69 of 69 frames, one step
+in each of the 68 intervals; the frame time is the same, 10.3 ms mean and 11.4 worst, and the slices still run in the scene). The physics and
+`check_car.sh` are unchanged.
+
 ## Open points
 
 - The deviations above are chaotic: a wall, a jump or the creep of a nearly stopped car amplifies a last-bit difference, so

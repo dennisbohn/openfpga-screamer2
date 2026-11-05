@@ -208,7 +208,7 @@ default): in slices (one car's step, or the cars touching) whenever handing a pi
 for room in its buffer (`hw_idle` in `frame.h`: the buffer holds 107 pieces and is then full), and what is left after the last
 piece, while the rasterizer finishes the picture. `-DRACE_OVERLAP=1` runs them all after the last piece, `-DRACE_OVERLAP=0` before
 the scene as one step with the player's. Where the hardware is the bound, which the worst frames are, the CPU waits for it anyway and
-the steps cost nothing; the computers' cars are drawn from the step before or the one just taken, 20 ms apart. See
+the steps cost nothing; the computers' cars are drawn from the step before (`road_race_scene` copies their poses before the first slice). See
 docs/screamer2/driving.md, "The race", and performance.md section 7 for the numbers.
 
 The physics sits behind `firmware/s2car.h` (`s2car_init`, `s2car_step` for one 20 ms step, `s2car_look`,
