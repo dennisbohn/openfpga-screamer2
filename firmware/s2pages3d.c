@@ -70,29 +70,10 @@ static int32_t cut(float f)
     return (int32_t)f;
 }
 
-static float easing(int i) { return 0.5f + (float)i * 0.005f; }
-
 /* 0x3364d / 0x11212: a whole number eased towards a target (the row of the easing table), cut */
 static void ease_int(int32_t *v, float target, int row)
 {
-    *v = cut(((float)*v - target) * easing(row) + target);
-}
-
-/* 0x1016b: an angle eased the short way round, kept in 0 .. 2 pi */
-static void ease_angle(float *v, float target, int row)
-{
-    float e = easing(row), a = *v;
-    if (a != target) {
-        if (a < target) {
-            if (target - a >= PI) *v = -((target - a) + -TWO_PI) * e + target;
-            else *v = (a - target) * e + target;
-        } else {
-            if (a - target >= PI) *v = -((target - a) + TWO_PI) * e + target;
-            else *v = (a - target) * e + target;
-        }
-    }
-    if (*v < 0.0f) *v += TWO_PI;
-    else if (*v >= TWO_PI) *v += -TWO_PI;
+    *v = cut(((float)*v - target) * s2scene_easing(row) + target);
 }
 
 /* 0x33703: the n records of 3 numbers turned round one place: direction 1 (each moves on, the last comes first) or 0 */
@@ -238,7 +219,7 @@ static void letter_step(struct page *p, int k)
     o->pos[1] = 0;
     o->pos[2] = cut(radius * cosf(ang));
     float yaw = (float)o->a1 * 0.0009765625f * PI;
-    if (p->t < 1.0f) ease_angle(&yaw, f1 * step, 0x37);
+    if (p->t < 1.0f) s2scene_ease_angle(&yaw, f1 * step, 0x37);
     else yaw = f1 * step;
     o->a1 = cut(yaw * 1024.0f / PI) & 0x7FF;
     o->a0 = cut(r->tilt * 1024.0f / PI) & 0x7FF;

@@ -143,6 +143,30 @@ struct track_cam s2scene_camera(float x, float y, float z, float pitch)
     return (struct track_cam){ x, z, y, 0.0f, pitch, 0.0f };
 }
 
+#define PI      3.1415927f
+#define TWO_PI  6.2831853f
+
+float s2scene_easing(int row)
+{
+    return 0.5f + (float)row * 0.005f;
+}
+
+void s2scene_ease_angle(float *v, float target, int row)
+{
+    float e = s2scene_easing(row), a = *v;
+    if (a != target) {
+        if (a < target) {
+            if (target - a >= PI) *v = -((target - a) + -TWO_PI) * e + target;
+            else *v = (a - target) * e + target;
+        } else {
+            if (a - target >= PI) *v = -((target - a) + TWO_PI) * e + target;
+            else *v = (a - target) * e + target;
+        }
+    }
+    if (*v < 0.0f) *v += TWO_PI;
+    else if (*v >= TWO_PI) *v += -TWO_PI;
+}
+
 float s2scene_dist2(const struct track_cam *cam, float x, float y, float z)
 {
     const float dx = x - cam->x, dy = z - cam->y, dh = y - cam->h;
