@@ -34,6 +34,7 @@ static struct car {
     int a1;
     const uint8_t *mlb, *mesh;
     uint32_t mlb_size;
+    struct track_refl refl;                 /* the windows' reflection state (the original's object record +0x24 ..) */
 } car[S2SHOW_MAX];
 static int32_t slot[S2SHOW_MAX][3];
 static int n_cars, chosen_car, loaded_team, loaded_n, fresh;
@@ -135,6 +136,7 @@ void s2showroom_init(int n, int chosen)
     for (int i = 0; i < n; i++) {
         memcpy(car[i].pos, slot[i], sizeof car[i].pos);
         car[i].a1 = 0;
+        car[i].refl = (struct track_refl){ { 0, 0, 0 }, { 0.0f, 0.0f, 0.0f } };
     }
 }
 
@@ -190,13 +192,14 @@ void s2showroom_draw(struct blit_list *l)
     }
     s2scene_begin(car[0].mlb, buffer, fresh);
     fresh = 0;
+    track_reflection_rate(0.002f);                          /* how fast the windows' picture slides: the page's value (measured: the offsets of the original's cars at their places) */
     for (int j = 0; j < m; j++) {
         const struct car *c = &car[order[j]];
         struct track_block b[CAR_BLOCKS];
         const struct car_look lk = { (float)c->pos[0], (float)c->pos[2], (float)c->pos[1], s2scene_rad(c->a1), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0 };
         const int nb = car_mesh_draw(c->mesh, &lk, &cam, b);
         s2scene_mlb(c->mlb);
-        s2scene_blocks(&cam, b, nb);
+        s2scene_blocks_refl(&cam, b, nb, track_object_reflection(&cam, lk.x, lk.y, lk.z, &car[order[j]].refl));
     }
     s2scene_end();
     blit_start(l, buffer);

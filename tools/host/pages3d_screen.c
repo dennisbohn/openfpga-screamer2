@@ -179,10 +179,16 @@ static void ref_draw(volatile uint8_t *fb, const uint8_t *pic, const struct ref_
             const struct car_look lk = { (float)o->pos[0], (float)o->pos[2], (float)o->pos[1], (float)o->a1 * (6.2831853f / 2048.0f), 0, 0, 0, 0, 0, 0, 0 };
             struct track_block b[CAR_BLOCKS];
             const int nb = car_mesh_draw(o->mesh, &lk, &tc, b);
+            /* the windows' reflection offsets: the original's object adds its way since it was last drawn, rotated into the view, times the rate to three accumulators
+               (the page's rate 0.002, measured), so a car that stands at its place has the camera's right and forward axes' share of the whole place: u from -(right . p),
+               v from -(forward . p), p the place as (x, z, y), each rounded and kept to 8 bits */
+            const double sp = sin(cam->pitch), cp = cos(cam->pitch), place[3] = { (double)o->pos[0], (double)o->pos[2], (double)o->pos[1] };
+            const uint32_t refl = (uint32_t)((int)lrint(0.002 * place[0]) & 255) << 16 | (uint32_t)((int)lrint(0.002 * (cp * place[1] - sp * place[2])) & 255) << 24;
             for (int k = 0; k < nb; k++) {
                 double M[9], O[3] = { b[k].o[0], b[k].o[1], b[k].o[2] };
                 for (int j = 0; j < 9; j++) M[j] = b[k].m[j];
                 ref_piece(o->mesh, b[k].blk, M, O, cam, b[k].phase, &g);
+                g.refl = refl;
                 gu_draw(fb, &clip, &v, o->mlb, &g, &st);
                 ref_pieces++;
                 ref_faces += st.faces;

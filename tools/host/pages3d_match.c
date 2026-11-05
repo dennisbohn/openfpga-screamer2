@@ -123,6 +123,7 @@ static void draw_scene(const struct scene *s, const int *angle)
         key[j] = d;
     }
     s2scene_begin(s->it[0].mlb, 0, 1);
+    track_reflection_rate(0.002f);                  /* the CAR page's cars' windows: the offsets of a car that stands at its place (the page's own rate, firmware/s2showroom.c) */
     for (int j = 0; j < m; j++) {
         const struct item *it = &s->it[order[j]];
         const int a1 = it->group >= 0 ? angle[it->group] : it->a1;
@@ -135,7 +136,8 @@ static void draw_scene(const struct scene *s, const int *angle)
             s2scene_object(it->mesh, (float)it->pos[0], (float)it->pos[1], (float)it->pos[2], it->a0, a1, it->phase, &b[0]);
         }
         s2scene_mlb(it->mlb);
-        s2scene_blocks(&s->cam, b, nb);
+        struct track_refl st = { { 0, 0, 0 }, { 0.0f, 0.0f, 0.0f } };      /* (a car that has stood since the page began: the first drawing's whole place) */
+        s2scene_blocks_refl(&s->cam, b, nb, it->car ? track_object_reflection(&s->cam, (float)it->pos[0], (float)it->pos[2], (float)it->pos[1], &st) : 0);
     }
 }
 
@@ -462,10 +464,11 @@ int main(int argc, char **argv)
         else if (kind_best == 1) scene_name(&sc, 0, bw);
         else scene_car(&sc, bw);
         draw_scene(&sc, bang);
-        if (getenv("REFL_FIT")) {                               /* the offsets of the windows' reflection that make the pixels of a box equal the screenshot's most */
+        if (getenv("REFL_FIT") && *getenv("REFL_FIT")) {                               /* the offsets of the windows' reflection that make the pixels of a box equal the screenshot's most */
             int bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
             sscanf(getenv("REFL_FIT"), "%d,%d,%d,%d", &bx0, &by0, &bx1, &by1);
-            int best_eq = -1, best_o = 0, none_eq = 0;
+            int best_eq = -1, best_o = 0, none_eq = 0, try_u = -1, try_v = 0, try_eq = 0;
+            if (getenv("REFL_TRY")) sscanf(getenv("REFL_TRY"), "%d,%d", &try_u, &try_v);
             for (int o = -1; o < 65536; o++) {
                 refl_force = o < 0 ? -1 : (o & 255) << 16 | (o >> 8) << 24;
                 draw_scene(&sc, bang);
@@ -473,11 +476,13 @@ int main(int argc, char **argv)
                 int eq = 0;
                 for (int y = by0; y < by1; y++)
                     for (int x = bx0; x < bx1; x++) eq += fb[y * 320 + x] == frame_idx[y * 320 + x];
+                if (o == (try_u & 255) + (try_v & 255) * 256 && try_u >= 0) try_eq = eq;
                 if (o < 0) none_eq = eq;
                 else if (eq > best_eq) { best_eq = eq; best_o = o; }
             }
             printf("  REFL_FIT box %d,%d,%d,%d (%d pixels): no offsets %d equal, best offsets u %d v %d %d equal\n", bx0, by0, bx1, by1, (bx1 - bx0) * (by1 - by0), none_eq,
                    best_o & 255, best_o >> 8, best_eq);
+            if (try_u >= 0) printf("  REFL_TRY u %d v %d: %d equal\n", try_u, try_v, try_eq);
             refl_force = -1;
             draw_scene(&sc, bang);
         }
