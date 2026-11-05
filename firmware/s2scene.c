@@ -28,7 +28,7 @@ uint32_t s2scene_generation(void)
 }
 
 /* the SDRAM holds what the CPU wrote (the geometry unit reads the meshes there) */
-static void settle(void)
+void s2scene_settle(void)
 {
     while (!(MEM_STATUS & MEM_WRITES_IDLE))
         ;
@@ -68,7 +68,7 @@ uint32_t s2scene_entry(struct s2_cont *c, const char *name, uint8_t *out, uint32
         d.offset = 0;                                       /* the bytes begin at the stage now */
         n = dat_extract(STAGE, d.stored, &d, out, max);
     }
-    settle();
+    s2scene_settle();
     return n;
 }
 
