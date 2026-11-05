@@ -10,6 +10,7 @@
  * that they drive the line, not a trace).
  */
 #include "race.h"
+#include "s2ghost.h"
 #include "s2params.h"
 #include "dat.h"
 #include "prof.h"
@@ -207,6 +208,12 @@ static struct {
     float floor_z;
     float skills[3][7];                                 /* MISC.DTR's SKILLS: the pace taken off a computer's car */
     int skills_ok;
+    int kind, slot;                                     /* the kind of race (race_kind), the side the player took (time attack) */
+    const struct s2gh_head *ghost;                      /* time attack: the run being raced, 0 for none */
+    uint32_t gsteps;                                    /* the ghost's steps taken: its own count, so that a frame of several steps does not move it */
+    float gclock;                                       /* ... and its own clock (the grid's hold ends at 3 s as the player's does) */
+    int grunning;
+    float cb[5];                                        /* the free run: this car's best lap's splits (+0xc58) */
     struct s2car_state car[RACE_CARS];
     struct pstate st[RACE_CARS];                        /* each car's place on the line (car + 0xc4) */
     float near[RACE_CARS][2];                           /* the nearest point of the line, whole numbers */
@@ -217,6 +224,23 @@ static struct {
 struct s2_pick race_grid[RACE_CARS] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } };
 int race_laps = RACE_LAPS;
 int race_level = 1;
+int race_kind = RACE_NORMAL;
+const struct s2gh_head *race_ghost;
+int race_slot(void) { return R.slot; }
+
+/* the free run's lap list and the session's quickest lap (the original keeps them in the data segment, 0x130d1c, 0x130d18, 0x132fc8, 0x133000) */
+static const union word NONE = { .u = 0x4560fffcu };    /* 3599.999: no time */
+static struct race_free FR;
+static int fr_ready;
+const struct race_free *race_free_state(void) { return &FR; }
+void race_free_reset(void)
+{
+    for(int k = 0; k < 5; k++) { FR.best[k] = NONE.f; FR.lt[k] = FR.rt[k] = NONE.f; FR.sign[k] = ' '; }
+    FR.best_lap = NONE.f;
+    FR.list_left = 0.0f;
+    FR.msg_left = 0.0f;
+    fr_ready = 1;
+}
 
 struct s2car_state *race_car(int i) { return &R.car[i]; }
 int race_cars(void) { return R.n; }
@@ -249,11 +273,63 @@ static void lap_done(int i, int by)
     if(I(c, 0x4a8) <= I(c, 0x4ac)) return;
     I(c, 0x4ac) = I(c, 0x4a8);
     if(!(F(c, 0xc3c) >= F(c, 0xc40))) F(c, 0xc40) = F(c, 0xc3c);
-    if(I(c, 0x4a8) == race_laps) {
+    if(R.kind == RACE_FREE && i == 0) {                 /* the free run (0x201ee): the session's quickest lap, its splits, the list stays for 4 s */
+        if(F(c, 0xc40) < FR.best_lap) FR.best_lap = F(c, 0xc40);
+        if(F(c, 0xc54) < R.cb[4]) {
+            for(int k = 0; k < 5; k++) R.cb[k] = F(c, 0xc44 + 4 * k);
+            if(F(c, 0xc54) < FR.best[4])
+                for(int k = 0; k < 5; k++) FR.best[k] = F(c, 0xc44 + 4 * k);
+        }
+        FR.list_left = 4.0f;
+    }
+    if(I(c, 0x4a8) == race_laps && R.kind != RACE_FREE) {       /* (the free run does not end on its laps) */
         I(c, 0x4c) |= 3;
         F(c, 4) = (float)(R.n - I(c, 0xc30)) * 0.2f;
     }
     F(c, 0xc3c) = 0.0f;
+}
+
+/* A marker (a fifth of a lap) passed, by checkpoints (0x1ffcb): the free run's list. The difference against the quickest lap's split is taken against what the
+   row held (the running time the list shows in the row of the next marker, kept by free_frame() every step), the split itself is the lap's time now. */
+static void free_marker(struct s2car_state *c, int by)
+{
+    I(c, 0x4b0) += by;
+    if(!(I(c, 0x4b0) > I(c, 0x4b4))) return;
+    I(c, 0x4b4) = I(c, 0x4b0);
+    const int idx = (I(c, 0x4b0) - by) % 5;
+    if(idx < 0 || idx > 4) return;
+    if(FR.best[idx] != NONE.f) {
+        const float d = F(c, 0xc44 + 4 * idx) - FR.best[idx];
+        FR.rt[idx] = fabsf(FR.best[idx] - F(c, 0xc44 + 4 * idx));
+        FR.sign[idx] = 0.0f <= d ? '+' : '-';
+        FR.msg_sign = FR.sign[idx];
+        FR.msg_val = FR.rt[idx];
+        FR.msg_left = 4.0f;
+        if(idx + 1 < 5) {                               /* the next row shows the quickest lap's own time there */
+            FR.sign[idx + 1] = ' ';
+            FR.rt[idx + 1] = FR.best[idx + 1];
+        }
+    }
+    F(c, 0xc44 + 4 * idx) = F(c, 0xc3c);
+    FR.lt[idx] = F(c, 0xc3c);
+}
+
+/* Once a step in the free run (the original's per-picture part of the race screen, 0x4612d): while a lap's list is held it counts down, and when it is over the
+   columns clear (the first row on the right keeps the quickest lap's first split); otherwise the row of the next marker shows the running time */
+static void free_frame(void)
+{
+    struct s2car_state *c = &R.car[0];
+    FR.msg_left = FR.msg_left > DT ? FR.msg_left - DT : 0.0f;
+    if(FR.list_left > 0.0f) {
+        FR.list_left -= DT;
+        if(FR.list_left >= 0.0f) return;
+        for(int k = 0; k < 5; k++) { FR.lt[k] = FR.rt[k] = NONE.f; FR.sign[k] = ' '; }
+        FR.rt[0] = FR.best[0];
+    }
+    const int idx = I(c, 0x4b4) % 5;
+    if(idx < 0 || idx > 4) return;
+    F(c, 0xc44 + 4 * idx) = F(c, 0xc3c);
+    FR.lt[idx] = F(c, 0xc3c);
 }
 
 /* Where the car is along the road (0x153c6): the line's four points half a node apart round where the car was last
@@ -323,6 +399,10 @@ static void locate(int i)
     if(st->node > 0) F(c, 0x4bc) = (float)nd[st->node - 1].dist * (1.0f - frac) + (float)nd[st->node].dist * frac;
     else F(c, 0x4bc) = (float)nd[0].dist * frac;
     F(c, 0x4bc) = (float)(nd[nodes - 1].dist * (I(c, 0x4a8) + lap)) + F(c, 0x4bc);
+    if(R.kind == RACE_FREE && i == 0) {                 /* a marker passed (0x16789: the progress times 5 over the line's nodes) */
+        const int chk = (int)(F(c, 0x4b8) * 5.0f / (float)nodes);
+        if(chk != I(c, 0x4b0)) free_marker(c, chk - I(c, 0x4b0));
+    }
     if(lap) lap_done(i, lap);
 }
 
@@ -460,7 +540,7 @@ static void places_and_pace(void)
         for(int j = 0; j < i; j++)
             if(I(a, 0xc30) == I(&R.car[j], 0xc30)) I(a, 0xc30) += 1;
     }
-    if(!R.skills_ok || (int)R.clock % 8 != 0) return;
+    if(R.kind != RACE_NORMAL || !R.skills_ok || (int)R.clock % 8 != 0) return;      /* (time attack has no computers, the ghost is no computer) */
     const float mean = F(&R.car[0], 0x4bc);             /* the player's: the only car with controls */
     for(int i = 1; i < n; i++) {
         struct s2car_state *a = &R.car[i];
@@ -556,32 +636,77 @@ int race_init(int track, float floor_z)
     R.running = 0;
     R.clock = 0.0f;
     R.steps = 0;
+    R.kind = race_kind;
+    R.ghost = race_kind == RACE_ATTACK ? race_ghost : 0;
+    R.gsteps = 0;
+    R.gclock = 0.0f;
+    R.grunning = 0;
     respawns = 0;
     memset(R.off, 0, sizeof R.off);
     memset(R.still, 0, sizeof R.still);
-    for(int i = 0; i < RACE_CARS; i++) {
+    /* four cars on the grid, or in time attack the player's and the ghost's side by side, or the free run's one */
+    const int ncars = R.kind == RACE_NORMAL ? RACE_CARS : R.ghost ? 2 : 1;
+    R.slot = R.kind == RACE_ATTACK ? (R.ghost ? 1 - R.ghost->slot : 1) : 0;     /* (0x339e7: car i of n takes place n - 1 - i; the player the other side than the kept run) */
+    for(int i = 0; i < ncars; i++) {
         R.team[i] = race_grid[i].team - 1;              /* the player's team and car, then the computers' (the physics counts from 0) */
         R.model[i] = race_grid[i].car - 1;
-        const int grid = RACE_CARS - 1 - i;             /* the player starts last */
-        if(!s2car_init_grid(&R.car[i], R.team[i], R.model[i], track, grid, i > 0)) return 0;
+        if(R.kind != RACE_NORMAL) R.car[i].manual = 0;  /* (the first gear of a car depends on it: the ghost must start as the car it was recorded from; the viewer sets the player's after) */
+        if(R.kind == RACE_NORMAL) {
+            const int grid = RACE_CARS - 1 - i;         /* the player starts last */
+            if(!s2car_init_grid(&R.car[i], R.team[i], R.model[i], track, grid, i > 0)) return 0;
+        } else if(!s2car_init_row(&R.car[i], R.team[i], R.model[i], track, i == 0 ? R.slot : R.ghost->slot, 0)) {
+            return 0;
+        }
         R.car[i].hold = 1;
     }
     if(!load_line(track)) return 0;
     load_skills();
-    for(int i = 0; i < RACE_CARS; i++) {
+    if(R.kind == RACE_FREE && !fr_ready) race_free_reset();
+    for(int i = 0; i < ncars; i++) {
         struct s2car_state *c = &R.car[i];
         I(c, 0) = i;
         I(c, 0xc40) = (int32_t)0x4560fffcu;             /* no best lap yet (3599.999) */
-        I(c, 0xc30) = RACE_CARS - i;
+        I(c, 0xc30) = ncars - i;
+        for(int k = 0; k < 5; k++) F(c, 0xc44 + 4 * k) = NONE.f;                    /* the splits of the lap (0x2f519) */
         memset(&R.st[i], 0, sizeof R.st[i]);
         point(&R.st[i]);
         locate(i);                                      /* the place on the line from the start: laps -1 until the line is crossed */
     }
-    R.n = RACE_CARS;
+    R.n = ncars;
+    if(R.kind == RACE_FREE) {                           /* the list starts clear, the first row on the right showing the quickest lap's first split (0x2e6dc ..) */
+        for(int k = 0; k < 5; k++) { FR.lt[k] = FR.rt[k] = NONE.f; FR.sign[k] = ' '; R.cb[k] = FR.best[k]; }
+        FR.rt[0] = FR.best[0];
+        FR.list_left = 0.0f;
+        FR.msg_left = 0.0f;
+    }
+    if(R.kind == RACE_ATTACK) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages);
     return 1;
 }
 
-/* the first half of a step: the race's clock, places and pace, the lights, the player's car */
+/* One step of a car with a human's controls: the player's, and in time attack the ghost's. Its clocks (0x1f3ce), the physics, where it is on the line; he has
+   finished: the game's driver brings the car to a stop. Where the race has no computers (time attack, the free run) the check that puts a car that has left the
+   road for good back on the line is made here, every step, and not after the frame's steps as race_others_slice() makes it for the arcade's cars: a run
+   then does not depend on how many steps a frame took, which the ghost needs. */
+static void human_step(int i, const struct s2car_input *in, int running)
+{
+    PF_VAR(pf);
+    struct s2car_state *c = &R.car[i];
+    if(running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }
+    if(!(I(c, 0x4c) & 1)) {
+        PF_SET(pf);
+        s2car_step(c, in);
+        PF_ADD(PF_PLAYER_STEP, pf); PF_SET(pf);
+        locate(i);
+        PF_ADD(PF_LINE, pf);
+    } else
+        s2car_step_driven(c, driver, (void *)(intptr_t)i);
+    if(R.kind != RACE_NORMAL) {
+        R.off[i] = c->off_track ? R.off[i] + 1 : 0;
+        if(R.off[i] >= OFF_STEPS || c->pos[2] < R.floor_z) put_on_line(i);
+    }
+}
+
+/* the first half of a step: the race's clock, places and pace, the lights, the player's car (recorded, in time attack) */
 void race_step_player(const struct s2car_input *in)
 {
     PF_VAR(pf);
@@ -590,19 +715,30 @@ void race_step_player(const struct s2car_input *in)
     PF_ADD(PF_PLACES, pf);
     if(!R.running && R.clock > 3.0f) {                  /* the lights are out: the cars are let go */
         R.running = 1;
-        for(int i = 0; i < R.n; i++) R.car[i].hold = 0;
+        for(int i = 0; i < R.n; i++) if(R.kind == RACE_NORMAL || i == 0) R.car[i].hold = 0;
     }
     struct s2car_state *c = &R.car[0];
-    if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }          /* 0x1f3ce */
-    if(!(I(c, 0x4c) & 1)) {
-        PF_SET(pf);
-        s2car_step(c, in);
-        PF_ADD(PF_PLAYER_STEP, pf); PF_SET(pf);
-        locate(0);
-        PF_ADD(PF_LINE, pf);
-    } else
-        s2car_step_driven(c, driver, 0);                /* he has finished: the game's driver brings the car to a stop */
+    if(R.kind == RACE_ATTACK && !(I(c, 0x4c) & 1)) s2gh_rec_step(in, c->manual);        /* up to the step in which he has done his laps */
+    human_step(0, in, R.running);
+    if(R.kind == RACE_FREE) free_frame();
     R.steps++;
+}
+
+/* the ghost's step: the kept run's byte for it, its own clock and hold */
+static void ghost_step(void)
+{
+    struct s2car_state *c = &R.car[1];
+    R.gclock += DT;
+    if(!R.grunning && R.gclock > 3.0f) {
+        R.grunning = 1;
+        c->hold = 0;
+    }
+    struct s2car_input in = { 0 };
+    int manual = c->manual;
+    if(R.gsteps < R.ghost->steps) in = s2gh_unpack(s2gh_data(R.ghost)[R.gsteps], &manual);
+    R.gsteps++;
+    c->manual = manual;
+    human_step(1, &in, R.grunning);
 }
 
 /* the second half of `count` steps: the three computer cars (each step's physics and driver), the cars touching, the cars
@@ -623,12 +759,20 @@ int race_others_slice(void)
     if(!others.left) return 0;
     if(others.stage < R.n) {
         const int i = others.stage++;
+        if(R.kind != RACE_NORMAL) {                     /* time attack: the ghost (car 1), stepped by its controls; nothing collides with it */
+            ghost_step();
+            return 1;
+        }
         struct s2car_state *c = &R.car[i];
         if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }
         PF_VAR(pf);
         s2car_step_driven(c, driver, (void *)(intptr_t)i);
         PF_ADD(PF_AI_STEP, pf);
         return 1;
+    }
+    if(R.kind != RACE_NORMAL) {
+        others.stage = 1;
+        return --others.left != 0;
     }
     PF_VAR(pc);
     collide();

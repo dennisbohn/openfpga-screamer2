@@ -1349,7 +1349,7 @@ static void make_car(car_t *c, int track)
     RF(0x2c) = (float)(set[3] + set[4]) * 0.5f;
 }
 
-static int init_car(struct s2car_state *s, int team, int car, int track, int grid, int ai, const float *at)
+static int init_car(struct s2car_state *s, int team, int car, int track, int grid, int ai, const float *at, int abreast)
 {
     car_t *c = s;
     if(team < 0 || team > 3 || car < 0 || car > 4 || track < 1 || track > 7 || grid < 0 || grid > 15) return 0;
@@ -1393,11 +1393,13 @@ static int init_car(struct s2car_state *s, int team, int car, int track, int gri
     RF(0x4c4) = G.road_heading;
     RF(0x4e8) = RF(0x4c4);
     RF(0x508) = RF(0x4e8);
-    /* the grid (0x2f519): place g is 1000 units to the side (the sides in turn) and 2000 x g back of the line's first node */
+    /* the grid (0x2f519): place g is 1000 units to the side (the sides in turn) and 2000 x g back of the line's first node; in time attack and the
+       free run (abreast) the cars stand side by side, no row behind (0x30328 .. 0x303fa: only the 1000 to the side) */
     int k = (grid % 2) * 2 - 1;
     float a = RF(0x4e8);
-    float gx = (float)k * sinf(a + HALF_PI_F) * 1000.0f + (float)grid * sinf(a + PI_F) * 2000.0f + x0;
-    float gz = z0 - ((float)k * cosf(a + HALF_PI_F) * 1000.0f + (float)grid * cosf(a + PI_F) * 2000.0f);
+    const float back = abreast ? 0.0f : (float)grid;
+    float gx = (float)k * sinf(a + HALF_PI_F) * 1000.0f + back * sinf(a + PI_F) * 2000.0f + x0;
+    float gz = z0 - ((float)k * cosf(a + HALF_PI_F) * 1000.0f + back * cosf(a + PI_F) * 2000.0f);
     if(at) { gx = x0; gz = z0; }                        /* put back on the line itself (a car that left the road) */
     RF(0x4d8) = placed(gx);
     RF(0x4e0) = placed(gz);
@@ -1427,13 +1429,18 @@ static int init_car(struct s2car_state *s, int team, int car, int track, int gri
 
 int s2car_init_grid(struct s2car_state *s, int team, int car, int track, int grid, int ai)
 {
-    return init_car(s, team, car, track, grid, ai, 0);
+    return init_car(s, team, car, track, grid, ai, 0, 0);
+}
+
+int s2car_init_row(struct s2car_state *s, int team, int car, int track, int side, int ai)
+{
+    return init_car(s, team, car, track, side, ai, 0, 1);
 }
 
 int s2car_init_at(struct s2car_state *s, int team, int car, int track, float x, float z, int ai)
 {
     const float at[2] = { x, z };
-    return init_car(s, team, car, track, 0, ai, at);
+    return init_car(s, team, car, track, 0, ai, at, 0);
 }
 
 /* the lone car of the driving mode: the first place of the grid, driven by the player, not held */

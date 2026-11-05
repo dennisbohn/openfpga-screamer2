@@ -36,7 +36,9 @@
 #include "raster.h"
 #include "setup.h"
 
-#define GU_MAX_VERT     512             /* vertices of a mesh; more: the piece is left out */
+#ifndef GU_MAX_VERT
+#define GU_MAX_VERT     512             /* vertices of a mesh; more: the piece is left out (a build of the tests may take more: tools/trackmap.sh) */
+#endif
 #define GU_MAX_FACES    1024            /* faces of a row; the rest is left out */
 
 struct gu_piece {

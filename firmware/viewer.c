@@ -27,6 +27,9 @@
 #include "s2save.h"
 #include "s2league.h"
 #include "s2leaguepages.h"
+#include "s2ghost.h"
+#include "s2trackpage.h"
+#include "s2arcade.h"
 #include "music.h"
 #include "s2hud.h"
 #include "prof.h"
@@ -89,6 +92,8 @@ static struct blit_list back;
 static int ui_ready;                    /* the 2D toolkit (s2gfx.h) is up: the loading screen and the pause menu */
 static int league_mode;                 /* the visit is a race of the championship (league_run): no RESTART, no track switch, the end screen is the league's */
 static int league_started;              /* ... and the race did start (its cars' places are there to read) */
+static int attack_mode;                 /* the visit is time attack (1) or the free run (2): attack_run(); no track switch, the end screen is time attack's, a quicker run is kept as the ghost */
+#define VISIT_AGAIN 100                 /* visit() ends with the race again asked for on time attack's end screen: the ghost may have changed, attack_race() decides what to load */
 static uint32_t sim_frames;             /* in the simulation: the frames to draw before it ends */
 static uint32_t results;
 static int sim;
@@ -171,8 +176,12 @@ static int sim_image(void)
 /* Track n: its containers from the ZIP, the image built, checked and set up, the road chained. 1 if all
    worked, else 0 and what stopped it in *what. The grid's cars are read and unpacked once (s2teams.h). The log
    gets one line: the bytes read and the milliseconds of each step. */
+static int load_cars = RACE_CARS;       /* the cars of the grid the image holds: four, time attack's two (the ghost) or one */
+static struct { int valid, track, cars; struct s2_pick pick[RACE_CARS]; } loaded;     /* what the image holds, so that time attack does not build it again */
+
 static int load_track(struct zip *z, int n, const char **what)
 {
+    loaded.valid = 0;
     static struct s2_files f;
     static char gfx_name[24], data_name[24], env_name[24];
     struct track_build_info info = { "", 0, 0, 0 };
@@ -185,9 +194,9 @@ static int load_track(struct zip *z, int n, const char **what)
         fmt_str(fmt_udec(fmt_str(data_name, "DATA/MAP"), (uint32_t)n), ".DAT");
         fmt_str(fmt_udec(fmt_str(env_name, "GFX/ENVP"), (uint32_t)n), "01.DAT");
         uint32_t cars_t0 = rdcycle();
-        f.car = s2_cars_load(z, race_grid, RACE_CARS, 0, CARS_MEM, CARS_MAX, BLOB_MEM, &read_bytes, what);
+        f.car = s2_cars_load(z, race_grid, load_cars, 0, CARS_MEM, CARS_MAX, BLOB_MEM, &read_bytes, what);
         if (!f.car) return 0;
-        f.ncars = RACE_CARS;
+        f.ncars = load_cars;
         read_cycles += rdcycle() - cars_t0;              /* (the first load: with the cars' unpacking) */
         f.gfx = GFX_MEM;
         f.data = DATA_MEM;
@@ -238,6 +247,10 @@ static int load_track(struct zip *z, int n, const char **what)
     dlog_str(", ");
     dlog_dec(placements);
     dlog_str(" pl\n");
+    loaded.valid = 1;
+    loaded.track = n;
+    loaded.cars = load_cars;
+    memcpy(loaded.pick, race_grid, sizeof loaded.pick);
     return 1;
 }
 
@@ -429,7 +442,7 @@ static void end_screen(int n, volatile uint8_t *fb, const uint32_t *pal, uint32_
     struct race_hud h;
     race_get_hud(&h);
     struct s2_end_in in = { .track = n, .laps = race_laps, .place = h.place, .time = h.time, .best_lap = h.best_lap, .team = race_grid[0].team,
-                            .car = race_grid[0].car };
+                            .car = race_grid[0].car, .attack = attack_mode == 1 };
     if (league_mode) {                                  /* the championship's end lists the cars that have done their laps (s2end.h) */
         struct race_result r[RACE_CARS];
         race_get_results(r);
@@ -452,6 +465,21 @@ static void end_screen(int n, volatile uint8_t *fb, const uint32_t *pal, uint32_
     }
     end_choice = s2end_frame(fb, (int)draw_buf, pal, &in, fin_frames, vf, press);
     (void)fb;
+}
+
+/* time attack's player has done his laps and chosen RACE AGAIN or EXIT: his run is the track's ghost if the track has none whole or it is quicker (s2ghost.h) */
+static void attack_keep(int n)
+{
+    if (attack_mode != 1) return;
+    struct race_hud h;
+    race_get_hud(&h);
+    if (!h.finished) return;
+    const int kept = s2gh_keep(h.time, h.best_lap, race_laps);
+    dlog_str("ghost: T");
+    dlog_dec(n);
+    dlog_str(kept ? " kept, " : " not kept, ");
+    dlog_dec((int32_t)s2gh_rec_steps());
+    dlog_str(" steps\n");
 }
 
 static int other_track(int n, uint32_t press)
@@ -483,7 +511,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     uint32_t win_n = 0, win_sum = 0, win_max = 0, shown_mean = 0, shown_max = 0, shown_faces = 0;
     if (*drive && !race_start(n, floor_z)) {          /* no race on this track: the ride instead (the championship stops) */
         *drive = 0;
-        return league_mode ? 0 : -n;
+        return league_mode || attack_mode ? 0 : -n;
     }
     league_started = league_mode;
     s2load_fade();                                      /* the LOADING picture was up through the track's build and the race's set-up (no-op if none) */
@@ -506,7 +534,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         last_vf = vf;
         /* the buttons: another track (this visit ends), the cars, the mode, the overlay */
         if (*drive) {
-            if (sel && (press & (KEY_LEFT | KEY_RIGHT)) && !league_mode) {
+            if (sel && (press & (KEY_LEFT | KEY_RIGHT)) && !league_mode && !attack_mode) {
                 leave(n, mode, &st_all);
                 return other_track(n, press);
             }
@@ -517,6 +545,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             if (end_choice == S2END_EXIT) {             /* the end screen's choices */
                 leave(n, mode, &st_all);
                 end_choice = 0;
+                attack_keep(n);
                 return 0;
             }
             if (end_choice == S2END_CONTINUE) {         /* the championship's end screen: the race is over, on to the report */
@@ -526,6 +555,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             }
             if (end_choice == S2END_AGAIN) {
                 end_choice = 0;
+                if (attack_mode == 1) {                 /* time attack: the run is kept if it is quicker, and what the next race loads depends on it (the ghost's car) */
+                    leave(n, mode, &st_all);
+                    attack_keep(n);
+                    return VISIT_AGAIN;
+                }
                 race_start(n, floor_z);
                 fin_frames = 0;
             }
@@ -854,6 +888,8 @@ static void league_run(struct zip *z, int *cars, int *overlay)
         dlog_str(" begins\n");
         for (;;) {
             const int n = s2l_track(L.races_done);
+            const int tp = s2tp_league(league_at, L.races_done, n);         /* the original's TRACK page: the track's map, TERRAIN, DIFFICULTY (a missing picture leaves it out) */
+            if (tp == S2TP_BACK || tp == S2TP_LEAVE) break;                 /* ESC before the first race, or YES to LEAVING LEAGUE?: back to LEAGUE SELECTION */
             apply_cfg();
             memcpy(race_grid, L.pick, sizeof race_grid);
             race_level = s2l_def[L.league].level;
@@ -881,6 +917,72 @@ static void league_run(struct zip *z, int *cars, int *overlay)
     }
 }
 
+/* One kind of time attack (cfg.free_run: the free run): the loading screen (time attack's records, none for the free run), the race against the ghost of the track's best run
+   if GAME SETTINGS' TIME ATTACK GHOST CAR is ON and the track has one that can be raced (s2gh_ghost), or alone; the race is run again as often as the end screen asks (the ghost may
+   be a new one then, which another car may drive: the image is built again only if it holds other cars). The player's grid place is the side the ghost did not start on (race.h). */
+static void attack_race(struct zip *z, int *cars, int *overlay)
+{
+    const int free_run = cfg.free_run != 0, n = cfg.track;
+    apply_cfg();
+    race_kind = free_run ? RACE_FREE : RACE_ATTACK;
+    race_laps = free_run ? 1 : 3;                                           /* (0x339e7: time attack three laps, the free run one that does not end) */
+    attack_mode = free_run ? 2 : 1;
+    for (;;) {
+        const struct s2gh_head *g = !free_run && s2save_get(S2S_GHOST) == 0 ? s2gh_ghost(n, s2save_get(S2S_DAMAGE)) : 0;
+        race_ghost = g;
+        if (g) race_grid[1] = (struct s2_pick){ g->team, g->car };
+        load_cars = g ? 2 : 1;
+        if (!loaded.valid || loaded.track != n || loaded.cars != load_cars || memcmp(loaded.pick, race_grid, sizeof(struct s2_pick) * (size_t)load_cars)) {
+            const char *what = "";
+            const uint32_t *loading = s2load_show_kind(free_run ? S2S_KINDS : S2S_KIND_ATTACK, n, 3);
+            if (!loading) screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);
+            if (!load_track(z, n, &what)) {
+                char l[40];
+                fmt_str(fmt_str(l, "Could not set up "), what);
+                screen_text(n, l, "see debug.txt in the Saves folder", "B: back to the menu", 1);
+                uint32_t keys_before = in_keys();
+                for (int done = 0; !done;) {
+                    wait_swap_done();
+                    uint32_t keys = in_keys(), press = keys & ~keys_before;
+                    keys_before = keys;
+                    done = (press & KEY_B) != 0;
+                }
+                break;
+            }
+        }
+        dlog_str(free_run ? "attack: free run T" : "attack: T");
+        dlog_dec(n);
+        dlog_str(g ? " with the ghost\n" : " alone\n");
+        int drive = 1, next;
+        while ((next = visit(n, cars, overlay, &drive)) < 0)
+            ;                                                               /* (the overlay or the gearbox changed: the same visit again) */
+        if (next != VISIT_AGAIN) break;
+    }
+    attack_mode = 0;
+    race_kind = RACE_NORMAL;
+    race_ghost = 0;
+    load_cars = RACE_CARS;
+    s2menu_store(&cfg);
+}
+
+/* Time attack (STARTL.EXE 0x3f79e, 0x3cc2c): TRACK SELECTION with the turning maps -> the CAR page and its 3 LAPS / FREE RUN -> the race; ESC goes back a page (from TRACK
+   SELECTION to the start menu). The best lap of the free run is forgotten when TRACK SELECTION is entered (0x3f7f3). Returns when the player leaves for the start menu. */
+static void attack_run(struct zip *z, int *cars, int *overlay)
+{
+    for (;;) {
+        race_free_reset();
+        if (s2tp_attack(&cfg) != S2TP_GO) {                                 /* (ESC, or the picture or the maps are missing) */
+            s2menu_store(&cfg);
+            return;
+        }
+        s2menu_store(&cfg);
+        if (s2arcade_page(S2ARC_ATTACK, &cfg) != S2ARC_NEXT) continue;      /* ESC: back to TRACK SELECTION */
+        s2menu_store(&cfg);
+        attack_race(z, cars, overlay);
+        return;
+    }
+}
+
 void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
 {
     struct zip *z = files_zip();
@@ -904,6 +1006,10 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
             int go = s2menu_run(&cfg);
             if (go == S2M_CHAMP) {                      /* the championship needs the toolkit's pages; without it the row does nothing */
                 if (ui_ready) league_run(z, &cars, &overlay);
+                continue;
+            }
+            if (go == S2M_ATTACK) {                     /* so does time attack */
+                if (ui_ready) attack_run(z, &cars, &overlay);
                 continue;
             }
             n = cfg.track;

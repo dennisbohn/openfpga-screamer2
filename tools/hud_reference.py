@@ -87,6 +87,8 @@ class Hud:
         self.text = lines[first:first + 9]
         self.miles = self.text[8][0].lower() == "m"
         self.game = game
+        self.kind, self.ncars = 0, 4                    # the kind of race (0 arcade, 1 time attack, 2 the free run) and the cars in it (time attack alone has one, with a ghost two)
+        self.free = dict(lt=[3599.999] * 5, rt=[3599.999] * 5, sign=" " * 5, msg=("_", 0.0, 0.0))
 
     # a race begins: the track's best lap and total, the first checkpoint, the bends' arrows (MAPnDIR.SPL: a count, nodes of 56 bytes)
     def begin(self, track, laps, rec_lap, rec_total, cars):
@@ -116,7 +118,7 @@ class Hud:
         self.revs = f32(f32(f32(self.revs - revs) * k) + revs)
         self.msg_left = f32(self.msg_left - dt) if self.msg_left > dt else 0.0
         self.wrong = f32(self.wrong + dt) if p.wrong == -1.0 else 0.0
-        for i, car in enumerate(cars):
+        for i, car in enumerate(cars[:self.ncars]):
             chk = trunc(f32(f32(car.n4b8 * 5.0) / float(nodes)))
             if chk == self.chk[i]:
                 continue
@@ -167,7 +169,7 @@ class Hud:
     def draw(self, c, cars, clock, cam, view, top, finished):
         p, T = cars[0], self.text
         # the 1ST mark over a car that leads (0x4962c): the point 500 above it as the scene projects it, 10 left and 12 up of it
-        for i in range(1, 4):
+        for i in range(1, self.ncars):
             if cars[i].place != 1:
                 continue
             x, y, h, yaw, pitch, roll = cam
@@ -200,14 +202,37 @@ class Hud:
         tx, ty = trunc(f32(float(px) + f32(s * 30.0))), trunc(f32(float(py) - f32(co * 30.0)))
         for ox, oy in ((0, 0), (co, s), (-co, -s)):
             c.line(trunc(f32(float(px) + ox)), trunc(f32(float(py) + oy)), tx, ty, 0x5b)
-        if not finished:
+        if not finished and self.kind == 2:                  # the free run (0x460ae ..): THIS LAP and BEST LAP on top, the five markers' list
             if self.bend_left > 0:
                 self.centred(c, 0x1b + self.bend_id, 0x32 + top)
-            if p.place == 1:
-                self.sprite(c, 0x72, 0x10e, 4)
-            w = c.text_width(self.fnt[3], -1, T[6])
-            self.put_text(c, 3, 3, -1, 0x138 - w, 2, T[6])
-            self.put_text(c, 1, 1, 2, 0x11e, 0xb, "%d" % p.place)
+            self.put_text(c, 3, 3, -1, 8, 16, T[0])
+            self.put_text(c, 3, 3, -1, 0x10e, 16, T[2])
+            self.put_text(c, 3, 1, -1, 8, 24, self.clock(p.lapt))
+            self.put_text(c, 3, 1, -1, 0x10e, 24, self.clock(self.rec_lap))
+            fr = self.free
+            for k in range(5):
+                self.put_text(c, 3, 3, -1, 8, 0x38 + 8 * k, chr(65 + k))
+                self.put_text(c, 3, 3, -1, 0x105, 0x38 + 8 * k, chr(65 + k))
+                self.put_text(c, 3, 1, -1, 0x12, 0x38 + 8 * k, self.clock(fr["lt"][k]))
+                self.put_text(c, 3, 1, -1, 0x10a, 0x38 + 8 * k, "\x01" + fr["sign"][k] + clock_digits(fr["rt"][k]))
+            sg, val, left = fr["msg"]
+            if left > 0:
+                s = "\x01" + (" " if sg == "_" else sg) + clock_digits(val)
+                if sg == "+":
+                    self.say(c, 8, 3, -1, 0x23 + top, s)
+                else:
+                    self.say(c, 7, 1, -1, 0x23 + top, s)
+            if self.best_left > 0 and trunc(f32(self.best_left * 2.0)) & 1:
+                self.say(c, 0, 1, 2, 0xf + top, T[4])
+        elif not finished:
+            if self.bend_left > 0:
+                self.centred(c, 0x1b + self.bend_id, 0x32 + top)
+            if self.ncars > 1:
+                if p.place == 1:
+                    self.sprite(c, 0x72, 0x10e, 4)
+                w = c.text_width(self.fnt[3], -1, T[6])
+                self.put_text(c, 3, 3, -1, 0x138 - w, 2, T[6])
+                self.put_text(c, 1, 1, 2, 0x11e, 0xb, "%d" % p.place)
             if self.msg_left > 0:
                 self.say(c, 8, 3, -1, 0x23 + top, self.msg)
             self.put_text(c, 3, 3, -1, 8, 2 + top, T[7])
@@ -225,13 +250,14 @@ class Hud:
             if self.best_left > 0 and trunc(f32(self.best_left * 2.0)) & 1:
                 self.say(c, 0, 1, 2, 0xf + top, T[4])
             y = 3 + top                                      # the bar (0x458c7)
-            c.fill(0x6c, y + 1, 0x68, 7, 0)
-            self.sprite(c, 0x25, 0x6c, y - 1)
-            for i in range(1, 4):
-                d = f32(f32(p.n4bc - cars[i].n4bc) / 200000.0)
-                d = max(-1.0, min(1.0, d))
-                self.sprite(c, 4 + cars[i].team - 1, trunc(f32(f32(160.0 - f32(d * 50.0)) + -4.0)), y)
-            self.sprite(c, 9, 0x9c, y)
+            if self.ncars > 1:
+                c.fill(0x6c, y + 1, 0x68, 7, 0)
+                self.sprite(c, 0x25, 0x6c, y - 1)
+                for i in range(1, self.ncars):
+                    d = f32(f32(p.n4bc - cars[i].n4bc) / 200000.0)
+                    d = max(-1.0, min(1.0, d))
+                    self.sprite(c, 4 + cars[i].team - 1, trunc(f32(f32(160.0 - f32(d * 50.0)) + -4.0)), y)
+                self.sprite(c, 9, 0x9c, y)
         if trunc(self.wrong) & 1:
             self.say(c, 0, 1, 2, 0xf + top, T[5])
         if 0 <= (3 - trunc(clock) if clock < 4.0 else -1) and not finished:
@@ -410,6 +436,66 @@ def main():
     car(1, py=5000.0)                                       # behind the camera: none
     emit("first_behind", 1)
 
+    # ---------------- 9. time attack (menus row 7): alone no places, no bar, no laurel; with the ghost they are there (the ghost is car 1: its team's mark); the records are time attack's
+    def kind(k, n):
+        hud.kind, hud.ncars = k, n
+        lines.append("kind %d %d" % (k, n))
+
+    kind(1, 1)
+    begin(4, 3, 77.7, 200.5)
+    car(0, place=1, lapcnt=1, lapt=12.34, total=52.5, speed=60.0, rpm=0.5, maxrpm=1.0, gear=2, n4b8=-1.0)
+    emit("ta_alone", 50)
+    emit("ta_alone_top", 1, 16)
+    kind(1, 2)
+    begin(4, 3, 77.7, 200.5)
+    car(0, place=2, lapcnt=0, lapt=12.34, total=12.34, speed=60.0, rpm=0.5, maxrpm=1.0, gear=2, n4b8=-1.0, n4bc=1000.0)
+    car(1, place=1, team=3, n4b8=-1.0, n4bc=40000.0)
+    emit("ta_ghost_ahead", 50)
+    car(0, place=1, n4bc=90000.0)
+    car(1, place=2, n4bc=20000.0)
+    emit("ta_ghost_behind", 50)
+    emit("ta_ghost_behind_top", 1, 16)
+    kind(0, 4)
+
+    # ---------------- 10. the free run: no lap block, THIS LAP and BEST LAP on top, the list of the five markers (A .. E): the running time in the row of the next marker,
+    # the differences against the quickest lap's splits with their signs (- quicker, + slower), the quickest lap's own time in the row after, BEST LAP! over a record
+    def free(lt, rt, sign, best, msg=("_", 0.0, 0.0)):
+        hud.free = dict(lt=[f32(float(v)) for v in lt], rt=[f32(float(v)) for v in rt], sign=sign, msg=(msg[0], f32(msg[1]), f32(msg[2])))
+        lines.append("freemsg %s %r %r" % (msg[0], msg[1], msg[2]))
+        lines.append("free %s %s %s" % (" ".join(repr(float(v)) for v in lt), " ".join(repr(float(v)) for v in rt), sign.replace(" ", "_")))
+
+    NONE = 3599.999
+    kind(2, 1)
+    lines.append("freebest 3599.999")
+    begin(4, 1, 3599.999, 3599.999)
+    free([NONE] * 5, [NONE] * 5, " " * 5, NONE)
+    car(0, place=1, lapcnt=0, lapt=0.0, total=0.0, speed=0.0, n4b8=-1.0)
+    emit("free_start", 1)
+    free([12.34, NONE, NONE, NONE, NONE], [NONE] * 5, " " * 5, NONE)
+    car(0, lapt=12.34, speed=50.0, rpm=0.4, gear=2, n4b8=0.5)
+    emit("free_first", 5)
+    emit("free_first_top", 1, 16)
+    free([12.34, 25.5, 38.75, NONE, NONE], [NONE] * 5, " " * 5, NONE)
+    car(0, lapt=40.0, speed=80.0, rpm=0.6, gear=3)
+    emit("free_three", 5)
+    free([12.34, 25.5, 38.75, 51.0, 64.25], [NONE] * 5, " " * 5, NONE)           # the lap's list stays four seconds
+    car(0, lapt=0.5, lapcnt=1, best=64.25)
+    emit("free_lap_done", 1)
+    for k in range(6):
+        emit("free_lap_blink_%d" % k, 10)
+    # the second lap against the first: the list was cleared, the first row on the right shows the quickest lap's first split, signs and differences come with each marker
+    lines.append("freebest 64.25")
+    begin(4, 1, 64.25, 3599.999)
+    free([12.0, NONE, NONE, NONE, NONE], [12.34, NONE, NONE, NONE, NONE], " " * 5, 64.25)
+    car(0, lapt=12.0, speed=60.0, rpm=0.5, gear=2, place=1, n4b8=0.4)
+    emit("free_second_a", 3)
+    free([12.0, 25.0, 37.0, NONE, NONE], [0.34, 0.5, 1.75, NONE, NONE], "--   ", 64.25, ("-", 0.5, 3.5))
+    car(0, lapt=37.5, speed=70.0, rpm=0.55, gear=3)
+    emit("free_second_b", 3)
+    free([12.0, 25.0, 38.9, 52.0, NONE], [0.34, 0.5, 1.15, 0.25, 64.25], "--++ ", 64.25, ("+", 0.25, 2.0))
+    emit("free_second_c", 3)
+    kind(0, 4)
+
     # ---------------- 8. the player has finished: no texts, the dial and the rest of the screen stay as they were
     begin(4, 3, 3599.999, 3599.999)
     car(0, place=1, flags=3, speed=20.0, rpm=0.2, gear=1, lapcnt=3, total=200.0, n4b8=-1.0)
@@ -422,4 +508,5 @@ def main():
     print("%d frames in %s" % (nframes[0], out))
 
 
-main()
+if __name__ == "__main__":
+    main()

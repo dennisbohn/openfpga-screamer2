@@ -6,6 +6,7 @@
 #include "s2hud.h"
 #include "s2gfx.h"
 #include "s2load.h"
+#include "s2save.h"
 #include "s2car.h"
 #include "race.h"
 #include "track.h"
@@ -19,7 +20,7 @@
 
 /* the sprites of GAMEL.SPR and the fonts of GAMEL.FNT (the original's numbers) */
 enum { SPR_MARK = 4, SPR_PLAYER = 9, SPR_DIAL = 0x1a, SPR_ARROW = 0x1b, SPR_BAR = 0x25, SPR_LEADER = 0x26, SPR_LIGHTS = 0x42, SPR_LAUREL = 0x72 };
-enum { FONT_TITLE = 0, FONT_BIG = 1, FONT_GEAR = 2, FONT_LABEL = 3, FONT_MID = 4, FONT_CHECK = 8 };
+enum { FONT_TITLE = 0, FONT_BIG = 1, FONT_GEAR = 2, FONT_LABEL = 3, FONT_MID = 4, FONT_QUICK = 7, FONT_CHECK = 8 };
 
 /* the car record's words (s2car.h keeps the game's layout) */
 union word { int32_t i; uint32_t u; float f; };
@@ -49,7 +50,8 @@ static struct {
     float msg_left, best_left, bend_left;       /* the checkpoint gap (0x133078), BEST LAP! (0x13307c), the bend's arrow (0x133090): seconds left */
     int bend_next, bend_id, nbends;             /* the next of the bends' nodes (0x133080), the arrow now shown (0x133088) */
     struct { int32_t x, z, id; } bend[MAX_BENDS];
-    float rec_lap, rec_total;                   /* the track's best lap and total time (0x130d18, 0x130d14), 3599.999 for none */
+    float rec_lap, rec_total;                   /* the track's best lap and total time (0x130d18, 0x130d14), 3599.999 for none (the free run: the best lap since the menu) */
+    int kind;                                   /* race_kind */
     float seen_best;                            /* the player's best lap as of the last frame */
     int chk[RACE_CARS], chk_max[RACE_CARS];     /* each car's checkpoint (car + 0x4b0) and the furthest it has been (+ 0x4b4) */
     int32_t leader[MAX_CHK];                    /* the whole seconds at which the car leading got to each checkpoint (0x11ccec) */
@@ -109,9 +111,12 @@ void s2hud_begin(int track)
     struct s2_record total, lap;
     static uint8_t spl[8 + 56 * MAX_BENDS + 8];
     memset(&S, 0, sizeof S);
-    s2_best_get(track, race_laps, &total, &lap);
+    S.kind = race_kind;
+    if (S.kind == RACE_ATTACK) s2_best_get_kind(S2S_KIND_ATTACK, track, 3, &total, &lap);       /* time attack: its own lists, three laps */
+    else s2_best_get(track, race_laps, &total, &lap);
     S.rec_total = total.time;
     S.rec_lap = lap.time;
+    if (S.kind == RACE_FREE) S.rec_lap = race_free_state()->best_lap;         /* the free run: the best lap since the menu */
     fixed_stale = 1;
     S.seen_best = RF(race_car(0), 0xc40);
     /* the bends' arrows: MAPnDIR.SPL, a count and 56 bytes a node (x +4, y +8, the arrow +0xc) */
@@ -252,6 +257,19 @@ static void make_fixed(int top)
     char t[24];
     out = &fixed;
     blit_start(&fixed, 0);
+    if (S.kind == RACE_FREE) {                                  /* the free run (0x460ae ..): THIS LAP and BEST LAP at the top, the five markers' letters */
+        txt(FONT_LABEL, 3, -1, 8, 16, text[T_THIS_LAP]);
+        txt(FONT_LABEL, 3, -1, 0x10e, 16, text[T_BEST_LAP]);
+        for (int k = 0; k < 5; k++) {
+            const char letter[2] = { (char)('A' + k), 0 };
+            txt(FONT_LABEL, 3, -1, 8, 0x38 + 8 * k, letter);
+            txt(FONT_LABEL, 3, -1, 0x105, 0x38 + 8 * k, letter);
+        }
+        out = &list;
+        fixed_top = top;
+        fixed_stale = 0;
+        return;
+    }
     txt(FONT_LABEL, 3, -1, 8, 2 + top, text[T_LAP]);
     txt(FONT_LABEL, 3, -1, 8, 0x38, text[T_THIS_LAP]);
     txt(FONT_LABEL, 3, -1, 8, 0x48, text[T_TOTAL]);
@@ -261,8 +279,10 @@ static void make_fixed(int top)
     txt(FONT_LABEL, 3, -1, 0x10e, 0x48, text[T_BEST_TOTAL]);
     clock_text(t, S.rec_total);
     txt(FONT_LABEL, 1, -1, 0x10e, 0x50, t);
-    blit_fill(out, 0x6c, BAR_Y + top + 1, 0x68, 7, 0);          /* (the original darkens what is there; this is dark) */
-    sprite(SPR_BAR, 0x6c, BAR_Y + top - 1);
+    if (race_cars() > 1) {                                      /* (the bar: not in time attack alone, 0x458c7) */
+        blit_fill(out, 0x6c, BAR_Y + top + 1, 0x68, 7, 0);      /* (the original darkens what is there; this is dark) */
+        sprite(SPR_BAR, 0x6c, BAR_Y + top - 1);
+    }
     out = &list;
     fixed_top = top;
     fixed_stale = 0;
@@ -311,15 +331,43 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
     blit_start(&list, (int)draw_buf);
     leader_mark(car, n, cam, view);
     dial(car[0]);
-    if (!h.finished) {                                          /* (0x45cfb: none of the rest once the player has done his laps) */
+    if (!h.finished && S.kind == RACE_FREE) {                   /* the free run: no lap block, no places; the lap's clock, the best lap and the list of the five markers */
+        char t[24];
+        const struct race_free *fr = race_free_state();
+        if (fixed_stale || fixed_top != top) make_fixed(top);
+        append_fixed((int)draw_buf);
+        if (S.bend_left > 0.0f) centred(SPR_ARROW + S.bend_id, 0x32 + top);
+        clock_text(t, h.lap_time);
+        txt(FONT_LABEL, 1, -1, 8, 24, t);
+        clock_text(t, S.rec_lap);
+        txt(FONT_LABEL, 1, -1, 0x10e, 24, t);
+        for (int k = 0; k < 5; k++) {
+            clock_text(t, fr->lt[k]);
+            txt(FONT_LABEL, 1, -1, 0x12, 0x38 + 8 * k, t);
+            t[0] = 1;
+            t[1] = fr->sign[k];
+            digits(t + 2, fr->rt[k]);
+            txt(FONT_LABEL, 1, -1, 0x10a, 0x38 + 8 * k, t);
+        }
+        if (fr->msg_left > 0.0f) {                              /* the last marker's difference again at the top, 4 s (0x45e03): '+' in font 8 colour 3, else font 7 colour 1 */
+            t[0] = 1;
+            t[1] = fr->msg_sign;
+            digits(t + 2, fr->msg_val);
+            if (fr->msg_sign == '+') txt_centred(FONT_CHECK, 3, -1, 0x23 + top, t);
+            else txt_centred(FONT_QUICK, 1, -1, 0x23 + top, t);
+        }
+        if (S.best_left > 0.0f && ((int)(S.best_left * 2.0f) & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_BEST_LAP_NEW]);
+    } else if (!h.finished) {                                   /* (0x45cfb: none of the rest once the player has done his laps) */
         char t[24], *q;
         if (fixed_stale || fixed_top != top) make_fixed(top);
         append_fixed((int)draw_buf);
         if (S.bend_left > 0.0f) centred(SPR_ARROW + S.bend_id, 0x32 + top);
-        if (h.place == 1) sprite(SPR_LAUREL, 0x10e, 4);
-        txt(FONT_LABEL, 3, -1, position_x, 2, text[T_POSITION]);
-        fmt_udec(t, (uint32_t)h.place);
-        txt(FONT_BIG, 1, 2, 0x11e, 0xb, t);
+        if (n > 1) {                                            /* (time attack without a ghost: one car, no places, no bar) */
+            if (h.place == 1) sprite(SPR_LAUREL, 0x10e, 4);
+            txt(FONT_LABEL, 3, -1, position_x, 2, text[T_POSITION]);
+            fmt_udec(t, (uint32_t)h.place);
+            txt(FONT_BIG, 1, 2, 0x11e, 0xb, t);
+        }
         if (S.msg_left > 0.0f) txt_centred(FONT_CHECK, 3, -1, 0x23 + top, S.msg);
         q = fmt_udec(t, (uint32_t)h.lap);
         *q++ = ':';                                             /* ("%d%c": the figures' font has the colon after the nine) */
@@ -332,7 +380,7 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
         clock_text(t, h.time);
         txt(FONT_LABEL, 1, -1, 8, 0x50, t);
         if (S.best_left > 0.0f && ((int)(S.best_left * 2.0f) & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_BEST_LAP_NEW]);
-        bar_marks(car, n, BAR_Y + top);
+        if (n > 1) bar_marks(car, n, BAR_Y + top);
     }
     if (((int)S.wrong & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_WRONG_WAY]);
     if (h.count >= 0 && !h.finished) centred(SPR_LIGHTS + 3 - h.count, 60);

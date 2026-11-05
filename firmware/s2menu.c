@@ -22,7 +22,7 @@ const uint8_t s2_menu_laps[S2M_LAPS] = { 1, 3, 5, 10 };
 static const char *track_name[S2M_TRACKS] = { "ENGLAND", "COLUMBIA", "EGYPT", "CALIFORNIA", "FINLAND", "SWITZERLAND", "THE TUNNEL" };
 static const char *team_name[S2M_TEAMS] = { "CONDOR", "ANGELS", "WASP", "ZEUS" };
 static const char *skill_name[S2M_SKILLS] = { "ROOKIE", "NORMAL", "PRO" };
-static const char *lab_arcade = "ARCADE", *lab_champ = "CHAMPIONSHIP", *lab_laps = "NUMBER OF LAPS", *lab_skill = "ARCADE ENEMIES SKILL";
+static const char *lab_arcade = "ARCADE", *lab_champ = "CHAMPIONSHIP", *lab_attack = "TIME ATTACK", *lab_laps = "NUMBER OF LAPS", *lab_skill = "ARCADE ENEMIES SKILL";
 static const char *title = "OPTIONS ROOM";
 
 #define LOCAL_MAX   0x2000u             /* LOCAL.DAT is 2.7 KB stored */
@@ -78,7 +78,7 @@ int s2menu_init(struct zip *z)
         found++;
     }
     static const struct { const char **dst; const char *key; } lab[] = {
-        { &lab_arcade, "ARCADE" }, { &lab_champ, "CHAMPIONSHIP" }, { &lab_laps, "NUMBER OF LAPS" }, { &lab_skill, "ARCADE ENEMIES SKILL" }, { &title, "OPTIONS ROOM" },
+        { &lab_arcade, "ARCADE" }, { &lab_champ, "CHAMPIONSHIP" }, { &lab_attack, "TIME ATTACK" }, { &lab_laps, "NUMBER OF LAPS" }, { &lab_skill, "ARCADE ENEMIES SKILL" }, { &title, "OPTIONS ROOM" },
     };
     for (unsigned k = 0; k < sizeof lab / sizeof lab[0]; k++) {
         i = find_line(lines, lab[k].key);
@@ -111,6 +111,7 @@ void s2menu_load(struct s2_menu_cfg *c)
     c->laps = s2save_get(S2S_LAPS);
     c->skill = s2save_get(S2S_SKILL);
     c->manual = s2save_get(S2S_TRANS);
+    c->free_run = 0;                                        /* (time attack's choice is made every time) */
 }
 
 void s2menu_store(const struct s2_menu_cfg *c)
@@ -154,6 +155,7 @@ int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press)
     if (press & (KEY_A | KEY_B | KEY_START)) {              /* (the start menu has no page behind it: A takes the row as B does) */
         if (*cursor == S2M_ROW_ARCADE) return S2M_ARCADE;
         if (*cursor == S2M_ROW_CHAMP) return S2M_CHAMP;
+        if (*cursor == S2M_ROW_ATTACK) return S2M_ATTACK;
         if (*cursor == S2M_ROW_SETTINGS) return S2M_SETTINGS;
         if (*cursor == S2M_ROW_SCORES) return S2M_SCORES;
         if (*cursor == S2M_ROW_TEAM) return S2M_TEAM;
@@ -198,37 +200,39 @@ void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor)
     con_text(fb, VALUE_COL - 13, 2, "track, car, gearbox, race", GREY, cursor == S2M_ROW_ARCADE ? BAR : BG);
     row(fb, 3, cursor == S2M_ROW_CHAMP, lab_champ, WHITE, 0, 0);
     con_text(fb, VALUE_COL - 13, 3, "four leagues of 4 to 6 races", GREY, cursor == S2M_ROW_CHAMP ? BAR : BG);
+    row(fb, 4, cursor == S2M_ROW_ATTACK, lab_attack, WHITE, 0, 0);
+    con_text(fb, VALUE_COL - 13, 4, "the ghost, free run", GREY, cursor == S2M_ROW_ATTACK ? BAR : BG);
     fmt_udec(v, s2_menu_laps[c->laps]);
-    row(fb, 4, cursor == S2M_ROW_LAPS, lab_laps, GREY, v, 1);
-    row(fb, 5, cursor == S2M_ROW_SKILL, lab_skill, GREY, skill_name[c->skill], 1);
+    row(fb, 5, cursor == S2M_ROW_LAPS, lab_laps, GREY, v, 1);
+    row(fb, 6, cursor == S2M_ROW_SKILL, lab_skill, GREY, skill_name[c->skill], 1);
 
     fmt_str(fmt_str(fmt_udec(v, (uint32_t)c->track), " "), track_name[c->track - 1]);
-    row(fb, 7, cursor == S2M_ROW_RACE, "START RACE", GREEN, v, 1);
-    row(fb, 8, cursor == S2M_ROW_WATCH, "WATCH", CYAN, 0, 0);
-    con_text(fb, 12, 8, "the ride round the track", GREY, cursor == S2M_ROW_WATCH ? BAR : BG);
-    row(fb, 9, cursor == S2M_ROW_SETTINGS, "GAME SETTINGS", CYAN, 0, 0);
-    row(fb, 10, cursor == S2M_ROW_SCORES, "HI SCORES", CYAN, 0, 0);
-    row(fb, 11, cursor == S2M_ROW_TEAM, "TEAM SELECTION", CYAN, 0, 0);
-    con_text(fb, VALUE_COL - 7, 11, "team and name", GREY, cursor == S2M_ROW_TEAM ? BAR : BG);
+    row(fb, 8, cursor == S2M_ROW_RACE, "START RACE", GREEN, v, 1);
+    row(fb, 9, cursor == S2M_ROW_WATCH, "WATCH", CYAN, 0, 0);
+    con_text(fb, 12, 9, "the ride round the track", GREY, cursor == S2M_ROW_WATCH ? BAR : BG);
+    row(fb, 10, cursor == S2M_ROW_SETTINGS, "GAME SETTINGS", CYAN, 0, 0);
+    row(fb, 11, cursor == S2M_ROW_SCORES, "HI SCORES", CYAN, 0, 0);
+    row(fb, 12, cursor == S2M_ROW_TEAM, "TEAM SELECTION", CYAN, 0, 0);
+    con_text(fb, VALUE_COL - 7, 12, "team and name", GREY, cursor == S2M_ROW_TEAM ? BAR : BG);
 
     struct s2_pick g[4];
     s2menu_grid(c, g);
     p = fmt_udec(fmt_str(fmt_str(v, team_name[g[0].team - 1]), " "), g[0].car);
     p = fmt_str(p, c->manual ? "  MANUAL" : "  AUTOMATIC");
-    con_text(fb, 2, 12, "YOU", GREY, BG);
-    con_text(fb, 12, 12, v, WHITE, BG);
+    con_text(fb, 2, 13, "YOU", GREY, BG);
+    con_text(fb, 12, 13, v, WHITE, BG);
     p = o;
     *p = 0;
     for (int k = 1; k < 4; k++) {
         if (k > 1) p = fmt_str(p, "  ");
         p = fmt_udec(fmt_str(fmt_str(p, team_name[g[k].team - 1]), " "), g[k].car);
     }
-    con_text(fb, 2, 13, "AGAINST", GREY, BG);
-    con_text(fb, 12, 13, o, WHITE, BG);
+    con_text(fb, 2, 14, "AGAINST", GREY, BG);
+    con_text(fb, 12, 14, o, WHITE, BG);
 
-    con_text(fb, 2, 15, "d-pad: up/down row, left/right value", GREY, BG);
-    con_text(fb, 2, 16, "B or Start: take the row   X: watch", GREY, BG);
-    con_text(fb, 2, 17, "L / R: track -3 / +3 from any row", GREY, BG);
+    con_text(fb, 2, 16, "d-pad: up/down row, left/right value", GREY, BG);
+    con_text(fb, 2, 17, "B or Start: take the row   X: watch", GREY, BG);
+    con_text(fb, 2, 18, "L / R: track -3 / +3 from any row", GREY, BG);
     con_text(fb, 2, 19, "in the race or the ride:", WHITE, BG);
     static const char *const keys[4][2] = { { "Select+B", "back to this menu" }, { "Select+Start", "race again" },
                                             { "Select+left/right", "other track" }, { "Start", "ride / drive" } };

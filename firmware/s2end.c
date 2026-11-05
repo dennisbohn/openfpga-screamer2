@@ -27,6 +27,7 @@ static struct {
     int started;
     uint32_t last_vf, clock, blink;     /* the clocks in hundredths of a second */
     int choice;                         /* 0 RACE AGAIN, 1 EXIT */
+    int kind;                           /* the lists' kind of game: S2S_KIND_ARCADE, S2S_KIND_LEAGUE, S2S_KIND_ATTACK */
     int recorded, rank;                 /* the times are in the lists; the row the total time took, -1 if none */
     int first;                          /* the first row of the list in view, and how far it is into the move to the next, 0 .. 1 */
     float frac;
@@ -38,7 +39,7 @@ static void record(const struct s2_end_in *in)
 {
     static int logged;
     E.recorded = 1;
-    const int kind = in->league ? S2S_KIND_LEAGUE : S2S_KIND_ARCADE;
+    const int kind = E.kind;
     E.rank = s2save_add_time(kind, in->track, s2_laps_list(in->laps), in->time, 0, in->team, in->car, 0);
     if (in->best_lap > 0.0f) s2save_add_time(kind, in->track, S2S_LAP, in->best_lap, 0, in->team, in->car, 0);
     if (logged++ < 3) {                 /* (the log has 4 KB) */
@@ -60,6 +61,15 @@ static void record(const struct s2_end_in *in)
 static void congratulations(struct blit_list *l, const struct s2_end_in *in)
 {
     char t[24];
+    if (in->attack) {                   /* time attack (0x48b4c): TOTAL and the time, LAP TIME and the best lap */
+        s2gfx_text_centred(l, FONT, WHITE, 2, 60, s2gfx_line("TOTAL", 0, "TOTAL"));
+        s2_time_text(t, in->time);
+        s2gfx_text_centred(l, FONT, WHITE, 2, 80, t);
+        s2gfx_text_centred(l, FONT, WHITE, 2, 100, s2gfx_line("LAP TIME", 0, "LAP TIME"));
+        s2_time_text(t, in->best_lap);
+        s2gfx_text_centred(l, FONT, WHITE, 2, 120, t);
+        return;
+    }
     static const char *const ord[4] = { "1ST", "2ND", "3RD", "4TH" };
     int place = in->place < 1 ? 1 : in->place > 4 ? 4 : in->place;
     if (in->place == 1) s2gfx_text_centred(l, FONT, WHITE, 2, 70, s2gfx_line("1ST", 5, "CONGRATULATIONS !"));
@@ -84,7 +94,7 @@ static void choices(struct blit_list *l, const struct s2_end_in *in)
     int y0 = (int)(80.0f - 12.0f * E.frac), list = s2_laps_list(in->laps);
     s2gfx_clip(0x51, 0x8C, 0x50, 0x8C);
     for (int i = E.first, y = y0; i < E.first + VIEW && i < ROWS; i++, y += 12) {
-        const struct s2save_row *r = s2save_row(S2S_KIND_ARCADE, in->track, list, i);
+        const struct s2save_row *r = s2save_row(E.kind, in->track, list, i);
         char t[40];
         s2_row_text(t, i, r);
         int mine = i == E.rank;
@@ -138,6 +148,7 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
         E.last_vf = vf;
         E.blink = BLINK_BIT;
         E.rank = -1;
+        E.kind = in->league ? S2S_KIND_LEAGUE : in->attack ? S2S_KIND_ATTACK : S2S_KIND_ARCADE;
         s2gfx_dark_table(pal, E.dark, 256);
     }
     uint32_t dvf = (vf - E.last_vf) & 0xFFFF;

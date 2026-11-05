@@ -89,6 +89,7 @@ static void draw_loading(struct blit_list *l)
     s2gfx_picture(l, s2gfx_pic(0));
     s2gfx_sprite_centred(l, SPR_BANNER + track_shown - 1, 4);
     s2gfx_text_centred(l, S2G_FONT_MEDIUM, S2G_WHITE, 2, 170, s2gfx_line("LOADING...", 0, "LOADING..."));
+    if (kind_shown >= S2S_KINDS) return;        /* the free run keeps no records and shows none (0x34fb7: the kinds 3 and 4 skip the lines) */
     s2gfx_text_centred(l, S2G_FONT_SMALL, S2G_WHITE, 2, 72, s2gfx_line("BEST TIME", 0, "BEST TIME"));
     s2_record_text(t, &total);
     s2gfx_text_centred(l, S2G_FONT_MEDIUM, S2G_WHITE, 2, 84, t);

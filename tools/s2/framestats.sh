@@ -49,7 +49,7 @@ PY
     python -I "$root/tools/s2/perf_patch.py" "$src"
     docker_sh -v "$mount:/b" --entrypoint sh $img -c "
         cd /b/stats/src_s2 && gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../framestats_s2 framestats.c perf.c $LIST -lm &&
-        gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../racestats_s2 racestats.c perf.c $LIST race.c -lm"
+        gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../racestats_s2 racestats.c perf.c $LIST race.c s2ghost.c -lm"
     ;;
 sweep)
     v=$1; image=$2; label=$3; out=$4; step=$5; cars=$6; grid=$7

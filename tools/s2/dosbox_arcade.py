@@ -19,6 +19,13 @@ the championship's end screen, the LEAGUE REPORT after it and, from it, the TRAC
 build/check/dosbox_league/ with text files of the game's state (ram_*.txt: the cars' places, laps and times, the points); `--league --check` compares them with the models of
 tools/ui_league_ref.py: the selection whole, the welcome page's two lines (its picture is a 3D scene), the end screen's texts and list and the report whole at any of the blink phases,
 built from the numbers in the game's memory. The game's keyboard focus is taken for about 5 minutes.
+
+--timeattack [closed|free|race] (menus row 7): the options room's third station, TIME ATTACK. Its TRACK SELECTION (the turning 3D map of the chosen track, flying in and out as the
+choice moves; build/check/dosbox_ta/) with all seven tracks open (or, with `closed`, the three of a new save, RIGHT pressed once more than there are tracks), the car page with
+its 3 LAPS / FREE RUN choice, and with `race` a race of one lap (the game's lap count is set to 1 once the race runs: time attack's is 3) with the car handed to the game's driver, its
+end screen (TOTAL / LAP TIME, then the list); with `free` the free run with the car handed to the driver: the race screen with the five markers' list, the numbers of which
+(the text tables at 0x132fc8 and 0x133000) go to ram_*.txt. `--timeattack --check` compares the screenshots with the models (tools/ui_ta_ref.py). Needs the window in front
+for about 3 to 6 minutes a run.
 """
 import atexit
 import ctypes
@@ -149,11 +156,20 @@ def make_private(extra, **choice):
 # 0x119300) and entries (0x2c bytes from 0x130c58), the table of places the end screen makes, the standings the report keeps (12 bytes a car from 0x128a6c)
 DUMP = (
     [0x128a10, 0x128a14, 0x128a18, 0x128a1c, 0x128a20, 0x132494, 0x1324c4, 0x130c48, 0x130c4c, 0x130d10, 0x130d48, 0x1289ec]
-    + [0x119300 + 0xcc0 * i + o for i in range(4) for o in (0x4c, 0x4a8, 0xc30, 0xc38)]
+    + [0x119300 + 0xcc0 * i + o for i in range(4) for o in (0x4c, 0x4a8, 0xc30, 0xc38, 0xc40)]
     + [0x130c58 + 0x2c * i + o for i in range(4) for o in (0, 4, 8)]
     + [0x128a6c + 12 * i + o for i in range(4) for o in (0, 4, 8)]
     + list(range(0x132384, 0x1323c8, 4))
 )
+
+
+# the free run's text tables (0x132fc8 + 11 i: the left column, 0x133000 + 11 i: the right), the best lap's text, the gap message, the lap list timers
+FREE_BYTES = [(0x132fc8, 55), (0x133000, 55), (0x132fa4, 12), (0x132f98, 12), (0x13304c, 4), (0x133078, 4), (0x13307c, 4), (0x130d18, 4), (0x130d1c, 20)] + \
+             [(0x119300 + 0xc38, 4), (0x119300 + 0xc3c, 4), (0x119300 + 0xc40, 4), (0x119300 + 0xc44, 20), (0x119300 + 0xc58, 20), (0x119300 + 0x4b0, 8), (0x119300 + 0x4a8, 8)]
+
+
+# time attack's lists (the totals of kind 2 for three laps, the best laps): 300 bytes a track in columns of 15 (times, names, replay numbers, teams, models), the files' track order
+TA_LISTS = [(0x12d388 + 0x4b0 * t, 300) for t in range(7)] + [(0x12f32c + 0x1068 + 0x12c * t, 300) for t in range(7)]
 
 
 class Mem:
@@ -184,13 +200,21 @@ class Mem:
             time.sleep(0.4)
         return False
 
-    def race(self, folder):
-        """the race is set up (the kind of game word 0x130d10 is 2: a championship race), then 20 s on (the loading, the lights and a few seconds of an unmoving car) the player's
-        car's controls pointer (+0xb4) is set to 0: the game's driver takes the car, which drives its lap"""
-        ok = self.wait(lambda: self.word(0x130d10) == 2, 120)
+    def race(self, folder, mode=2, laps=None, drive=True):
+        """the race is set up (the kind of game word 0x130d10 is 2: a championship race; 4 time attack, 8 free run), then 20 s on (the loading, the lights and a few seconds of an
+        unmoving car) the player's car's controls pointer (+0xb4) is set to 0: the game's driver takes the car, which drives its lap. laps: the race's laps (0x130d48) set at once
+        (time attack's are 3, a lap is long enough to wait for); drive: False leaves the car to the keys"""
+        ok = self.wait(lambda: self.word(0x130d10) == mode, 120)
+        if laps is not None and ok:
+            self.g.poke(0x130d48, struct.pack("<i", laps))
         time.sleep(20)
-        ok = ok and self.g.poke(0x1193b4, struct.pack("<i", 0))
+        ok = ok and (not drive or self.g.poke(0x1193b4, struct.pack("<i", 0)))
         print("the player's car handed to the game's driver:", "yes" if ok else "NO (the race did not start in time)")
+
+    def bytes_at(self, label, folder, ranges):
+        """the bytes of the given (address, length) ranges to <folder>/bytes_<label>.txt, one range a line: address, hex"""
+        lines = ["%06x %s" % (a, self.g.flat(a, n).hex()) for a, n in ranges]
+        open(os.path.join(folder, "bytes_%s.txt" % label), "w").write("\n".join(lines) + "\n")
 
     def finished(self):
         """the player's car has done its laps (the flag +0x4c bit 1 of its record)"""
@@ -226,10 +250,25 @@ def session(steps):
             t_mem = time.time()
             mem = Mem.open(pid) if mem is None else mem
             print("the game's memory: %s after %.1f s" % ("found" if mem else "not found", time.time() - t_mem))
-        elif st[0] == "X":                      # --league: Xrace hands the player's car to the game's driver once the race runs, Xfin waits until the car has finished
+        elif st[0] == "X":                      # --league: Xrace hands the player's car to the game's driver once the race runs, Xfin waits until the car has finished;
+            mem = Mem.open(pid) if mem is None else mem      # --timeattack: Xta (mode 4, one lap) and Xfree (mode 8) the same; Xkeys only waits for the race to run
+            if mem:
+                if st[1:] == "race":
+                    mem.race(work)
+                elif st[1:] == "ta":
+                    mem.race(work, 4, 1)
+                elif st[1:] == "free":
+                    mem.race(work, 8)
+                else:
+                    mem.finished()
+        elif st[0] == "T":                      # --timeattack: T<label> time attack's lists to bytes_<label>.txt
             mem = Mem.open(pid) if mem is None else mem
             if mem:
-                mem.race(work) if st[1:] == "race" else mem.finished()
+                mem.bytes_at(st[1:], work, TA_LISTS)
+        elif st[0] == "B":                      # --timeattack: Bfree<label> the bytes of the free run's text tables to bytes_<label>.txt
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.bytes_at(st[1:], work, FREE_BYTES)
         elif st[0] == "D":                      # the game's league state into a text file
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -432,6 +471,92 @@ def league():
     print(f"{len(shots)} screenshots in {work}")
 
 
+# ------------------------------------------------------------------------------------------------ time attack (menus row 7)
+
+def timeattack(which):
+    """time attack against the running original (see the header): `which` is "" (all seven tracks open: TRACK SELECTION in every state, then the car page), "closed" (a new save: three
+    tracks), "race" (England, one lap, the end screen) or "free" (the free run). The keys are the original's (ENTER 0x1c, ESC 0x01, the arrows extended)."""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox_ta" + ("_" + which if which else ""))
+    atexit.register(drop_junctions)
+    make_private(0 if which == "closed" else 4, team=0, car=1, name="MIL")
+    # the attract sequence plays while the game's memory is looked for; ENTER leaves it for TEAM SELECTION, the name, the options room: RIGHT twice to the third station, TIME ATTACK
+    boot = "w3 M k1c w6 k1c w6 k1c w6 ke4d w4 ke4d w4 k1c w7 "
+    tracks = ""
+    if which == "":
+        # TRACK SELECTION: the first track settled (the map turns once in 8.2 s: shots spread over it), then RIGHT to each next one (the old map leaves and the new comes in
+        # within a quarter second: shots right after the key), at the end one RIGHT more than there are tracks
+        tracks = "Lta_0 r4,0.9 "
+        for p in range(1, 7):
+            tracks += "Ke4d R4,0.04 w0.5 Lta_%d r3,1.1 " % p
+        tracks += "ke4d w1 Lta_last r2,0.9 "
+        tracks += "ke4b w1.2 Lta_back r2,0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w1.2 Lta_first r2,0.6 "
+        tracks += "k1c w7 Lta_car0 r3,0.6 k1c w1.5 Lta_car1 r3,0.6 k1c w1.5 Lta_mode r4,0.5 ke4d w0.8 Lta_mode_free r4,0.45 q"
+    elif which == "closed":
+        tracks = "Lta_0 r3,0.9 ke4d w1.2 Lta_1 r3,0.9 ke4d w1.2 Lta_2 r3,0.9 ke4d w1 Lta_2_more r3,0.9 ke4d w1 Lta_2_more2 r2,0.9 q"
+    elif which == "race":
+        tracks = ("Lta_0 r2,0.5 k1c w7 Lta_car0 r1,0.5 k1c w1.5 Lta_car1 r1,0.5 k1c w1.5 Lta_mode r1,0.5 k1c w2 Lta_loading r2,1.0 "
+                  "Xta Lta_race r3,1.5 Xfin w1.2 Lta_end_a r2,0.5 w1.8 Lta_end_b r2,0.5 w1 Dend Tend w2 Lta_end_list r4,0.6 q")
+    elif which == "free":
+        tracks = ("Lta_0 r1,0.5 k1c w7 k1c w1.5 k1c w1.5 ke4d w0.8 Lta_mode_free r2,0.5 k1c w2 Lta_loading r2,1.0 "
+                  "Xfree Lfree_1 r2,0.6 Bfree_1 w6 Lfree_2 r2,0.6 Bfree_2 w9 Lfree_3 r2,0.6 Bfree_3 w9 Lfree_4 r2,0.6 Bfree_4 w9 Lfree_5 r2,0.6 Bfree_5 w9 Lfree_6 r2,0.6 Bfree_6 "
+                  "w9 Lfree_7 r2,0.6 Bfree_7 w9 Lfree_8 r2,0.6 Bfree_8 w9 Lfree_9 r2,0.6 Bfree_9 w9 Lfree_10 r2,0.6 Bfree_10 w9 Lfree_11 r2,0.6 Bfree_11 q")
+    shots = session(boot + tracks)
+    print(f"{len(shots)} screenshots in {work}")
+
+
+def read_bytes_dump(label):
+    """a dump of Mem.bytes_at(): {address: bytes}"""
+    out = {}
+    for line in open(os.path.join(work, "bytes_%s.txt" % label)):
+        a, h = line.split()
+        out[int(a, 16)] = bytes.fromhex(h)
+    return out
+
+
+def check_free(shots):
+    """the free run's race screen against the model of tools/hud_reference.py: the text tables the game kept at the moment (bytes_free_<k>.txt, the strings of 0x132fc8 and 0x133000 as the game
+    has them, the message of 0x132f98, its timer) drawn by the model's text routine at the places read from the code; the pixels the model draws are compared with the screenshots' (the
+    scene is under them). The live row (the running time of the next marker) and the lap's clock change while the dump and the screenshots are a second apart: not compared."""
+    import hud_reference
+    hud = hud_reference.Hud(game)
+    T = hud.text
+    tot_n = tot_same = 0
+    done = set()
+    for png, label in shots:
+        if not label.startswith("free_"):
+            continue
+        try:
+            d = read_bytes_dump(label)
+        except FileNotFoundError:
+            continue
+        idx = read_png(png)
+        lt = [d[0x132fc8][11 * i:11 * i + 11].split(b"\0")[0].decode("latin-1") for i in range(5)]
+        rt = [d[0x133000][11 * i:11 * i + 11].split(b"\0")[0].decode("latin-1") for i in range(5)]
+        timer = struct.unpack("<f", d[0x13304c])[0]
+        cp = struct.unpack("<i", d[0x119300 + 0x4b0][4:8])[0]
+        live = cp % 5 if timer <= 0.5 else -1                  # (the list is frozen while it is held)
+        c = hud_reference.Canvas()
+        hud.put_text(c, 3, 3, -1, 8, 16, T[0])
+        hud.put_text(c, 3, 3, -1, 0x10e, 16, T[2])
+        for k in range(5):
+            hud.put_text(c, 3, 3, -1, 8, 0x38 + 8 * k, chr(65 + k))
+            hud.put_text(c, 3, 3, -1, 0x105, 0x38 + 8 * k, chr(65 + k))
+            if k != live:
+                hud.put_text(c, 3, 1, -1, 0x12, 0x38 + 8 * k, lt[k])
+            hud.put_text(c, 3, 1, -1, 0x10a, 0x38 + 8 * k, rt[k])
+        n = same = 0
+        for i in range(64000):
+            if c.px[i]:
+                n += 1
+                same += idx[i] == c.px[i]
+        tot_n += n
+        tot_same += same
+        print("%s %-9s the free run's text tables (labels, columns%s): %d of %d drawn pixels equal" % (os.path.basename(png), label, ", live row %d left out" % live if live >= 0 else "", same, n))
+    print("free run: %d of %d pixels equal" % (tot_same, tot_n))
+    return 0 if tot_same == tot_n and tot_n else 1
+
+
 def league_models():
     """the models of tools/ui_league_ref.py (the pages) and its End class (the championship's end screen)"""
     sys.path.insert(0, os.path.join(root, "tools"))
@@ -575,6 +700,17 @@ def main():
         sys.exit(1 if bad else 0)
     if "--pages3d" in sys.argv:
         pages3d()
+        return
+    if "--timeattack" in sys.argv:
+        which = next((a for a in sys.argv if a in ("closed", "race", "free")), "")
+        if "--check" not in sys.argv:
+            timeattack(which)
+        work = os.path.join(root, "build", "check", "dosbox_ta" + ("_" + which if which else ""))
+        if which == "free":
+            files = sorted(glob.glob(os.path.join(work, "*.png")))
+            labels = open(os.path.join(work, "labels.txt")).read().split()
+            sys.exit(check_free(list(zip(files, labels))))
+        print("%d screenshots in %s: compared by tools/trackmap.sh (the maps, the pages' text, the end screen)" % (len(glob.glob(os.path.join(work, "*.png"))), work))
         return
     extra = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 0
     if "--check" in sys.argv:                   # the screenshots of the last run again (build/check/dosbox)

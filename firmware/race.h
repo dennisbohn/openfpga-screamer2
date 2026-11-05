@@ -36,6 +36,35 @@ extern struct s2_pick race_grid[RACE_CARS];
 extern int race_laps;
 extern int race_level;
 
+/* The kind of race (set before race_init()): the arcade's and the championship's are RACE_NORMAL, four cars on the game's grid. Time attack
+   (RACE_ATTACK, STARTL.EXE mode word bit 4, 0x339e7: three laps, no computers) races the player's car, and the ghost's car if race_ghost is set, side by side on
+   the first row; the player's controls are recorded (s2ghost.h) and the ghost's car is stepped from a kept run's controls: a second car of the same physics, which
+   nothing collides with and which is not a computer (no pace, no driver). The free run (RACE_FREE, bit 8) is the player's car alone, a race that does not end
+   on its laps, with the five splits of a lap (race_free_state()). In both the car records of the slots after the first are race_grid's: slot 1 is the ghost's team and car. */
+enum { RACE_NORMAL, RACE_ATTACK, RACE_FREE };
+extern int race_kind;
+struct s2gh_head;
+extern const struct s2gh_head *race_ghost;      /* RACE_ATTACK: the kept run to race against (s2gh_ghost()), 0 for none */
+
+/* RACE_ATTACK: the side (0 / 1) the player's car took on the first row (the other is the ghost's: the player takes the one the kept run did not start on) */
+int race_slot(void);
+
+/* The free run's lap list (the original's 0x132fc8 / 0x133000 tables, 0x1ffcb, 0x4612d): marker A .. E are the fifths of a lap; the left column shows the lap's
+   time at each marker (the running time in the row of the next marker), the right the difference against the session's quickest lap's splits ('-' quicker,
+   '+' slower) with, in the row after the one just passed, that lap's own time there. 3599.999 is "--:--:--". The finished lap's list stays 4 s, then it clears. */
+struct race_free {
+    float lt[5], rt[5];                 /* the columns' times */
+    char sign[5];                       /* the right column's sign: ' ', '+' or '-' */
+    float best[5];                      /* the quickest lap's splits since the menu */
+    float list_left;                    /* seconds the finished lap's list still stays (0x13304c) */
+    char msg_sign;                      /* the message at the top of the screen after a marker (0x132f98, the checkpoint gap's place: the original copies the right column's text into it, */
+    float msg_val, msg_left;            /* 0x20162): its sign and time, and the seconds it stays (0x133078: 4 after each marker passed against a quickest lap) */
+    float best_lap;                     /* the quickest lap since the menu (0x130d18) */
+};
+const struct race_free *race_free_state(void);
+/* the best lap and splits are forgotten (the original does it when time attack's TRACK SELECTION is entered, 0x3f7f3) */
+void race_free_reset(void);
+
 /* Track 1 .. 7: the line read (once per track) and the four cars put on the grid, the player's car 0 last, the
    countdown at 0. 1 if it worked. floor_z: a car lower than this is put back on the line. */
 int race_init(int track, float floor_z);

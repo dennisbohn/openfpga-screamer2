@@ -5,6 +5,9 @@
  * in view: the player's time has been put into the lists at that moment (s2save.h, as 0x353cb does) and its row, lit, is brought
  * into view. Left / right choose, B or Start take (the original's ENTER).
  *
+ * Time attack's end (0x48b4c, `attack` in s2_end_in): the arcade's, but the first four seconds show TOTAL, the total time, LAP TIME and the best lap (font 0 at y 60,
+ * 80, 100, 120) in place of CONGRATULATIONS / place / time, and the player's times go into time attack's lists (S2S_KIND_ATTACK: only the three-lap totals and the laps).
+ *
  * The championship's end (0x48041, `league` in s2_end_in): the same four seconds, then the banner, the darkened band with CONTINUE alone in the
  * middle (the original's REPLAY comes with the replay) and, in a darkened box, a list of the cars that have done their laps: place, name (the
  * player's, CPU for the computers), the car's side view, its time and the points of its place (10 / 6 / 3 / 0), the rows by place; B or Start end
@@ -32,6 +35,7 @@ struct s2_end_in {
     float best_lap;                     /* his best lap, 0 or less if none */
     int team, car;                      /* his team 1 .. 4 and car 1 .. 5 (the files' numbering) */
     int league;                         /* 1: the championship's end: the four cars below are shown, CONTINUE is the only choice */
+    int attack;                         /* 1: time attack's end (0x48b4c): TOTAL, the time, LAP TIME and the best lap for the first four seconds, the lists are time attack's */
     struct s2_end_car cars[4];
 };
 

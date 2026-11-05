@@ -69,6 +69,8 @@ void s2gfx_picture(struct blit_list *l, const uint8_t *pic);
 void s2gfx_sprite(struct blit_list *l, int n, int x, int y);
 /* Sprite n in the middle of the screen at row y (the original's 0x333d9: (320 - (w + x offset)) / 2 - x offset / 2) */
 void s2gfx_sprite_centred(struct blit_list *l, int n, int y);
+/* Sprite n centred in the box x0 .. x0 + width at row y (the original's 0x33455: x = x0 + (width - w) / 2, w the sprite's own width, its x offset added when it is drawn) */
+void s2gfx_sprite_boxed(struct blit_list *l, int n, int x0, int width, int y);
 /* Text as the original's engine routine with an explicit spacing (0xc67f0 draws, 0xc6c88 measures): `space` pixels between two characters (none
    before the first or after the last); a control byte 1 sets fixed pitch (a character centred in a cell of the font's widest, the first's cell
    without the space, the later ones with it), 2 proportional. Draws at (x, y) and returns the width in pixels; with l = 0 it only measures. */

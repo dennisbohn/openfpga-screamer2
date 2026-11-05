@@ -7,6 +7,8 @@
  *                        ESC goes back
  *   CHAMPIONSHIP         the championship (s2leaguepages.h, s2league.h): LEAGUE SELECTION, WELCOME TO LEAGUE n, the league's races with the LEAGUE
  *                        REPORT after each; the viewer runs it (S2M_CHAMP)
+ *   TIME ATTACK          the original's TRACK SELECTION with the turning 3D maps (s2trackpage.h), the CAR page with 3 LAPS / FREE RUN, then the race
+ *                        against the ghost of the track's best run, or the free run (s2ghost.h); the viewer runs it (S2M_ATTACK)
  *   NUMBER OF LAPS       the original's options, 1 / 3 / 5 / 10 (a GAME SETTINGS row; the championship races take it too)
  *   ARCADE ENEMIES SKILL ROOKIE / NORMAL / PRO (a GAME SETTINGS row)
  *   START RACE           the race with the choices as they are, at once (left / right: the track, T1 .. T7 in the files' numbering)
@@ -35,16 +37,17 @@ struct s2_menu_cfg {
     int laps;                           /* index into s2_menu_laps: 1, 3, 5, 10 */
     int skill;                          /* 0 ROOKIE, 1 NORMAL, 2 PRO (race_level = 2 - skill) */
     int manual;                         /* 1: the manual gearbox */
+    int free_run;                       /* time attack's choice on its CAR page: 0 3 LAPS, 1 FREE RUN (not kept: the original asks it every time) */
 };
 extern const uint8_t s2_menu_laps[S2M_LAPS];
 
 /* what the menu ends with (S2M_ARCADE: a key press on the ARCADE row, which s2menu_run() answers by running the arcade pages; S2M_SETTINGS and
    S2M_SCORES and S2M_TEAM: the GAME SETTINGS, HI SCORES and TEAM SELECTION rows, which s2menu_run() answers by running the page; S2M_CHAMP: the
    CHAMPIONSHIP row, which s2menu_run() returns to the viewer, whose races the league needs) */
-enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES, S2M_TEAM, S2M_CHAMP };
+enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES, S2M_TEAM, S2M_CHAMP, S2M_ATTACK };
 
 /* The rows, top to bottom */
-enum { S2M_ROW_ARCADE, S2M_ROW_CHAMP, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROW_TEAM, S2M_ROWS };
+enum { S2M_ROW_ARCADE, S2M_ROW_CHAMP, S2M_ROW_ATTACK, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROW_TEAM, S2M_ROWS };
 
 /* The names and labels from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the
    built-in English text, which is the same. Once, before the first menu. Returns how many of the 8 texts (the tracks, the teams, the
