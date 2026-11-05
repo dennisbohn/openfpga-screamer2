@@ -20,7 +20,7 @@
 
 /* the sprites of GAMEL.SPR and the fonts of GAMEL.FNT (the original's numbers) */
 enum { SPR_MARK = 4, SPR_PLAYER = 9, SPR_DIAL = 0x1a, SPR_ARROW = 0x1b, SPR_BAR = 0x25, SPR_LEADER = 0x26, SPR_LIGHTS = 0x42, SPR_LAUREL = 0x72 };
-enum { FONT_TITLE = 0, FONT_BIG = 1, FONT_GEAR = 2, FONT_LABEL = 3, FONT_MID = 4, FONT_CHECK = 8 };
+enum { FONT_TITLE = 0, FONT_BIG = 1, FONT_GEAR = 2, FONT_LABEL = 3, FONT_MID = 4, FONT_QUICK = 7, FONT_CHECK = 8 };
 
 /* the car record's words (s2car.h keeps the game's layout) */
 union word { int32_t i; uint32_t u; float f; };
@@ -265,7 +265,6 @@ static void make_fixed(int top)
             txt(FONT_LABEL, 3, -1, 8, 0x38 + 8 * k, letter);
             txt(FONT_LABEL, 3, -1, 0x105, 0x38 + 8 * k, letter);
         }
-        blit_fill(out, 0x6c, BAR_Y + top + 1, 0x68, 7, 0);
         out = &list;
         fixed_top = top;
         fixed_stale = 0;
@@ -280,8 +279,10 @@ static void make_fixed(int top)
     txt(FONT_LABEL, 3, -1, 0x10e, 0x48, text[T_BEST_TOTAL]);
     clock_text(t, S.rec_total);
     txt(FONT_LABEL, 1, -1, 0x10e, 0x50, t);
-    blit_fill(out, 0x6c, BAR_Y + top + 1, 0x68, 7, 0);          /* (the original darkens what is there; this is dark) */
-    sprite(SPR_BAR, 0x6c, BAR_Y + top - 1);
+    if (race_cars() > 1) {                                      /* (the bar: not in time attack alone, 0x458c7) */
+        blit_fill(out, 0x6c, BAR_Y + top + 1, 0x68, 7, 0);      /* (the original darkens what is there; this is dark) */
+        sprite(SPR_BAR, 0x6c, BAR_Y + top - 1);
+    }
     out = &list;
     fixed_top = top;
     fixed_stale = 0;
@@ -347,6 +348,13 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
             t[1] = fr->sign[k];
             digits(t + 2, fr->rt[k]);
             txt(FONT_LABEL, 1, -1, 0x10a, 0x38 + 8 * k, t);
+        }
+        if (fr->msg_left > 0.0f) {                              /* the last marker's difference again at the top, 4 s (0x45e03): '+' in font 8 colour 3, else font 7 colour 1 */
+            t[0] = 1;
+            t[1] = fr->msg_sign;
+            digits(t + 2, fr->msg_val);
+            if (fr->msg_sign == '+') txt_centred(FONT_CHECK, 3, -1, 0x23 + top, t);
+            else txt_centred(FONT_QUICK, 1, -1, 0x23 + top, t);
         }
         if (S.best_left > 0.0f && ((int)(S.best_left * 2.0f) & 1)) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_BEST_LAP_NEW]);
     } else if (!h.finished) {                                   /* (0x45cfb: none of the rest once the player has done his laps) */

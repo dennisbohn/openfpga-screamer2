@@ -57,6 +57,8 @@ struct race_free {
     char sign[5];                       /* the right column's sign: ' ', '+' or '-' */
     float best[5];                      /* the quickest lap's splits since the menu */
     float list_left;                    /* seconds the finished lap's list still stays (0x13304c) */
+    char msg_sign;                      /* the message at the top of the screen after a marker (0x132f98, the checkpoint gap's place: the original copies the right column's text into it, */
+    float msg_val, msg_left;            /* 0x20162): its sign and time, and the seconds it stays (0x133078: 4 after each marker passed against a quickest lap) */
     float best_lap;                     /* the quickest lap since the menu (0x130d18) */
 };
 const struct race_free *race_free_state(void);

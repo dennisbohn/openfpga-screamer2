@@ -17,6 +17,9 @@
 #include "../s2trackmap.h"
 #include "../s2menu.h"
 #include "../s2page.h"
+#include "../s2end.h"
+#include "../s2save.h"
+#include "../s2load.h"
 #include "../slot.h"
 #include "../dlog.h"
 #include "../dat.h"
@@ -83,7 +86,6 @@ void music_frame(void) {}
 
 /* what the pages need of the rest of the firmware */
 static const int order[7] = { 1, 3, 4, 5, 6, 2, 7 };
-int s2save_track_at(int pos) { return order[pos]; }
 int s2arcade_tracks_open(void) { return 7; }
 int s2page_run(const struct s2_page *p, void *self) { (void)p; (void)self; return 0; }
 
@@ -199,6 +201,66 @@ static void dump(const char *prefix, const char *name, const char *what, const u
     fclose(o);
 }
 
+/* Time attack's end screen (s2end.c) against the screenshots of the race that ended: the state of the game's memory at the end (tools/s2/dosbox_arcade.py --timeattack race: the track,
+   the player's total time and best lap) gives the screen's input; the firmware's frames are drawn over two flat backgrounds and the pixels that do not depend on the background (the text,
+   the banner, the cars' pictures: everything the blitter draws over the darkened race) are compared with the screenshot's. phase 1: the first four seconds; the list: the choices, the list
+   of the track (its rows empty in the original: a car handed to the game's own driver is not entered) at the blink phase that matches best. */
+static int ram_word(const char *path, unsigned addr, int *v)
+{
+    FILE *f = fopen(path, "r");
+    char line[64];
+    if (!f) return 0;
+    while (fgets(line, sizeof line, f)) {
+        unsigned a;
+        int w;
+        if (sscanf(line, "%x %d", &a, &w) == 2 && a == addr) { *v = w; fclose(f); return 1; }
+    }
+    fclose(f);
+    return 0;
+}
+
+static int end_match(const char *label, const char *ram, int *n_equal, int *n_drawn)
+{
+    int track_word = 0, total_bits = 0, best_bits = 0;
+    if (!ram_word(ram, 0x130c4c, &track_word) || !ram_word(ram, 0x119f38, &total_bits) || !ram_word(ram, 0x119f40, &best_bits)) return 0;
+    struct s2_end_in in = { .track = track_word + 1, .laps = 3, .place = 1, .team = 1, .car = 1, .attack = 1 };
+    memcpy(&in.time, &total_bits, 4);
+    memcpy(&in.best_lap, &best_bits, 4);
+    if (in.best_lap > 3599.0f) in.best_lap = -1.0f;
+    static uint32_t pal[256];
+    static uint8_t r0[S2G_PIC_BYTES], r1[S2G_PIC_BYTES];
+    const int phase1 = strstr(label, "_a") != 0;
+    if (!phase1) in.time = 3600.0f;                             /* (the original does not enter the car in the lists: it has no controls; a time that is not one is not entered either) */
+    int best = -1, bn = 0;
+    for (int j = phase1 ? 60 : 210; j <= (phase1 ? 60 : 250); j += phase1 ? 1 : 2) {
+        s2save_reset();
+        uint8_t table[256];
+        for (int i = 0; i < 256; i++) pal[i] = (uint32_t)(i * 0x010101u);
+        for (int bg = 0; bg < 2; bg++) {
+            s2save_reset();
+            for (int k = 0; k <= j; k++) {
+                memset((void *)FB(0), bg, S2G_PIC_BYTES);
+                s2end_frame(FB(0), 0, pal, &in, (uint32_t)k, 1000u + (uint32_t)k, 0);
+            }
+            memcpy(bg ? r1 : r0, (const void *)FB(0), S2G_PIC_BYTES);
+        }
+        (void)table;
+        int n = 0, same = 0;
+        for (int y = 0; y < 200; y++)
+            for (int x = 0; x < 320; x++) {
+                const int i = y * 320 + x;
+                if (r0[i] != r1[i]) continue;                           /* (a background pixel: the two flat pictures differ there, darkened or not) */
+                if (r0[i] == 0 && !phase1) continue;
+                n++;
+                same += r0[i] == frame_idx[i];
+            }
+        if (same > best) { best = same; bn = n; }
+    }
+    *n_equal = best;
+    *n_drawn = bn;
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 4) { fprintf(stderr, "usage: %s <SCREAMER2.zip> <folder> <labels> [out prefix]\n", argv[0]); return 2; }
@@ -236,11 +298,26 @@ int main(int argc, char **argv)
         if (!lf || fscanf(lf, "%47s", labels[i]) != 1) labels[i][0] = 0;
     }
     if (lf) fclose(lf);
-    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0, sum2d_n = 0, sum2d_same = 0;
+    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0, sum2d_n = 0, sum2d_same = 0, end_eq = 0, end_n = 0;
     for (int f = 0; f < nn; f++) {
         if (only && !strstr(names[f], only) && !strstr(labels[f], only)) continue;
         const int ta = !strncmp(labels[f], "ta_", 3), league = !strncmp(labels[f], "trackmap", 8);
         if (!ta && !league) continue;
+        if (ta && strstr(labels[f], "ta_end")) {                      /* time attack's end screen: its own comparison */
+            char path[512];
+            snprintf(path, sizeof path, "%s/%s", argv[2], names[f]);
+            FILE *h = fopen(path, "rb");
+            if (!h || fread(frame_idx, 1, S2G_PIC_BYTES, h) != S2G_PIC_BYTES) { fprintf(stderr, "%s\n", path); return 1; }
+            fclose(h);
+            const char *ram = getenv("TA_RAM");
+            int eq, dn;
+            if (!ram || !end_match(labels[f], ram, &eq, &dn)) { printf("%s (%s): no state of the game for it\n", names[f], labels[f]); continue; }
+            printf("%s (%s): the end screen's drawn pixels (text, banner, pictures): %d of %d equal\n", names[f], labels[f], eq, dn);
+            end_eq += eq;
+            end_n += dn;
+            fflush(stdout);
+            continue;
+        }
         char path[512];
         snprintf(path, sizeof path, "%s/%s", argv[2], names[f]);
         FILE *h = fopen(path, "rb");
@@ -325,5 +402,6 @@ int main(int argc, char **argv)
     printf("%d frames: of %d map pixels in the screenshots %.1f %% differ at the outline, %.1f %% inside (%.1f %% of the inside within a pixel of the screenshot's colour)\n", frames, sum_cov,
            sum_cov ? 100.0 * sum_sil / sum_cov : 0.0, sum_cov ? 100.0 * sum_in / sum_cov : 0.0, sum_in ? 100.0 * sum_near / sum_in : 0.0);
     printf("2D parts of those frames: %d of %d pixels equal\n", sum2d_same, sum2d_n);
+    if (end_n) printf("the end screens: %d of %d drawn pixels equal\n", end_eq, end_n);
     return 0;
 }

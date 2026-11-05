@@ -15,12 +15,19 @@ out="$root/build/check/trackmap"
 [ -f "$game/SCREAMER2.zip" ] || { echo "$game/SCREAMER2.zip is missing: name the game's folder"; exit 1; }
 py=python3
 "$py" -c "" 2>/dev/null || py=python
-mkdir -p "$out/idx_ta" "$out/idx_league"
+mkdir -p "$out/idx_ta" "$out/idx_league" "$out/idx_taend"
 rm -f "$out"/idx_*/* "$out"/*.rgb "$out"/*.png
 have=0
 if ls "$root"/build/check/dosbox_ta/*.png > /dev/null 2>&1; then
     "$py" -I "$root/tools/pages3d_idx.py" "$root/build/check/dosbox_ta" "$out/idx_ta"
     cp "$root/build/check/dosbox_ta/labels.txt" "$out/labels_ta.txt"
+    have=1
+fi
+if ls "$root"/build/check/dosbox_ta_race/*.png > /dev/null 2>&1; then
+    mkdir -p "$out/idx_taend"
+    "$py" -I "$root/tools/pages3d_idx.py" "$root/build/check/dosbox_ta_race" "$out/idx_taend"
+    cp "$root/build/check/dosbox_ta_race/labels.txt" "$out/labels_taend.txt"
+    cp "$root/build/check/dosbox_ta_race/ram_end.txt" "$out/ram_taend.txt"
     have=1
 fi
 if ls "$root"/build/check/dosbox_league/*.png > /dev/null 2>&1; then
@@ -52,12 +59,12 @@ else
     mount=$root/build
     game_mount=$game
 fi
-LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c s2trackmap.c blit.c geom.c setup.c raster.c track.c car.c"
-MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
+LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c s2trackmap.c blit.c geom.c setup.c raster.c track.c car.c s2end.c s2load.c s2save.c champ.c s2league.c"
+MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -e TA_RAM=/b/check/trackmap/ram_taend.txt -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
     cd /b/host/trackmap && gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_match host/trackmap_match.c $LIST -lm &&
     gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -DGU_MAX_VERT=1024 -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_whole host/trackmap_match.c $LIST -lm &&
     cd /b/check/trackmap &&
-    for k in ta league; do
+    for k in ta taend league; do
         [ -d idx_\$k ] && [ -f labels_\$k.txt ] && ls idx_\$k/*.idx > /dev/null 2>&1 || continue
         echo '== the cut blocks (the firmware): '\$k; /b/host/trackmap_match /game/SCREAMER2.zip /b/check/trackmap/idx_\$k /b/check/trackmap/labels_\$k.txt /b/check/trackmap/p_\$k
         echo '== the whole blocks (a unit without the limit): '\$k; /b/host/trackmap_whole /game/SCREAMER2.zip /b/check/trackmap/idx_\$k /b/check/trackmap/labels_\$k.txt /b/check/trackmap/w_\$k

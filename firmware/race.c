@@ -238,6 +238,7 @@ void race_free_reset(void)
     for(int k = 0; k < 5; k++) { FR.best[k] = NONE.f; FR.lt[k] = FR.rt[k] = NONE.f; FR.sign[k] = ' '; }
     FR.best_lap = NONE.f;
     FR.list_left = 0.0f;
+    FR.msg_left = 0.0f;
     fr_ready = 1;
 }
 
@@ -301,6 +302,9 @@ static void free_marker(struct s2car_state *c, int by)
         const float d = F(c, 0xc44 + 4 * idx) - FR.best[idx];
         FR.rt[idx] = fabsf(FR.best[idx] - F(c, 0xc44 + 4 * idx));
         FR.sign[idx] = 0.0f <= d ? '+' : '-';
+        FR.msg_sign = FR.sign[idx];
+        FR.msg_val = FR.rt[idx];
+        FR.msg_left = 4.0f;
         if(idx + 1 < 5) {                               /* the next row shows the quickest lap's own time there */
             FR.sign[idx + 1] = ' ';
             FR.rt[idx + 1] = FR.best[idx + 1];
@@ -315,6 +319,7 @@ static void free_marker(struct s2car_state *c, int by)
 static void free_frame(void)
 {
     struct s2car_state *c = &R.car[0];
+    FR.msg_left = FR.msg_left > DT ? FR.msg_left - DT : 0.0f;
     if(FR.list_left > 0.0f) {
         FR.list_left -= DT;
         if(FR.list_left >= 0.0f) return;
@@ -672,6 +677,7 @@ int race_init(int track, float floor_z)
         for(int k = 0; k < 5; k++) { FR.lt[k] = FR.rt[k] = NONE.f; FR.sign[k] = ' '; R.cb[k] = FR.best[k]; }
         FR.rt[0] = FR.best[0];
         FR.list_left = 0.0f;
+        FR.msg_left = 0.0f;
     }
     if(R.kind == RACE_ATTACK) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages);
     return 1;

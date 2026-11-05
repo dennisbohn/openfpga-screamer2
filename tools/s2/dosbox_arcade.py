@@ -489,7 +489,7 @@ def timeattack(which):
         tracks = "Lta_0 r4,0.9 "
         for p in range(1, 7):
             tracks += "Ke4d R4,0.04 w0.5 Lta_%d r3,1.1 " % p
-        tracks += "ke4d w1 Lta_end r2,0.9 "
+        tracks += "ke4d w1 Lta_last r2,0.9 "
         tracks += "ke4b w1.2 Lta_back r2,0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w0.6 ke4b w1.2 Lta_first r2,0.6 "
         tracks += "k1c w7 Lta_car0 r3,0.6 k1c w1.5 Lta_car1 r3,0.6 k1c w1.5 Lta_mode r4,0.5 ke4d w0.8 Lta_mode_free r4,0.45 q"
     elif which == "closed":
@@ -503,6 +503,58 @@ def timeattack(which):
                   "w9 Lfree_7 r2,0.6 Bfree_7 w9 Lfree_8 r2,0.6 Bfree_8 w9 Lfree_9 r2,0.6 Bfree_9 w9 Lfree_10 r2,0.6 Bfree_10 w9 Lfree_11 r2,0.6 Bfree_11 q")
     shots = session(boot + tracks)
     print(f"{len(shots)} screenshots in {work}")
+
+
+def read_bytes_dump(label):
+    """a dump of Mem.bytes_at(): {address: bytes}"""
+    out = {}
+    for line in open(os.path.join(work, "bytes_%s.txt" % label)):
+        a, h = line.split()
+        out[int(a, 16)] = bytes.fromhex(h)
+    return out
+
+
+def check_free(shots):
+    """the free run's race screen against the model of tools/hud_reference.py: the text tables the game kept at the moment (bytes_free_<k>.txt, the strings of 0x132fc8 and 0x133000 as the game
+    has them, the message of 0x132f98, its timer) drawn by the model's text routine at the places read from the code; the pixels the model draws are compared with the screenshots' (the
+    scene is under them). The live row (the running time of the next marker) and the lap's clock change while the dump and the screenshots are a second apart: not compared."""
+    import hud_reference
+    hud = hud_reference.Hud(game)
+    T = hud.text
+    tot_n = tot_same = 0
+    done = set()
+    for png, label in shots:
+        if not label.startswith("free_"):
+            continue
+        try:
+            d = read_bytes_dump(label)
+        except FileNotFoundError:
+            continue
+        idx = read_png(png)
+        lt = [d[0x132fc8][11 * i:11 * i + 11].split(b"\0")[0].decode("latin-1") for i in range(5)]
+        rt = [d[0x133000][11 * i:11 * i + 11].split(b"\0")[0].decode("latin-1") for i in range(5)]
+        timer = struct.unpack("<f", d[0x13304c])[0]
+        cp = struct.unpack("<i", d[0x119300 + 0x4b0][4:8])[0]
+        live = cp % 5 if timer <= 0.5 else -1                  # (the list is frozen while it is held)
+        c = hud_reference.Canvas()
+        hud.put_text(c, 3, 3, -1, 8, 16, T[0])
+        hud.put_text(c, 3, 3, -1, 0x10e, 16, T[2])
+        for k in range(5):
+            hud.put_text(c, 3, 3, -1, 8, 0x38 + 8 * k, chr(65 + k))
+            hud.put_text(c, 3, 3, -1, 0x105, 0x38 + 8 * k, chr(65 + k))
+            if k != live:
+                hud.put_text(c, 3, 1, -1, 0x12, 0x38 + 8 * k, lt[k])
+            hud.put_text(c, 3, 1, -1, 0x10a, 0x38 + 8 * k, rt[k])
+        n = same = 0
+        for i in range(64000):
+            if c.px[i]:
+                n += 1
+                same += idx[i] == c.px[i]
+        tot_n += n
+        tot_same += same
+        print("%s %-9s the free run's text tables (labels, columns%s): %d of %d drawn pixels equal" % (os.path.basename(png), label, ", live row %d left out" % live if live >= 0 else "", same, n))
+    print("free run: %d of %d pixels equal" % (tot_same, tot_n))
+    return 0 if tot_same == tot_n and tot_n else 1
 
 
 def league_models():
@@ -651,7 +703,14 @@ def main():
         return
     if "--timeattack" in sys.argv:
         which = next((a for a in sys.argv if a in ("closed", "race", "free")), "")
-        timeattack(which)
+        if "--check" not in sys.argv:
+            timeattack(which)
+        work = os.path.join(root, "build", "check", "dosbox_ta" + ("_" + which if which else ""))
+        if which == "free":
+            files = sorted(glob.glob(os.path.join(work, "*.png")))
+            labels = open(os.path.join(work, "labels.txt")).read().split()
+            sys.exit(check_free(list(zip(files, labels))))
+        print("%d screenshots in %s: compared by tools/trackmap.sh (the maps, the pages' text, the end screen)" % (len(glob.glob(os.path.join(work, "*.png"))), work))
         return
     extra = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 0
     if "--check" in sys.argv:                   # the screenshots of the last run again (build/check/dosbox)

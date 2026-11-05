@@ -14,7 +14,7 @@
  *   frame <name> <steps> <top> <expected>  one s2hud_draw() of `steps` 20 ms steps; the picture is saved as <prefix>_<name>.rgb and, unless
  *                                       the expected file is -, must equal it (320 x 200 palette indices) in every pixel
  *   expect_cmd <name> <n> <x> <y> <tol> the frame's blitter list must hold a sprite of the leader's mark (command with the 10-bit x, y of
- *                                       the last frame) within tol pixels of x, y; n: the number of commands of the list must be < 128
+ *                                       the last frame) within tol pixels of x, y; n: the number of commands of the list must be < 192
  * Exit code 0 if all passed.
  */
 #define _GNU_SOURCE
@@ -82,10 +82,11 @@ static struct s2car_state cars[RACE_CARS];
 static float race_clock;
 static int line_nodes = 36;
 int race_kind = RACE_NORMAL;
+static int ncars_now = RACE_CARS;
 static struct race_free free_state;
 const struct race_free *race_free_state(void) { return &free_state; }
 struct s2car_state *race_car(int i) { return &cars[i]; }
-int race_cars(void) { return race_kind == RACE_NORMAL ? RACE_CARS : 1; }
+int race_cars(void) { return ncars_now; }
 int race_line_nodes(void) { return line_nodes; }
 
 union word { int32_t i; uint32_t u; float f; };
@@ -100,7 +101,7 @@ void race_get_hud(struct race_hud *h)
     h->laps = race_laps;
     h->lap = lap > race_laps ? race_laps : lap;
     h->place = I(c, 0xc30);
-    h->cars = RACE_CARS;
+    h->cars = ncars_now;
     h->finished = (I(c, 0x4c) & 2) != 0;
     h->time = F(c, 0xc38);
     h->lap_time = F(c, 0xc3c);
@@ -230,6 +231,8 @@ static int run_scenario(const char *ref, const char *prefix)
     if (!f) return 0;
     static uint32_t pal[256];
     static uint8_t background[64000];
+    race_kind = RACE_NORMAL;
+    ncars_now = RACE_CARS;
     struct track_cam cam = { 0, 0, 0, 0, 0, 0 };
     const struct su_view view = { 159 * 16, 130 * 16, 128 * 16, 0 };
     int frames = 0;
@@ -267,6 +270,24 @@ static int run_scenario(const char *ref, const char *prefix)
         } else if (sscanf(line, "car %d %n", &i, &n) == 1 && i >= 0 && i < RACE_CARS) {
             strcpy(a, line + n);
             set_car(i, a);
+        } else if (sscanf(line, "kind %d %d", &i, &n) == 2) {
+            race_kind = i;
+            ncars_now = n;
+        } else if (sscanf(line, "freebest %f", &x) == 1) {
+            free_state.best_lap = x;
+        } else if (sscanf(line, "freemsg %c %f %f", &a[0], &x, &y) == 3) {
+            free_state.msg_sign = a[0] == '_' ? ' ' : a[0];
+            free_state.msg_val = x;
+            free_state.msg_left = y;
+        } else if (!strncmp(line, "free ", 5)) {
+            float v[10];
+            char sg[16];
+            CHECK(sscanf(line, "free %f %f %f %f %f %f %f %f %f %f %15s", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8], &v[9], sg) == 11, "free line");
+            for (int k = 0; k < 5; k++) {
+                free_state.lt[k] = v[k];
+                free_state.rt[k] = v[5 + k];
+                free_state.sign[k] = sg[k] == '_' ? ' ' : sg[k];
+            }
         } else if (sscanf(line, "clock %f", &secs) == 1) {
             race_clock = secs;
         } else if (sscanf(line, "camera %f %f %f %f %f %f", &x, &y, &h, &yaw, &pitch, &roll) == 6) {
@@ -277,7 +298,7 @@ static int run_scenario(const char *ref, const char *prefix)
             for (int k = 0; k < 256; k++) VID_PAL[k] = pal[k];
             draw_buf = 0;
             s2hud_draw(&cam, &view, (uint32_t)steps, top);
-            CHECK(captured.n < 128, "frame %s: %d blitter commands", a, captured.n);
+            CHECK(captured.n < 192, "frame %s: %d blitter commands", a, captured.n);        /* (the free run's list is the longest, 137) */
             blit_model(fb, &captured);
             if (top) {                                              /* the timing overlay's two lines (22 characters of 8 x 8 at most) stay clear */
                 int touched = 0;
