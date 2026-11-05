@@ -75,3 +75,18 @@ void s2_env_windows(uint8_t *mlb, uint32_t size, uint32_t env_at)
     for(uint32_t k = 0; k < nrec; k++)
         if(s2_env_window(mlb + 16 * k) && s2_mlb_texture((int32_t)ld32(mlb + 16 * k + 4), size)) wr32(mlb + 16 * k + 4, env_at);
 }
+
+uint32_t s2_env_phase(int kind, float *rate)
+{
+    uint32_t phase = 0;
+    float k = 0.002f;
+    switch(kind) {
+    case 7: case 34: phase = 0x8000; k = 0.03f; break;
+    case 13: phase = 0x5556; k = 0.03f; break;
+    case 43: phase = 0xaaaa; k = 0.03f; break;
+    case 44: k = 0.03f; break;
+    default: break;
+    }
+    if(rate) *rate = k;
+    return phase;
+}
