@@ -37,9 +37,9 @@ DETAIL = 0x130C54
 
 
 def frames(step, work, mem, shots, times):
-    """A<label>:<seconds>[:s<label>@<t> ...][:n<row>,<distance>,<gap>,<count>] (steps of dosbox_arcade.session): the recording described in the header. n: a
-    screenshot whenever the row's object is within `distance` units of the camera and in front of it (within 25 degrees of its line of sight), at least `gap`
-    seconds after the last one, `count` at most"""
+    """A<label>:<seconds>[:s<label>@<t> ...][:n<row>,<distance>,<gap>,<count>[,<degrees>]] (steps of dosbox_arcade.session): the recording described in the header. n: a
+    screenshot whenever the row's object is within `distance` units of the camera and in front of it (within 25 degrees, or the given ones, of its line of sight),
+    at least `gap` seconds after the last one, `count` at most"""
     f = step.split(":")
     secs = float(f[1])
     events = sorted((float(e.split("@")[1]), e.split("@")[0]) for e in f[2:] if e[0] == "s")
@@ -80,7 +80,9 @@ def frames(step, work, mem, shots, times):
         out.write(json.dumps({"t": round(now, 4), "clock": clock.hex(), "car": g.flat(CAR + 0x4A0, 0x60).hex(), "cam": camrec.hex(),
                               "view": struct.unpack("<i", g.ptr(cam + 0xAE4, 4))[0] if cam else -1, "rows": rows.hex(), "objs": objs}) + "\n")
         n += 1
-        for row, dist, gap, count in near:
+        for spec in near:
+            row, dist, gap, count = spec[:4]
+            half = spec[4] if len(spec) > 4 else 25.0
             o = objs[int(row)] if int(row) < len(objs) else ""
             if o and camrec and taken < count and now - last_shot >= gap:
                 ox, oh, oy = struct.unpack_from("<3i", bytes.fromhex(o), 8)
@@ -89,7 +91,7 @@ def frames(step, work, mem, shots, times):
                 d = (ox - cx, oy - cy, oh - ch)
                 dl = math.sqrt(sum(v * v for v in d))
                 fwd = (math.sin(yaw) * math.cos(pitch), -math.cos(yaw) * math.cos(pitch), math.sin(pitch))
-                if 0 < dl <= dist and sum(a * b for a, b in zip(d, fwd)) / dl > math.cos(math.radians(25)):
+                if 0 < dl <= dist and sum(a * b for a, b in zip(d, fwd)) / dl > math.cos(math.radians(half)):
                     events.insert(0, (0.0, "snear%d_%d" % (int(row), taken)))
                     taken += 1
                     last_shot = now
@@ -98,6 +100,29 @@ def frames(step, work, mem, shots, times):
 
 
 da.HOOKS["A"] = frames
+
+
+def voices(step, work, mem, shots, times):
+    """V<label>:<seconds>: the game's sound manager (the object at the pointer 0x124274, HMI's digital driver under it) sampled every 100 ms for that long into voices.jsonl: the manager's
+    slot table (+0x6164, a handle for each of the 64 slots), the last distance of each slot (+0x6064), the driver's voice records (0xf0 bytes each, 40 of them) and the rows: what
+    a slot of the scenery's sounds (7 + row) plays, at which rate, and whether its position moves"""
+    secs = float(step.split(":")[1])
+    g = mem.g
+    out = open(os.path.join(work, "voices.jsonl"), "w")
+    t0 = time.time()
+    while time.time() - t0 < secs:
+        m = struct.unpack("<I", g.flat(0x124274, 4))[0]
+        drv = struct.unpack("<I", g.ptr(m + 0x5FDC, 4))[0]
+        p = struct.unpack("<I", g.flat(0x115974 + 4 * drv, 4))[0]
+        vp = struct.unpack("<I", g.ptr(p + 0x58, 4))[0]
+        cnt = struct.unpack("<i", g.flat(ROWS_N, 4))[0]
+        out.write(json.dumps({"t": round(time.time() - t0, 3), "clock": g.flat(CLOCK, 4).hex(), "slots": g.ptr(m + 0x6164, 256).hex(), "last": g.ptr(m + 0x6064, 256).hex(),
+                              "voices": g.ptr(vp, 40 * 0xF0).hex(), "rows": g.flat(ROWS, 0x4C * cnt).hex() if 0 < cnt <= 40 else ""}) + "\n")
+        time.sleep(0.1)
+    out.close()
+
+
+da.HOOKS["V"] = voices
 
 
 def others():
@@ -129,10 +154,11 @@ def main():
         sys.exit("a DOSBox is running (the owner's, or another agent's): not started, wait until it is gone")
     threading.Thread(target=watchdog, daemon=True).start()
     track = int(sys.argv[1])
-    secs = float(sys.argv[2]) if len(sys.argv) > 2 else 120.0
-    shots = [float(a) for a in sys.argv[3:] if a[0].isdigit()]
+    voices_secs = float(sys.argv[sys.argv.index("--voices") + 1]) if "--voices" in sys.argv else 0.0     # --voices <seconds>: the sound manager's voices instead of the rows (the Sound part of the doc)
+    secs = float(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2][0].isdigit() else 120.0
+    shots = [float(a) for a in sys.argv[3:] if a[0].isdigit() and sys.argv[sys.argv.index(a) - 1] != "--voices"]
     nears = [a for a in sys.argv[3:] if a[0] == "n"]            # n<row>,<distance>,<gap>,<count>: a screenshot whenever the row's object is near and in sight
-    da.work = os.path.join(da.root, "build", "check", "dosbox_anim_t%d" % track)
+    da.work = os.path.join(da.root, "build", "check", ("dosbox_voices_t%d" if voices_secs else "dosbox_anim_t%d") % track)
     import atexit
     atexit.register(da.drop_junctions)
     da.make_private(4, team=0, car=1, name="MIL", laps=1, detail=2)     # all seven tracks open, three laps, DETAIL HIGH
@@ -141,7 +167,10 @@ def main():
     # track), the CAR page, the TRANSMISSION page, the loading screen and the race; the car goes to the game's driver after 20 s, then the recording
     # (the TRACK page starts on the track last chosen, which the save of the game folder has: LEFT seven times stops at the first, England, then RIGHT to the track)
     steps = "w3 M k1c w6 k1c w6 k1c w6 k1c w9 k1c w4 " + "ke4b w1.3 " * 7 + "ke4d w1.3 " * pos + "k1c w5 k1c w2 k1c w3 Xarc "
-    steps += "Atrack%d:%.1f:%s q" % (track, secs, ":".join(["sshot%d@%.1f" % (i, t) for i, t in enumerate(shots)] + nears))
+    if voices_secs:
+        steps += "Vvoices:%.1f q" % voices_secs
+    else:
+        steps += "Atrack%d:%.1f:%s q" % (track, secs, ":".join(["sshot%d@%.1f" % (i, t) for i, t in enumerate(shots)] + nears))
     got = da.session(steps)
     print("%d screenshots in %s" % (len(got), da.work))
 

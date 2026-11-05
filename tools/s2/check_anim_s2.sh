@@ -25,6 +25,7 @@ for t in 1 2 3 4 5 6 7; do
     "$py" -I "$root/tools/s2/make_track_s2.py" "$game" $t "$out/anim_image_t$t.bin" > /dev/null
     "$py" -I "$chk" misc "$game" "$out/anim_image_t$t.bin" $t
 done
+"$py" -I "$chk" misc "$game" "$out/anim_image_t3.bin" 3 negative
 dos=""
 for t in 1 2 3 4 5 6 7; do
     d="$root/build/check/dosbox_anim_t$t"

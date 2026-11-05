@@ -10,7 +10,7 @@ running original's own numbers (tools/s2/dosbox_anim.py), compared line by line.
         a row halved) and the comparison must fail
     dosbox_scenario <folder> <scenario.txt>
         the frames recorded in the running original (dosbox_anim.py) as a scenario
-    misc <game> <image> <track>
+    misc <game> <image> <track> [negative]
         the track image's copy of MISC.MLB (the materials of the animated rows' meshes, in front of the MLB after the cars') against the container's own: every material
         record the rows' meshes use (every face of every block at every level of detail, with the offset the builder moves it by) has the routine, the extents and every
         frame's pixels of the original's record
@@ -159,10 +159,10 @@ def mesh_materials(x):
     return out
 
 
-def check_misc(game, image, track):
-    """the report of the `misc` mode: (materials checked, frames checked) or raises"""
+def check_misc(game, image, track, negative=False):
+    """the `misc` mode: prints what was checked, or raises. negative: one pixel of the first texture the meshes use is changed in the copy of the image first: the check must fail"""
     import datfile
-    img = open(image, "rb").read()
+    img = bytearray(open(image, "rb").read())
     mlb_off, = struct.unpack_from("<I", img, 8)
     g = datfile.read(os.path.join(game, "GFX", "MAP%dH01.DAT" % track))
     misc = datfile.extract(g, "MISC.MLB")
@@ -177,9 +177,16 @@ def check_misc(game, image, track):
     assert start is not None, "MISC.MLB's records are not in the image"
     delta = 0x100 + 16 * start - mlb_off
     rows, _ = ar.load(game, track)
-    mlb = img[mlb_off:]
     names = sorted({r["name"].upper() for r in rows if r["name"][0] != "@"})
     n_mat = n_fr = 0
+    if negative:                                                # one pixel of the first textured material's first frame
+        for nm in names[:1]:
+            for m in sorted(mesh_materials(datfile.extract(g, nm + ".3DX"))):
+                b = rec(img[0x100:], start + m // 16)
+                if b[1] > 0:
+                    img[mlb_off + struct.unpack_from("<I", img, mlb_off + b[1] + 8)[0] + 256 + 1] ^= 0xFF
+                    break
+    mlb = bytes(img[mlb_off:])
     for nm in names:
         x = datfile.extract(g, nm + ".3DX")
         for m in sorted(mesh_materials(x)):
@@ -228,7 +235,15 @@ def main():
             print("   ", f)
         sys.exit(0 if (bad > 0) == negative else 1)
     elif cmd == "misc":
-        check_misc(sys.argv[2], sys.argv[3], int(sys.argv[4]))
+        try:
+            check_misc(sys.argv[2], sys.argv[3], int(sys.argv[4]), len(sys.argv) > 5 and sys.argv[5] == "negative")
+        except AssertionError as e:
+            if not (len(sys.argv) > 5 and sys.argv[5] == "negative"):
+                raise
+            print("track %s: the negative control (a pixel changed in the image's copy) was found: %s" % (sys.argv[4], e))
+            sys.exit(0)
+        if len(sys.argv) > 5 and sys.argv[5] == "negative":
+            sys.exit("the negative control was NOT found")
     elif cmd == "dosbox_scenario":
         _, fr = dosbox_frames(sys.argv[2])
         open(sys.argv[3], "w").write("\n".join("F %.9f %d %d %d" % f[:4] for f in fr) + "\n")

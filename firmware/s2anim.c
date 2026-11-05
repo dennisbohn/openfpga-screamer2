@@ -194,8 +194,9 @@ int s2anim_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t 
 {
     char file[16] = "MAP0DAT.DTR";
     struct dat_entry e;
-    uint32_t w[7 * S2ANIM_ROWS], used = 0;
-    char names[S2ANIM_ROWS][12];
+    static uint32_t w[7 * S2ANIM_ROWS];          /* (static: the stack is 8 KB) */
+    static char names[S2ANIM_ROWS][12];
+    uint32_t used = 0;
     nrows = nmeshes = 0;
     memset(paths, 0, sizeof paths);
     if(!gfx || !data) return 0;                 /* (the simulation takes a finished image: no containers) */
