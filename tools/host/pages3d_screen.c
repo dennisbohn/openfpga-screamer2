@@ -38,6 +38,9 @@ void hw_piece(const struct gu_piece *g)
     faces_drawn += st.faces;
 }
 
+/* the see-through table into the rasterizer (main.c writes it through RS_SMG): the model reads the table the firmware hands over */
+void smg_load(const uint8_t *table) { rs_smg = table; }
+
 /* ------------------------------------------------------------------------------------------------ the independent reference */
 
 /* The references of the 3D pages: each page's state worked out again from the rules in the file headers of s2pages3d.c and s2showroom.c in plain C (the

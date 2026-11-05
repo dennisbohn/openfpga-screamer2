@@ -32,6 +32,10 @@ Image layout, version 7 (the version 6 of tools/make_track.py with the car mater
          then the reflection picture: a texture record (frames, the ENV record's word +4, the frames' offsets)
          padded to 256 bytes and the frames, 64 KB each (256 x 256, rows of 256); the header's MLB offset
          (0x08) is the MLB, its size (0x0C) all of it
+         The MLB section also holds MISC.MLB (a race's one more library after the cars': its 11 to 48 material records go into the section in front, like a car's),
+         and after the reflection picture the see-through copies and the effects block (tools/s2/smg_ref.py, firmware/smg.c): every material of routine 208 or 224
+         turned into routine 224 on a copy of its texture whose texels are the hardware's rows, then the meshes of the shadow and the two smokes (faces onto MISC's
+         records), the table of 64 x 256 and a directory of 256 bytes ('S2FX', 1, the table's offset, the meshes', the rows used, the texels found), the section's last
   then   UNR, palette, placements (and after them the cells' visibility table, visibility() below), camera path
          (empty), ground index, markers (empty), cars (one stand-in row per car model, its livery word the car:
          team * 256 + car),
@@ -57,6 +61,8 @@ here = os.path.dirname(os.path.abspath(__file__))
 tools = os.path.join(here, "..")
 sys.path.insert(0, tools)
 import datfile
+sys.path.insert(0, here)
+import smg_ref
 
 # tools/make_track.py runs main() when imported; take everything above that call
 src = open(os.path.join(tools, "make_track.py")).read()
@@ -115,7 +121,7 @@ def visibility(mmp):
 
 def s2_track_data(dtr):
     """ADAPTER: Screamer 2's TRACK_DATA is a list of 'd' numbers with comments: far plane (negative),
-    background rgb, background 256 (palette entry), asmoke rgb, a2smoke rgb, tyre pressure"""
+    background rgb, background 256 (palette entry), asmoke rgb, a2smoke rgb, tyre pressure (the first eleven are read)"""
     s = dtr.decode("latin-1")
     body = s[s.index("TRACK_DATA"):]
     nums = []
@@ -126,9 +132,9 @@ def s2_track_data(dtr):
         if t.startswith("END_LIST") or t.startswith("*---"):
             break
         nums += [int(v[1:]) for v in t.split() if v[0] == "d"]
-        if len(nums) >= 5:
+        if len(nums) >= 11:
             break
-    return nums
+    return nums[:11]
 
 
 def mlb_records(mlb):
@@ -251,7 +257,7 @@ def main():
     col = datfile.extract(g, track + ".COL")
     mmp = datfile.extract(g, track + ".MMP")
     if room:
-        tdata = [-43808, 0, 0, 0, 0]
+        tdata = [-43808, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1]            # (no asmoke and a2smoke: only the shadow's rows)
     else:
         d = datfile.read(os.path.join(root, "DATA", f"MAP{n}.DAT"))
         tdata = s2_track_data(datfile.extract(d, track + "DAT.DTR"))      # ADAPTER: MAPnDAT.DTR
@@ -271,23 +277,31 @@ def main():
     teams = {t: datfile.read(os.path.join(root, "GFX", f"CARS{t}{look}1.DAT")) for t, _ in pick}
     car_mlb = [datfile.extract(teams[t], f"AUTO{c}.MLB") for t, c in pick]
     x3d = [datfile.extract(teams[t], f"AUTO{c}.3DX") for t, c in pick]
-    nrec = [mlb_records(m) for m in car_mlb]
+    libs = list(car_mlb)
+    if not room:                                                        # ADAPTER: MISC.MLB is one more library (the shadow's and the smokes' materials, the rotor's ...)
+        libs.append(datfile.extract(g, "MISC.MLB"))
+    nrec = [mlb_records(m) for m in libs]
     cmat_size = 16 * sum(nrec)
     mlb_off = FIRST + pad256(cmat_size)
     assert mlb_off - FIRST <= 32768, "car materials too far below the MLB"
     lib_at, at = [], pad256(len(mlb))
-    for m in car_mlb:
+    for m in libs:
         lib_at.append(at)
         at += pad256(len(m))
     env_at = at                                                         # the windows' picture, after the libraries
     cmat, mlbsec = b"", mlb + bytes(pad256(len(mlb)) - len(mlb))
-    for k in range(CARS):
-        _, recs, lib = car_library(car_mlb[k], lib_at[k], env_at)
+    for k in range(len(libs)):
+        _, recs, lib = car_library(libs[k], lib_at[k], env_at)
         cmat += recs
         mlbsec += lib + bytes(pad256(len(lib)) - len(lib))
     if not room:
         env = datfile.extract(datfile.read(os.path.join(root, "GFX", f"ENVP{n}{look}1.DAT")), "ENV.MLB")   # ADAPTER
         mlbsec += env_picture(env, env_at)
+    # ADAPTER: the see-through step (tools/s2/smg_ref.py): the textures of routine 208 / 224 copied with their texels as rows of the hardware's 64-row table, the effects'
+    # block at the end of the MLB section (the meshes of the shadow and the two smokes, faces onto MISC's records, the table, the directory)
+    meshes = [] if room else [car_faces_onto(datfile.extract(g, nm), FIRST + 16 * sum(nrec[:CARS]) - mlb_off) for nm in ("ASHADOW.3DX", "ASMOKE.3DX", "A2SMOKE.3DX")]
+    pal6 = [tuple(col[3 * i:3 * i + 3]) for i in range(256)]
+    cmat, mlbsec, rowmap, alive = smg_ref.process(cmat, sum(nrec), mlbsec, mlb_records(mlb), pal6, tdata[5:8], tdata[8:11], not room, meshes)
     models, files, at = b"", b"", 24 * CARS
     for k in range(CARS):
         delta = FIRST + 16 * sum(nrec[:k]) - mlb_off
@@ -334,7 +348,7 @@ def main():
     with open(out, "wb") as fh:
         fh.write(blob)
     print(f"{out}: {len(blob)} bytes ({len(crcs)} blocks of 256 KB; limit 28): MLB {len(mlb)} + {CARS} car libraries "
-          f"({sum(nrec)} materials) + windows' picture {len(mlbsec) - env_at}, UNR {len(unr)}, {len(pl)} placements ({nground} drivable), {len(dirs)} road points, "
+          f"({sum(nrec)} materials) + windows' picture and see-through block {len(mlbsec) - env_at}, UNR {len(unr)}, {len(pl)} placements ({nground} drivable), {len(dirs)} road points, "
           f"{len(walls)} walls, {CARS} car models {[tuple(round(v) for v in struct.unpack_from('<4f', models, 24 * k)) for k in range(CARS)]}, "
           f"start {sx_},{sy_} yaw {sa:.3f}, far plane {far}, background colour {colour}")
 

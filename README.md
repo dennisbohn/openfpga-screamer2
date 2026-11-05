@@ -25,7 +25,7 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   path with the original's level of detail at DETAIL HIGH (placed meshes 6,000 / 9,000 units, cars 2,000 /
   6,000; far plane from TRACK_DATA). A timing overlay (B) and `debug.txt` give the frame times to hold against the
   forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
-  gaps: the cars' windows show the original's environment picture (sliding with the car), no shadows, smoke, props, fade, night, mirror, the original's menus (most are built, see below; docs/screamer2/menus.md has what is left); the ride is silent (the race has sound, next bullet).
+  gaps: the cars' windows show the original's environment picture (sliding with the car), no props, fade, night, mirror, the original's menus (most are built, see below; docs/screamer2/menus.md has what is left); the ride is silent (the race has sound, next bullet).
 - **The menu:** after the files screen (and, on a new save, TEAM SELECTION and ENTER YOUR NAME) the original's options room: the team's room as a 3D scene, the camera gliding between five stations
   with left / right (ARCADE, CHAMPIONSHIP, TIME ATTACK, MULTIPLAYER, GAME SETTINGS), B or Start take the choice, A or Select go back to TEAM SELECTION (`firmware/s2room.c`; docs/development.md "The options room").
   The stations lead to ARCADE (the original's arcade pages: title, TRACK with the tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), CHAMPIONSHIP (the four leagues: LEAGUE SELECTION, WELCOME,

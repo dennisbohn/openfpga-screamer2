@@ -28,6 +28,8 @@ extern void (*hw_idle)(void);
 void hw_blit(const struct blit_list *l);
 /* The projection into the setup unit's registers */
 void su_view_regs(const struct su_view *v);
+/* The see-through table of the image just opened (track_fx().table, smg.h) into the rasterizer, before the first frame that blends: 16,384 writes (about 1 ms) */
+void smg_load(const uint8_t *table);
 
 /* The frame's timeline (tools/make_timeline_svg.py draws it): at each mark the cycles since the frame
    began, the busy clocks of the units and the CPU's cycles writing to them. tl_begin() with the cycle

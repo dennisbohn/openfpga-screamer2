@@ -46,7 +46,9 @@ and package versions pinned); the script builds the image on first use. The resu
 | `mixer.c` | C model of the audio mixer (`audio.v`) |
 | `track.c`, `track_build.c`, `tb_gfx.c`, `tb_hud.c`, `tb_mmp.c`, `tb_spl.c` | the track: drawing it, and building its image from the game's own files |
 | `s2teams.c` | the cars of the race, each its own team's (`race_grid`): reads the two entries of each car from the team container in the ZIP and unpacks them for the track image |
-| `efx.c` | effects the game draws through lookup tables: glass, shadows, smoke |
+| `efx.c` | Screamer 1's effects through its lookup table (glass, shadows, smoke); Screamer 2's are `smg.c` and `s2fx.c` |
+| `smg.c` | the see-through table in the hardware's 64 rows (docs/development.md "Wheel smoke and shadows"): the image builder gives each texel the see-through textures use a row, copies the textures with their texels as rows and makes the table; tested against `tools/s2/smg_ref.py` by `tools/s2/check_smg_s2.sh` and the image check |
+| `s2fx.c` | wheel smoke and shadows of the race: the puffs of the four cars (the game's rule of `0x204ae`), the shadows (`0x1f4a7`), as objects for `track_draw_cam()`; checked against recordings of the running game (`tools/s2/check_fx_s2.sh`) |
 | `drive.c`, `car.c` | the player's car: engine, gearbox, brakes, steering, walls, crashes, cameras |
 | `opp.c`, `scenery.c`, `ghost.c` | opponents, props and moving scenery, the time-attack ghost |
 | `champ.c`, `save.c` | the championship, saved data (nonvolatile data slots) |

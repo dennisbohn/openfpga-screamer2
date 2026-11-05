@@ -1535,3 +1535,29 @@ void s2car_look(const struct s2car_state *s, struct car_look *lk)
     *lk = (struct car_look){ s->pos[0], s->pos[1], s->pos[2], s->yaw, -s->pitch, s->roll, -s->body_pitch,
                              s->body_roll, s->wheel_spin[0], -s->wheel_steer, s->look >> 2 };
 }
+
+void s2car_fx(const struct s2car_state *s, struct s2car_fx *out)
+{
+    const car_t *c = s;
+    out->on_ground = RF(0x510) > 0.0f;
+    out->slip = RF(0xc34);
+    out->speed = RF(0x500);
+    out->x = (int32_t)RF(0x4d8);
+    out->y = RI(0x4dc);
+    out->z = (int32_t)RF(0x4e0);
+    out->yaw = RF(0x4e8);
+    out->pitch = RF(0x4e4);
+    for(int i = 0; i < 2; i++) {
+        const struct s2_road_kind *k = kind_of(RI(0x5d0 + 0x70 * 2 * i));       /* (the kind under wheel 0, or 2) */
+        const int w = 1 + 2 * i;                                                /* (the rear wheel beside it: 1, or 3) */
+        out->rear[i].flags = k->smoke[0];
+        out->rear[i].dispersion = k->smoke[1];
+        out->rear[i].world[0] = RI(0x5a0 + 0x70 * w);
+        out->rear[i].world[1] = RI(0x5a4 + 0x70 * w);
+        out->rear[i].world[2] = RI(0x5a8 + 0x70 * w);
+        for(int j = 0; j < 3; j++) out->rear[i].local[j] = RI(WH(w) + 0x38 + 4 * j);
+    }
+    out->ground = RI(0x4f8);
+    out->slope_along = RF(0xc0c);
+    out->slope_across = RF(0xc14);
+}

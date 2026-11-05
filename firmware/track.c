@@ -528,6 +528,20 @@ const uint8_t *track_mlb(void)
     return mlb;
 }
 
+/* the effects' block at the end of the MLB section (smg.h): its directory is the section's last 256 bytes, "S2FX", 1, the table, the three meshes, the rows used, the texels found */
+int track_fx(struct track_fx *fx)
+{
+    uint32_t size = (uint32_t)rd32(file_start + 0x0C);
+    if(!mlb || size < 256 + 16384 || rd32(mlb + size - 256) != 0x58463253 || rd32(mlb + size - 252) != 1) return 0;
+    const uint8_t *d = mlb + size - 256;
+    fx->table = mlb + rd32(d + 8);
+    fx->shadow = rd32(d + 12) ? mlb + rd32(d + 12) : 0;
+    fx->smoke = rd32(d + 16) ? mlb + rd32(d + 16) : 0;
+    fx->smoke2 = rd32(d + 20) ? mlb + rd32(d + 20) : 0;
+    fx->rows = rd32(d + 24);
+    return 1;
+}
+
 uint32_t track_path_length(void)
 {
     return (uint32_t)npath;
@@ -955,7 +969,7 @@ static inline int32_t depth_key(float d2)
 }
 
 /* the list drawn: key << 16 | i, i (the low half) a piece, or npieces + an object */
-#define MAX_OBJS    64
+#define MAX_OBJS    96                  /* objects of a frame: the four cars, their shadows and puffs (s2fx.h: 68 at most) */
 static int32_t vis[MAX_PIECES + MAX_OBJS];
 
 /* The faces of a block as the game takes them (0x834d6..0x83547): the camera in the block's

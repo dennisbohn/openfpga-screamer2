@@ -123,7 +123,7 @@ def front(pid):
 
 # ------------------------------------------------------------------------------------------------ the private game folder
 
-def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None, cars5=False):
+def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None, cars5=False, detail=None, cursor=None):
     """CONFIG/CHOICE.DAT: word i is kept as (v + i * 0x1050c) ^ i; word 10 (+0x28) is the tracks opened beyond the first three; team (word 0), the
     team's chosen car (the first word of its record at +0xb0 + team * 0x188) and the player's name (+8) as given (--pages3d)"""
     d = open(src, "rb").read()
@@ -134,6 +134,10 @@ def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, le
         dec[11] = league                        # +0x2c: the highest league open
     if laps is not None:
         dec[17] = laps                          # +0x44: the NUMBER OF LAPS row (an index: 0 is one lap)
+    if cursor is not None:
+        dec[8] = cursor                         # +0x20: where the ARCADE TRACK page's cursor starts (the place in ORDER of the track last chosen)
+    if detail is not None:
+        dec[16] = detail                        # +0x40: the DETAIL LEVEL row (0 LOW, 1 MEDIUM, 2 HIGH: the wheel smoke and the animated scenery are HIGH's alone)
     dec[0xB0 // 4 + 1] = 1                      # the first team's fifth car won
     if cars5:
         for t in range(4):

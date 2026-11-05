@@ -399,15 +399,21 @@ road. The offset from bumps decays after 3 s.
 ### Routine 224 (smoke, shadows, radar) and routine 160 (reflections)
 
 **Routine 224:** the game's filler (`0xcd9d0`) turns each pixel into `SMG[texel x 256 + pixel]`,
-without light or depth; this is the only SMG lookup in the program. It is used by smoke (player
-only, `0x19818`, `0x19970`: eight places, every 0.05 s at the rear wheels, travels with the car,
-about 0.67 s, turned to the screen; each cloud offset sideways by (x & 7) * (T & 63) and backwards
-by (z & 7) * (T & 63), x and z the car's integer position, which the game truncates toward 0 each
-step, T its 100 Hz counter), by shadows (player `0x18cbc`: 20 units away from the camera, ground
-- 2; opponents `0x1c83c`, `0x1cd34`; class 4 sorts 200 farther back), on track 4 by headlight
-cones and lamp glow, on tracks 3 and 6 by a helicopter; never by glass. The rasterizer reads the
+without light or depth; this is the only SMG lookup in the program. It is used by smoke (all four cars,
+`0x204ae`, `0x2073b`: eight records of each of two kinds a car, a puff at each rear corner every 0.08 s
+while the car is on the ground and the tyres slide or the road kind says so, 30 frames, turned to the
+screen; each cloud offset sideways by ((2 d & T) - d) * (x & 7) and backwards by the same * (z & 7), d the
+road kind's dispersion, x and z the car's integer position, T the 100 Hz counter; the camera's car's puffs
+stay in the car's frame), by shadows (`0x1f4a7`: 30 units away from the camera, ground - 2; class 4 sorts
+200 farther back), by headlight cones and lamp glow of the night looks, by a helicopter's rotor on tracks
+2, 3 and 6; never by glass. The rasterizer reads the
 pixel from the framebuffer and looks it up in a 16 KB table (16 M10K, `RS_SMG`); texel 0 leaves the
 pixel alone (row 0 swaps only colours of equal value, which saves 23-75 % of the pixels for smoke).
+Screamer 2's table has 112 rows made at the race start; the 64 rows of the unit are enough: the image
+builder (`firmware/smg.c`, docs/development.md "Wheel smoke and shadows") gives each distinct texel the
+see-through textures use a row (40 to 62 of 62), copies the textures with their texels as those rows,
+turns routine 208 into 224 and puts the table (the game's rows for those texels) at the end of the MLB
+section; no hardware change.
 In blend mode the original's point rule applies, otherwise the shared edges of a polygon's
 triangles would be blended twice. The radar (`0x23a68`) is a 72x72 window at (4, 124), darkened
 through row 63 of the table (x 0.75, nearest palette colour, `0x25870`) as one blended quad after

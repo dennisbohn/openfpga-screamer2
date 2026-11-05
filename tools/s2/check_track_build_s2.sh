@@ -52,7 +52,7 @@ else
     mount=$root
     game_mount=$game
 fi
-src="firmware/track_build.c firmware/s2env.c firmware/dat.c firmware/tb_mmp.c firmware/tb_spl.c firmware/tb_gfx.c \
+src="firmware/track_build.c firmware/smg.c firmware/s2env.c firmware/dat.c firmware/tb_mmp.c firmware/tb_spl.c firmware/tb_gfx.c \
      firmware/tb_hud.c firmware/crc32.c firmware/s2teams.c firmware/zip.c tools/s2/check_track_build_s2.c"
 runs=""
 for n in $tracks; do

@@ -47,14 +47,15 @@ def other_games():
     return [int(x) for x in r.stdout.split()]
 
 
-def start(track, seconds):
+def start(track, seconds, **choice):
     busy = other_games()
     if busy:
         sys.exit("another DOSBox has the game open (process %s): its window and this script's keys would collide; close it or run later" % busy)
     da.work = out
     os.makedirs(out, exist_ok=True)
     da.atexit.register(da.drop_junctions)
-    da.make_private(4, team=0, car=1, name="MIL")        # all seven tracks open; the first team's second car (the reference's player), the name MIL
+    choice.setdefault("cursor", 0)                       # (the TRACK page starts at the first track, not where the owner left it: the keys below count from there)
+    da.make_private(4, team=0, car=1, name="MIL", **choice)        # all seven tracks open; the first team's second car (the reference's player), the name MIL
     conf = os.path.join(out, "run.conf")
     open(conf, "w").write('[sdl]\nfullscreen=false\nwindowresolution=original\n[dosbox]\ncaptures=%s\n[autoexec]\n@echo off\nmount C "%s"\n'
                           'imgmount d "%s/GAME.DAT" -t iso\nc:\nSTARTL.EXE\nexit\n' % (out, da.private, da.game))

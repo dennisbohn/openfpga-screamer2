@@ -45,8 +45,8 @@ S2CAR_SRCS ?= $(if $(wildcard s2car.c),$(filter-out s2car_stub.c,$(notdir $(wild
 
 BOOT_SRCS = start.S boot.c selftest.c console.c dlog.c trap.c memtest.c screen.c crc32.c slot.c
 PROG_SRCS = start_prog.S main.c viewer.c road.c console.c dlog.c trap.c screen.c raster.c files.c track.c crc32.c slot.c zip.c setup.c geom.c drive.c car.c opp.c ghost.c blit.c hud.c efx.c scenery.c sound.c speech.c music.c fm.c menu.c champ.c save.c intro.c \
-            track_build.c s2env.c dat.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c s2params.c s2teams.c race.c s2snd.c s2sound.c s2menu.c s2save.c $(S2CAR_SRCS) $(if $(PROF),prof.c) \
-            s2gfx.c s2page.c s2load.c s2pause.c s2arcade.c s2pages.c s2end.c s2hud.c s2scene.c s2pages3d.c s2showroom.c s2league.c s2leaguepages.c s2ghost.c s2trackmap.c s2trackpage.c s2cam.c s2room.c
+            track_build.c s2env.c smg.c dat.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c s2params.c s2teams.c race.c s2snd.c s2sound.c s2menu.c s2save.c $(S2CAR_SRCS) $(if $(PROF),prof.c) \
+            s2gfx.c s2page.c s2load.c s2pause.c s2arcade.c s2pages.c s2end.c s2hud.c s2scene.c s2pages3d.c s2showroom.c s2league.c s2leaguepages.c s2ghost.c s2trackmap.c s2trackpage.c s2cam.c s2room.c s2fx.c
 BOOT_OBJS = $(patsubst %,$(OUT)/obj/%.o,$(basename $(BOOT_SRCS)))
 PROG_OBJS = $(patsubst %,$(OUT)/obj/%.o,$(basename $(PROG_SRCS)))
 

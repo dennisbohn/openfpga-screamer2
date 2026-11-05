@@ -198,6 +198,13 @@ void su_view_regs(const struct su_view *v)
     SU_FAR = (uint32_t)v->far8;
 }
 
+void smg_load(const uint8_t *table)
+{
+    for (uint32_t a = 0; a < 16384; a++)
+        RS_SMG = a << 8 | table[a];
+    rs_smg = table;                             /* (the model's copy, raster.h) */
+}
+
 static void push_piece(const struct gu_piece *g);
 
 /* a piece into the geometry unit's buffer: its place in view space and its mesh; a word
