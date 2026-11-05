@@ -376,7 +376,7 @@ What the start menu still leaves out of the original: see the list above; the 3D
 | 8 | **Options room**: the track builder for `MENUt1.DAT`, the camera from `P_t.MCM`, five stations, the room's items; the stand-in until then is a 2D page with the five choices | `track_build_s2` for a room; measured frame cost | 3 |
 | 9 | **Attract sequence and credits**: logos (sprites), the AI race with trackside cameras (`CAMERASn.MCM` kinds 0 to 4), the credits scroll from `ATTRACT.TXT`, 30 s idle | race with four AI cars (exists), cameras | 2 |
 | 10 | **Replay** of the finished race (record the controls, run the race again) | S1's scheme | 2 |
-| 11 | **The arcade scene** (`ANIMS`): the track engine with the scene's `MAPn` and four cars on `SCENE0..3.PTH` | the path reader, 8 | 3 |
+| 11 | **The arcade scene** (`ANIMS`): the track engine with the scene's `MAPn` and four cars on `SCENE0..3.PTH`; **one block of each scene file has 515 vertices (`tools/s2/s2_vertscan.py`), 3 over the unit's 512: cut it like the maps' blocks (`s2map_cut()`), else the unit drops that object** | the path reader, 8 | 3 |
 | 12 | **CUSTOMIZE** and the set-ups' effect on the car (tyres, pressure, springs, brakes, handling) | `s2car.c` fields | 2 |
 
 Total about 29 days if every row is done (13.5 for rows 1 to 6: a complete arcade and championship with 2D and small-3D pages, none of the room, the scene or the ghost; row 7 is 3 to 4 more; rows 9 and 10 add 4). The order follows what the player needs while testing: the loading screen and a pause menu first, then the end of the race, then the
