@@ -663,6 +663,14 @@ void race_step(const struct s2car_input *in)
     race_step_others(1);
 }
 
+void race_get_results(struct race_result r[RACE_CARS])
+{
+    for(int i = 0; i < RACE_CARS; i++) {
+        const struct s2car_state *c = &R.car[i];
+        r[i] = (struct race_result){ I(c, 0xc30), I(c, 0x4a8) >= race_laps, (I(c, 0x4c) & 2) != 0, F(c, 0xc38) };
+    }
+}
+
 void race_get_hud(struct race_hud *h)
 {
     const struct s2car_state *c = &R.car[0];

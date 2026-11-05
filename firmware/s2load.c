@@ -13,7 +13,7 @@
 #define SPR_BANNER  0x13                /* the track name banners: MENUL.SPR 19 .. 25, 144 x 50 */
 
 static uint32_t pal[256];
-static int track_shown, laps_shown, up;
+static int track_shown, laps_shown, kind_shown = S2S_KIND_ARCADE, up;
 
 /* the list of a race of `laps` laps: the NUMBER OF LAPS value's place (1, 3, 5, 10) */
 int s2_laps_list(int laps)
@@ -21,10 +21,10 @@ int s2_laps_list(int laps)
     return laps >= 10 ? 3 : laps >= 5 ? 2 : laps >= 3 ? 1 : 0;
 }
 
-/* The first rows of the arcade lists (the race starts from the arcade flow; time attack and the league will ask with their own kind) */
-void s2_best_get(int track, int laps, struct s2_record *total, struct s2_record *lap)
+/* The first rows of the lists of a kind of game (the arcade's, the championship's: the end of a league race puts the player's times in its own) */
+void s2_best_get_kind(int kind, int track, int laps, struct s2_record *total, struct s2_record *lap)
 {
-    const struct s2save_row *t = s2save_row(S2S_KIND_ARCADE, track, s2_laps_list(laps), 0), *l = s2save_row(S2S_KIND_ARCADE, track, S2S_LAP, 0);
+    const struct s2save_row *t = s2save_row(kind, track, s2_laps_list(laps), 0), *l = s2save_row(kind, track, S2S_LAP, 0);
     *total = (struct s2_record){ 3599.999f, "MIL" };
     *lap = (struct s2_record){ 3599.999f, "MIL" };
     if (t) {
@@ -35,6 +35,11 @@ void s2_best_get(int track, int laps, struct s2_record *total, struct s2_record 
         lap->time = l->time;
         memcpy(lap->name, l->name, 4);
     }
+}
+
+void s2_best_get(int track, int laps, struct s2_record *total, struct s2_record *lap)
+{
+    s2_best_get_kind(S2S_KIND_ARCADE, track, laps, total, lap);
 }
 
 /* minutes, seconds, hundredths as 0x37e1e prints them: the whole seconds cut off, the hundredths of what is left cut off too (the
@@ -80,7 +85,7 @@ static void draw_loading(struct blit_list *l)
 {
     char t[24];
     struct s2_record total, lap;
-    s2_best_get(track_shown, laps_shown, &total, &lap);
+    s2_best_get_kind(kind_shown, track_shown, laps_shown, &total, &lap);
     s2gfx_picture(l, s2gfx_pic(0));
     s2gfx_sprite_centred(l, SPR_BANNER + track_shown - 1, 4);
     s2gfx_text_centred(l, S2G_FONT_MEDIUM, S2G_WHITE, 2, 170, s2gfx_line("LOADING...", 0, "LOADING..."));
@@ -93,6 +98,11 @@ static void draw_loading(struct blit_list *l)
 }
 
 const uint32_t *s2load_show(int track, int laps)
+{
+    return s2load_show_kind(S2S_KIND_ARCADE, track, laps);
+}
+
+const uint32_t *s2load_show_kind(int kind, int track, int laps)
 {
     char name[16];
     uint32_t t0 = rdcycle();
@@ -107,6 +117,7 @@ const uint32_t *s2load_show(int track, int laps)
     }
     track_shown = track;
     laps_shown = laps;
+    kind_shown = kind;
     struct blit_list *l = s2gfx_begin();
     draw_loading(l);
     s2gfx_end(pal, 0x8000);

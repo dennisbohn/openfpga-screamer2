@@ -5,7 +5,9 @@
  *
  *   ARCADE               the original's arcade pages (s2arcade.h): title, TRACK, CAR (the 3D carousel) and TRANSMISSION, and then the race;
  *                        ESC goes back
- *   NUMBER OF LAPS       the original's options, 1 / 3 / 5 / 10 (a GAME SETTINGS row)
+ *   CHAMPIONSHIP         the championship (s2leaguepages.h, s2league.h): LEAGUE SELECTION, WELCOME TO LEAGUE n, the league's races with the LEAGUE
+ *                        REPORT after each; the viewer runs it (S2M_CHAMP)
+ *   NUMBER OF LAPS       the original's options, 1 / 3 / 5 / 10 (a GAME SETTINGS row; the championship races take it too)
  *   ARCADE ENEMIES SKILL ROOKIE / NORMAL / PRO (a GAME SETTINGS row)
  *   START RACE           the race with the choices as they are, at once (left / right: the track, T1 .. T7 in the files' numbering)
  *   WATCH                the viewer's ride (for timing)
@@ -37,15 +39,16 @@ struct s2_menu_cfg {
 extern const uint8_t s2_menu_laps[S2M_LAPS];
 
 /* what the menu ends with (S2M_ARCADE: a key press on the ARCADE row, which s2menu_run() answers by running the arcade pages; S2M_SETTINGS and
-   S2M_SCORES and S2M_TEAM: the GAME SETTINGS, HI SCORES and TEAM SELECTION rows, which s2menu_run() answers by running the page) */
-enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES, S2M_TEAM };
+   S2M_SCORES and S2M_TEAM: the GAME SETTINGS, HI SCORES and TEAM SELECTION rows, which s2menu_run() answers by running the page; S2M_CHAMP: the
+   CHAMPIONSHIP row, which s2menu_run() returns to the viewer, whose races the league needs) */
+enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES, S2M_TEAM, S2M_CHAMP };
 
 /* The rows, top to bottom */
-enum { S2M_ROW_ARCADE, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROW_TEAM, S2M_ROWS };
+enum { S2M_ROW_ARCADE, S2M_ROW_CHAMP, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROW_TEAM, S2M_ROWS };
 
 /* The names and labels from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the
-   built-in English text, which is the same. Once, before the first menu. Returns how many of the 7 texts (the tracks, the teams, the
-   levels, four labels) were read from the file. */
+   built-in English text, which is the same. Once, before the first menu. Returns how many of the 8 texts (the tracks, the teams, the
+   levels, five labels) were read from the file. */
 int s2menu_init(struct zip *z);
 const char *s2menu_track_name(int track);       /* track 1 .. 7 */
 const char *s2menu_team_name(int team);         /* team 1 .. 4 */

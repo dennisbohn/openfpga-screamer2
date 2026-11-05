@@ -64,6 +64,15 @@ int race_cars(void);
 
 void race_get_hud(struct race_hud *h);
 
+/* Where every car stands (the championship's end screen and report, s2league.h): its place (1 .. race_cars(), the player's is race_get_hud()'s), whether
+   it has done all its laps (listed on the end screen, 0x1197a8 >= 0x130d48), whether it has finished (the car's flag +0x4c bit 1: the player's car, which
+   has not, is put last in a league's report when he left the race) and its time on the race's clock, which stops when it has done its laps. */
+struct race_result {
+    int place, done, finished;
+    float time;
+};
+void race_get_results(struct race_result r[RACE_CARS]);
+
 /* Steps run so far (a step is 20 ms) */
 uint32_t race_steps(void);
 

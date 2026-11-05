@@ -22,7 +22,7 @@ const uint8_t s2_menu_laps[S2M_LAPS] = { 1, 3, 5, 10 };
 static const char *track_name[S2M_TRACKS] = { "ENGLAND", "COLUMBIA", "EGYPT", "CALIFORNIA", "FINLAND", "SWITZERLAND", "THE TUNNEL" };
 static const char *team_name[S2M_TEAMS] = { "CONDOR", "ANGELS", "WASP", "ZEUS" };
 static const char *skill_name[S2M_SKILLS] = { "ROOKIE", "NORMAL", "PRO" };
-static const char *lab_arcade = "ARCADE", *lab_laps = "NUMBER OF LAPS", *lab_skill = "ARCADE ENEMIES SKILL";
+static const char *lab_arcade = "ARCADE", *lab_champ = "CHAMPIONSHIP", *lab_laps = "NUMBER OF LAPS", *lab_skill = "ARCADE ENEMIES SKILL";
 static const char *title = "OPTIONS ROOM";
 
 #define LOCAL_MAX   0x2000u             /* LOCAL.DAT is 2.7 KB stored */
@@ -78,7 +78,7 @@ int s2menu_init(struct zip *z)
         found++;
     }
     static const struct { const char **dst; const char *key; } lab[] = {
-        { &lab_arcade, "ARCADE" }, { &lab_laps, "NUMBER OF LAPS" }, { &lab_skill, "ARCADE ENEMIES SKILL" }, { &title, "OPTIONS ROOM" },
+        { &lab_arcade, "ARCADE" }, { &lab_champ, "CHAMPIONSHIP" }, { &lab_laps, "NUMBER OF LAPS" }, { &lab_skill, "ARCADE ENEMIES SKILL" }, { &title, "OPTIONS ROOM" },
     };
     for (unsigned k = 0; k < sizeof lab / sizeof lab[0]; k++) {
         i = find_line(lines, lab[k].key);
@@ -153,6 +153,7 @@ int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press)
     if (press & KEY_X) return S2M_WATCH;
     if (press & (KEY_A | KEY_B | KEY_START)) {              /* (the start menu has no page behind it: A takes the row as B does) */
         if (*cursor == S2M_ROW_ARCADE) return S2M_ARCADE;
+        if (*cursor == S2M_ROW_CHAMP) return S2M_CHAMP;
         if (*cursor == S2M_ROW_SETTINGS) return S2M_SETTINGS;
         if (*cursor == S2M_ROW_SCORES) return S2M_SCORES;
         if (*cursor == S2M_ROW_TEAM) return S2M_TEAM;
@@ -195,6 +196,8 @@ void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor)
 
     row(fb, 2, cursor == S2M_ROW_ARCADE, lab_arcade, WHITE, 0, 0);
     con_text(fb, VALUE_COL - 13, 2, "track, car, gearbox, race", GREY, cursor == S2M_ROW_ARCADE ? BAR : BG);
+    row(fb, 3, cursor == S2M_ROW_CHAMP, lab_champ, WHITE, 0, 0);
+    con_text(fb, VALUE_COL - 13, 3, "four leagues of 4 to 6 races", GREY, cursor == S2M_ROW_CHAMP ? BAR : BG);
     fmt_udec(v, s2_menu_laps[c->laps]);
     row(fb, 4, cursor == S2M_ROW_LAPS, lab_laps, GREY, v, 1);
     row(fb, 5, cursor == S2M_ROW_SKILL, lab_skill, GREY, skill_name[c->skill], 1);

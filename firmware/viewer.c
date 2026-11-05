@@ -25,6 +25,8 @@
 #include "s2pause.h"
 #include "s2end.h"
 #include "s2save.h"
+#include "s2league.h"
+#include "s2leaguepages.h"
 #include "music.h"
 #include "s2hud.h"
 #include "prof.h"
@@ -85,6 +87,8 @@ static struct blit_list back;
 #define GREY    4
 
 static int ui_ready;                    /* the 2D toolkit (s2gfx.h) is up: the loading screen and the pause menu */
+static int league_mode;                 /* the visit is a race of the championship (league_run): no RESTART, no track switch, the end screen is the league's */
+static int league_started;              /* ... and the race did start (its cars' places are there to read) */
 static uint32_t sim_frames;             /* in the simulation: the frames to draw before it ends */
 static uint32_t results;
 static int sim;
@@ -424,7 +428,28 @@ static void end_screen(int n, volatile uint8_t *fb, const uint32_t *pal, uint32_
 {
     struct race_hud h;
     race_get_hud(&h);
-    struct s2_end_in in = { n, race_laps, h.place, h.time, h.best_lap, race_grid[0].team, race_grid[0].car };
+    struct s2_end_in in = { .track = n, .laps = race_laps, .place = h.place, .time = h.time, .best_lap = h.best_lap, .team = race_grid[0].team,
+                            .car = race_grid[0].car };
+    if (league_mode) {                                  /* the championship's end lists the cars that have done their laps (s2end.h) */
+        struct race_result r[RACE_CARS];
+        race_get_results(r);
+        in.league = 1;
+        for (int i = 0; i < RACE_CARS; i++) {
+            struct s2_end_car *c = &in.cars[i];
+            if (i == 0) {                               /* the player's name as a string: no padding spaces */
+                memcpy(c->name, s2save_name(), 3);
+                c->name[3] = 0;
+                for (int k = 2; k >= 0 && c->name[k] == ' '; k--) c->name[k] = 0;
+            } else {
+                memcpy(c->name, "CPU", 4);
+            }
+            c->team = race_grid[i].team;
+            c->car = race_grid[i].car;
+            c->place = (uint8_t)r[i].place;
+            c->done = (uint8_t)r[i].done;
+            c->time = r[i].time;
+        }
+    }
     end_choice = s2end_frame(fb, (int)draw_buf, pal, &in, fin_frames, vf, press);
     (void)fb;
 }
@@ -456,10 +481,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     float s = resume_s, floor_z = road_floor() - FALL_UNITS;
     resume_s = 0.0f;
     uint32_t win_n = 0, win_sum = 0, win_max = 0, shown_mean = 0, shown_max = 0, shown_faces = 0;
-    if (*drive && !race_start(n, floor_z)) {          /* no race on this track: the ride instead */
+    if (*drive && !race_start(n, floor_z)) {          /* no race on this track: the ride instead (the championship stops) */
         *drive = 0;
-        return -n;
+        return league_mode ? 0 : -n;
     }
+    league_started = league_mode;
     s2load_fade();                                      /* the LOADING picture was up through the track's build and the race's set-up (no-op if none) */
     for (;;) {
         uint32_t st = wait_swap_done(), t_frame = rdcycle(), vf = VID_FRAME(st);
@@ -480,7 +506,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         last_vf = vf;
         /* the buttons: another track (this visit ends), the cars, the mode, the overlay */
         if (*drive) {
-            if (sel && (press & (KEY_LEFT | KEY_RIGHT))) {
+            if (sel && (press & (KEY_LEFT | KEY_RIGHT)) && !league_mode) {
                 leave(n, mode, &st_all);
                 return other_track(n, press);
             }
@@ -489,6 +515,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 return 0;
             }
             if (end_choice == S2END_EXIT) {             /* the end screen's choices */
+                leave(n, mode, &st_all);
+                end_choice = 0;
+                return 0;
+            }
+            if (end_choice == S2END_CONTINUE) {         /* the championship's end screen: the race is over, on to the report */
                 leave(n, mode, &st_all);
                 end_choice = 0;
                 return 0;
@@ -509,11 +540,13 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 }
             }
             if (press & KEY_START) {
-                if (sel) {                              /* Select + Start: the race again from the grid */
-                    race_start(n, floor_z);
-                    fin_frames = 0;
-                } else if (ui_ready && drawn && !fin_frames) {      /* Start: the pause menu (not once the player has finished) */
-                    int choice = s2pause_run(!!(st & VID_FRONT), pal);
+                if (sel) {                              /* Select + Start: the race again from the grid (the championship's race is run once) */
+                    if (!league_mode) {
+                        race_start(n, floor_z);
+                        fin_frames = 0;
+                    }
+                } else if (ui_ready && drawn && !fin_frames) {      /* Start: the pause menu (not once the player has finished; the championship's has no RESTART) */
+                    int choice = s2pause_run_items(!!(st & VID_FRONT), pal, !league_mode);
                     if (choice == S2PAUSE_EXIT) {
                         leave(n, mode, &st_all);
                         return 0;
@@ -775,6 +808,79 @@ static void apply_cfg(void)
     music_on = s2save_get(S2S_MUSIC) == 0;
 }
 
+/* One race of the championship (s2league.h): the original's loading screen with the championship's records, the track, the race (visit in league mode) until the
+   player has pressed CONTINUE on the end screen or chosen EXIT in the pause menu. 1 if the race was run, 0 if it could not be set up (the cars' places are then not
+   there). */
+static int league_race(struct zip *z, int n, int *cars, int *overlay)
+{
+    const char *what = "";
+    const uint32_t *loading = s2load_show_kind(S2S_KIND_LEAGUE, n, race_laps);
+    if (!loading) screen_text(n, "Loading...", "the track is built from the ZIP", 0, 0);
+    if (!load_track(z, n, &what)) {
+        char l[40];
+        fmt_str(fmt_str(l, "Could not set up "), what);
+        screen_text(n, l, "see debug.txt in the Saves folder", "B: back to the menu", 1);
+        uint32_t keys_before = in_keys();
+        for (int done = 0; !done;) {
+            wait_swap_done();
+            uint32_t keys = in_keys(), press = keys & ~keys_before;
+            keys_before = keys;
+            done = (press & KEY_B) != 0;
+        }
+        return 0;
+    }
+    int drive = 1, next;
+    league_mode = 1;
+    league_started = 0;
+    while ((next = visit(n, cars, overlay, &drive)) < 0)
+        ;                                               /* (the overlay or the gearbox changed: the same visit again) */
+    league_mode = 0;
+    return league_started;
+}
+
+/* The championship (STARTL.EXE 0x4337d ..): LEAGUE SELECTION, WELCOME TO LEAGUE n, then the league's races on the tracks in the menu's order, each followed by the
+   LEAGUE REPORT; after the last the report shows the win or the loss and the selection comes back. The player's team and car are the menu's, the laps and the
+   gearbox the GAME SETTINGS', the computers' level the league's (s2league.h). Returns when the player leaves for the start menu. */
+static void league_run(struct zip *z, int *cars, int *overlay)
+{
+    static int league_at;                               /* the cursor of LEAGUE SELECTION stays where it was (the original's 0x128a10) */
+    for (;;) {
+        if (s2lp_select(&league_at) != S2LP_GO) return;                 /* (ESC, or the picture is missing) */
+        if (s2lp_welcome(league_at) == S2LP_BACK) continue;             /* (a missing picture leaves the page out) */
+        struct s2_league L;
+        s2l_begin(&L, league_at, cfg.team, cfg.car > 4 && !s2save_car5_open(cfg.team) ? 1 : cfg.car);
+        dlog_str("league: ");
+        dlog_dec(league_at + 1);
+        dlog_str(" begins\n");
+        for (;;) {
+            const int n = s2l_track(L.races_done);
+            apply_cfg();
+            memcpy(race_grid, L.pick, sizeof race_grid);
+            race_level = s2l_def[L.league].level;
+            if (!league_race(z, n, cars, overlay)) return;
+            struct race_result res[RACE_CARS];
+            struct s2l_result lr;
+            int place[S2L_CARS];
+            race_get_results(res);
+            for (int i = 0; i < S2L_CARS; i++) place[i] = res[i].place;
+            s2l_places(place, res[0].finished, &lr);
+            s2l_add_points(&L, &lr);
+            dlog_str("league: race ");
+            dlog_dec(L.races_done);
+            dlog_str(" T");
+            dlog_dec(n);
+            dlog_str(" first car ");
+            dlog_dec(lr.car_at[0]);
+            dlog_str(res[0].finished ? "" : " (player left)");
+            dlog_char('\n');
+            int r = s2lp_report(&L);
+            if (r == S2LP_FAIL) r = s2l_over(&L) ? S2LP_DONE : S2LP_NEXT;       /* (no picture: go on) */
+            if (r == S2LP_LEAVE) return;
+            if (r == S2LP_DONE) break;
+        }
+    }
+}
+
 void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
 {
     struct zip *z = files_zip();
@@ -796,6 +902,10 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     for (;;) {
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
             int go = s2menu_run(&cfg);
+            if (go == S2M_CHAMP) {                      /* the championship needs the toolkit's pages; without it the row does nothing */
+                if (ui_ready) league_run(z, &cars, &overlay);
+                continue;
+            }
             n = cfg.track;
             drive = go == S2M_RACE;
             apply_cfg();

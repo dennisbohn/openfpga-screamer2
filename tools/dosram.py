@@ -38,6 +38,8 @@ class MBI(ctypes.Structure):
 k32.VirtualQueryEx.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.POINTER(MBI), ctypes.c_size_t]
 k32.ReadProcessMemory.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t,
                                   ctypes.POINTER(ctypes.c_size_t)]
+k32.WriteProcessMemory.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t,
+                                   ctypes.POINTER(ctypes.c_size_t)]
 
 
 class KI(ctypes.Structure):
@@ -85,11 +87,16 @@ def dosbox_pid():
 
 
 class Proc:
-    def __init__(self, pid):
+    def __init__(self, pid, write=False):
         self.pid = pid
-        self.h = k32.OpenProcess(0x0410, False, pid)    # QUERY_INFORMATION | VM_READ
+        # QUERY_INFORMATION | VM_READ, and for write=True (tools/s2/dosbox_arcade.py --league: a page's state set by hand) VM_OPERATION | VM_WRITE
+        self.h = k32.OpenProcess(0x0410 | (0x0028 if write else 0), False, pid)
         if not self.h:
             sys.exit("cannot open DOSBox (error %d)" % ctypes.get_last_error())
+
+    def write(self, addr, data):
+        got = ctypes.c_size_t()
+        return bool(k32.WriteProcessMemory(self.h, addr, data, len(data), ctypes.byref(got))) and got.value == len(data)
 
     def read(self, addr, n):
         buf = ctypes.create_string_buffer(n)
@@ -107,6 +114,7 @@ class Proc:
 
 
 OBJS = {1: (0x10000, 0xEB7A3), 3: (DATA, DATA_END)}     # code, data (unle.py's layout)
+OBJS2 = {1: (0x10000, 0xE4BD7), 3: (0x110000, 0x139C90)}    # Screamer 2's STARTL.EXE: obj1 (code) and obj4 (data: the flat addresses of docs/screamer2/menus.md)
 
 
 def find_obj(p, img, fix, lo, hi):
@@ -142,26 +150,32 @@ def find_obj(p, img, fix, lo, hi):
 
 class Game:
     """the game's memory: flat addresses as in openscreamer docs/NOTES.md, guest pointers"""
-    def __init__(self, p):
+    def __init__(self, p, objs=None):
+        self.objs = objs or OBJS
         img = open(os.path.join(root, "build/exe/startl.bin"), "rb").read()
         fix = open(os.path.join(root, "build/exe/startl_fix.bin"), "rb").read()
-        self.p, self.obj = p, {k: find_obj(p, img, fix, lo, hi) for k, (lo, hi) in OBJS.items()}
+        self.p, self.obj = p, {k: find_obj(p, img, fix, lo, hi) for k, (lo, hi) in self.objs.items()}
         self.mem = {h - l for h, l in self.obj.values()}    # guest memory's host address
         if len(self.mem) != 1:
             sys.exit("the objects do not sit in one guest memory (paging?)")
         self.mem = self.mem.pop()
 
     def flat(self, addr, n):
-        for k, (lo, hi) in OBJS.items():
+        for k, (lo, hi) in self.objs.items():
             if lo <= addr < hi:
                 return self.p.read(self.obj[k][0] + addr - lo, n)
         sys.exit("0x%x is in no object" % addr)
+
+    def poke(self, addr, data):     # bytes into the data object at a flat address (the code is never written)
+        lo, hi = self.objs[3]
+        assert lo <= addr and addr + len(data) <= hi, "0x%x is not in the data object" % addr
+        return self.p.write(self.obj[3][0] + addr - lo, bytes(data))
 
     def ptr(self, lin, n):          # a guest pointer (linear address)
         return self.p.read(self.mem + lin, n)
 
     def to_flat(self, lin):         # a guest pointer as a flat address, if in an object
-        for k, (lo, hi) in OBJS.items():
+        for k, (lo, hi) in self.objs.items():
             if 0 <= lin - self.obj[k][1] < hi - lo:
                 return lin - self.obj[k][1] + lo
         return None

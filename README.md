@@ -27,7 +27,8 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
   gaps: the cars' windows show the original's environment picture but it does not slide, no shadows, smoke, props, fade, night, mirror, the original's menus (a plain start menu below, docs/screamer2/menus.md has the plan for the rest); the ride is silent (the race has sound, next bullet).
 - **Start menu:** after the files screen a list in the console's text style (`firmware/s2menu.c`): ARCADE (the original's arcade pages: title, TRACK with the
-  tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL, PRO), START RACE
+  tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), CHAMPIONSHIP (the four leagues: LEAGUE SELECTION, WELCOME, the races with the LEAGUE REPORT
+  after each, what winning opens; docs/development.md "The championship"), laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL, PRO), START RACE
   (the race at once; left / right the track 1 to 7) and WATCH (the ride). Everything is open from the start. d-pad up/down row, left/right value, L / R three
   tracks on or back; Start in the race opens the pause menu (RESUME, RESTART, EXIT), and after a finished race A races again, B goes to the menu. The choices
   are kept across power-ups. Docs: docs/development.md, "Start menu".

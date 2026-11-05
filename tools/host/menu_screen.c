@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     int r = zip_open(&zip, 3, SCRATCH, SCRATCH_MAX);
     CHECK(r == ZIP_OK, "zip_open %d", r);
     int found = s2menu_init(&zip);
-    CHECK(found == 7, "texts read from LOCAL.DAT: %d of 7", found);
+    CHECK(found == 8, "texts read from LOCAL.DAT: %d of 8", found);
     static const char *const tracks[S2M_TRACKS] = { "ENGLAND", "COLUMBIA", "EGYPT", "CALIFORNIA", "FINLAND", "SWITZERLAND", "THE TUNNEL" };
     for (int k = 0; k < S2M_TRACKS; k++) CHECK(!strcmp(s2menu_track_name(k + 1), tracks[k]), "track %d is %s", k + 1, s2menu_track_name(k + 1));
     CHECK(!strcmp(s2menu_team_name(1), "CONDOR") && !strcmp(s2menu_team_name(4), "ZEUS"), "teams");
@@ -146,6 +146,14 @@ int main(int argc, char **argv)
     c = (struct s2_menu_cfg){ .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1, .manual = 0 };
     press(&c, &cursor, KEY_LEFT);
     CHECK(c.track == 1 && c.laps == 1 && c.skill == 1 && c.team == 1, "left on ARCADE changes nothing");
+    press(&c, &cursor, KEY_DOWN);
+    CHECK(cursor == S2M_ROW_CHAMP, "down: the CHAMPIONSHIP row");
+    press(&c, &cursor, KEY_LEFT);
+    press(&c, &cursor, KEY_RIGHT);
+    CHECK(c.track == 1 && c.laps == 1 && c.skill == 1, "left / right on CHAMPIONSHIP change nothing");
+    shot(argv[2], "champrow", &c, cursor);
+    CHECK(press(&c, &cursor, KEY_B) == S2M_CHAMP && press(&c, &cursor, KEY_START) == S2M_CHAMP && press(&c, &cursor, KEY_A) == S2M_CHAMP,
+          "B, Start and A on CHAMPIONSHIP go to the league pages");
     press(&c, &cursor, KEY_DOWN);
     CHECK(cursor == S2M_ROW_LAPS, "down: laps row");
     press(&c, &cursor, KEY_RIGHT);
