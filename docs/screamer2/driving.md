@@ -225,6 +225,16 @@ from the save when a race is set up; off, a knock marks and hurts nothing, as th
   (driven) wheels blur from step 15 and the front ones from step 84 to 101, the brake lights never; in a race of 1,100 steps no car on the grid has a
   look and the computers show their brake lights (48 to 449 car steps). The snapshots are of a copy of the car at rest with the look set (a car held on
   the grid creeps, which moves the whole picture). It fails 11 checks with the rule of Screamer 1. `LOOK_DUMP=/b/s2host/look_` writes the pictures.
+  **Which cars it is run for.** The check is of the image's model 0 with its own physics (the cars section's livery word names its team and car) and the race of
+  the image's four models (`race_grid`); it used to take team 1's first car for the physics of every image, and failed for **10 of the 20 cars** (car 2 and car 3 of
+  every team and car 5 of teams 3 and 4) with one check: "the wheels' flag 0x8000 changes nothing of the car". Those ten are the **four-wheel-drive** cars. Their four hubs
+  wear one material (`.MLB` entry of the hubs `flx blx frx brx`: the picture changes with bit 1, flag 0x400), and the game's own code sets only 0x400 for a car whose two
+  drive shares (record +0x90, +0x94) are both 0.8 or less (`STARTL.EXE` 0x173ef .. 0x17471: the third branch, `fast_back ? 0x400 : 0`), so on such a car 0x8000 is
+  never set and there is nothing for it to change; the other cars have one pair of hubs on bit 1 (the driven pair) and the other on bit 6 (flag 0x8000). The running
+  original agrees: its car records for the four cars of the arcade race (HORIZON, ...) hold the shares 0.5 / 0.5, 0.5 / 0.5, 1 / 0, 0 / 1 (`dosbox_arcade.py --cars 1 race`, the
+  data object at 0x119300 + 0xcc0 a car) and its CAR page prints "4wd" for them. The check now asks for flag 0x8000 only of the cars whose physics can set it. (Its image's
+  track number is the last digit 1 to 7 of the image's *file name*: an image called `c2_1.bin` is track 1, `w1_2.bin` is track 2 with a track-1 image, and the car goes
+  wild.) All 20 cars pass with their own physics (each as the player's car on track 1: models, hubs, brakes, marks, blur, the race of the image's four cars).
 - **The cars as drawn** (`tools/s2/render_s2.c`, every run): each car model of the image is drawn with and without the wheels' spin and
   steering, and exactly four blocks (the hubs) may change with the spin and four (the front wheels) with the steering; in a `g` run every
   car's pose each step must be a number and a car's (tilt under 1.2 rad, body lean under 0.5, steering under 1). It failed for AUTO02 and

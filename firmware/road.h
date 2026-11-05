@@ -45,3 +45,6 @@ int road_drive_scene(const struct s2car_state *s, struct track_cam *cam, struct 
    AUTO(k+1), each as it is now: the poses are copied here, so a car's state may change while the frame is drawn (the computers'
    steps in race.h's slices). Returns the number of objects. */
 int road_race_scene(struct s2car_state *const *cars, int n, struct track_cam *cam, struct track_object *objs);
+/* A new race: the cars' windows' reflection starts again (the original makes new object records: the first drawing adds the car's whole place
+   to the offsets, as track.h's track_refl says) */
+void road_race_reset(void);

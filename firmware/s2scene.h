@@ -46,6 +46,8 @@ int s2scene_open(struct zip *z, struct s2_cont *c, const char *path);
 /* Entry `name` unpacked to out (max bytes; out 4-aligned): its size, or 0 if it is not there, does not fit or is damaged. The SDRAM is
    settled for the hardware afterwards (the geometry unit and the blitter read what the CPU wrote). */
 uint32_t s2scene_entry(struct s2_cont *c, const char *name, uint8_t *out, uint32_t max);
+/* Waits until the SDRAM holds what the CPU wrote (the geometry unit reads the models there): for a page that changes a model after s2scene_entry() */
+void s2scene_settle(void);
 
 /* ------------------------------------------------------------------------------------------------ the picture */
 
@@ -64,6 +66,8 @@ void s2scene_begin(const uint8_t *mlb, int buffer, int fresh);
 void s2scene_mlb(const uint8_t *mlb);
 /* Blocks (track.h) seen from cam, in the order given (far first) */
 void s2scene_blocks(const struct track_cam *cam, const struct track_block *b, int n);
+/* The same for an object whose windows reflect (a car): refl is gu_piece.refl, the offsets track_object_reflection() works out (phase 0) */
+void s2scene_blocks_refl(const struct track_cam *cam, const struct track_block *b, int n, uint32_t refl);
 /* The pieces are with the unit; its work goes on while the CPU makes the page's text. */
 void s2scene_end(void);
 

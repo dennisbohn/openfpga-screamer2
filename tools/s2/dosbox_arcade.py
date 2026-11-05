@@ -112,7 +112,7 @@ def front(pid):
 
 # ------------------------------------------------------------------------------------------------ the private game folder
 
-def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None):
+def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None, cars5=False):
     """CONFIG/CHOICE.DAT: word i is kept as (v + i * 0x1050c) ^ i; word 10 (+0x28) is the tracks opened beyond the first three; team (word 0), the
     team's chosen car (the first word of its record at +0xb0 + team * 0x188) and the player's name (+8) as given (--pages3d)"""
     d = open(src, "rb").read()
@@ -124,6 +124,9 @@ def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, le
     if laps is not None:
         dec[17] = laps                          # +0x44: the NUMBER OF LAPS row (an index: 0 is one lap)
     dec[0xB0 // 4 + 1] = 1                      # the first team's fifth car won
+    if cars5:
+        for t in range(4):
+            dec[(0xB0 + 0x188 * t) // 4 + 1] = 1     # every team's fifth car
     if team is not None:
         dec[0] = team
     if car is not None:
@@ -255,6 +258,29 @@ class Mem:
         ok = self.wait(lambda: self.word(0x11934c) & 2, 260)
         print("the player's car finished:", "yes" if ok else "NO (not within 260 s)")
 
+    def dump_data(self, label, folder):
+        """the whole data object (flat addresses 0x110000 up) to <folder>/data_<label>.bin: what the game's records hold at this moment"""
+        lo, hi = self.g.objs[3]
+        open(os.path.join(folder, "data_%s.bin" % label), "wb").write(self.g.flat(lo, hi - lo))
+
+    def find_ints(self, label, folder, triple, tol=15, span=0x3000000):
+        """where in the guest's memory (the data object's linear base up to span bytes above it: the heap too) three whole numbers in a row are within tol of
+        `triple`: the hits and 0x300 bytes round each go to <folder>/find_<label>.txt (the pages' objects live there, not in the data object)"""
+        import numpy as np
+        lin0 = self.g.obj[3][1]
+        out = []
+        for off in range(0, span, 1 << 22):
+            chunk = self.g.ptr(lin0 + off, (1 << 22) + 16)
+            if not chunk or len(chunk) < 64:
+                continue
+            w = np.frombuffer(chunk[:len(chunk) & ~3], dtype="<i4")
+            hit = np.nonzero((abs(w[:-2] - triple[0]) <= tol) & (abs(w[1:-1] - triple[1]) <= tol) & (abs(w[2:] - triple[2]) <= tol))[0]
+            for i in hit[:8]:
+                a = lin0 + off + 4 * int(i)
+                out.append("hit at linear 0x%x: %s\n%s" % (a, list(map(int, w[i:i + 3])), self.g.ptr(a - 0x180, 0x300).hex()))
+        open(os.path.join(folder, "find_%s.txt" % label), "w").write("\n".join(out) + "\n")
+        print("find %s: %d hits" % (label, len(out)))
+
     def dump(self, label, folder):
         """the words of DUMP, <address> <value> a line, to <folder>/ram_<label>.txt"""
         lines = ["%06x %d" % (a, self.word(a)) for a in DUMP]
@@ -309,6 +335,22 @@ def session(steps):
             mem = Mem.open(pid) if mem is None else mem
             if mem:
                 mem.bytes_at(st[1:], work, FREE_BYTES)
+        elif st[0] == "F":                      # F<label>:<x>,<y>,<z>: where whole numbers like these are in the guest's memory (find_<label>.txt)
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                lab, nums = st[1:].split(":")
+                if nums == "car":               # the player's car (the record at 0x119300): its place x, y (floats +0x4d8, +0x4e0) and height (+0x4dc) wherever the game keeps them
+                    rec = mem.g.flat(0x119300, 0x500)
+                    x, y, h = struct.unpack_from("<f", rec, 0x4d8)[0], struct.unpack_from("<f", rec, 0x4e0)[0], struct.unpack_from("<i", rec, 0x4dc)[0]
+                    print("the player's car at", x, y, h)
+                    mem.find_ints(lab + "_xyh", work, (int(x), int(y), h), 60)
+                    mem.find_ints(lab + "_xhy", work, (int(x), h, int(y)), 60)
+                else:
+                    mem.find_ints(lab, work, tuple(int(v) for v in nums.split(",")))
+        elif st[0] == "Y":                      # the game's data object into data_<label>.bin
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.dump_data(st[1:], work)
         elif st[0] == "D":                      # the game's league state into a text file
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -481,6 +523,20 @@ def pages3d():
 # ------------------------------------------------------------------------------------------------ the championship's pages (menus row 6)
 
 LEAGUE_TICKS = [0, 16, 17, 32, 48]              # frames of a model that cover every blink phase (clock = 2 x tick: the frame and the arrows 0x3f / 0x7f, the question's 0x3f)
+
+
+def cars(team, race, moves=False):
+    """--cars <team 1..4> [race]: the CAR page of the team with all five cars open (screenshots of the carousel at rest and the game's data object, build/check/dosbox_cars),
+    with `race` the arcade race on track 1 (the grid and the first seconds: screenshots and the data object)"""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox_cars")
+    atexit.register(drop_junctions)
+    make_private(0, team=team - 1, car=1, name="MIL", cars5=True)
+    boot = "w12 k1c w6 k1c w6 k1c w6 k1c w9 k1c w4 "
+    carousel = "".join("Ke4d R3,0 w2.5 Lcar%d r3,0.4 " % (k + 2) for k in range(4)) if moves else ""    # moves: the carousel one place on four times, so that every car of the team has been the chosen one
+    steps = boot + "k1c w5 Lcar r%d,0.4 M Ycar " % (3 if moves else 12) + carousel + ("k1c w1.5 k1c w20 Lgrid r3,0.5 Ygrid Fpl:car w5 Lrace r3,1 Yrace q" if race else "q")
+    shots = session(steps)
+    print(f"{len(shots)} screenshots in {work}")
 
 
 def league():
@@ -931,6 +987,9 @@ def main():
         sys.exit(1 if bad else 0)
     if "--pages3d" in sys.argv:
         pages3d()
+        return
+    if "--cars" in sys.argv:
+        cars(int(sys.argv[sys.argv.index("--cars") + 1]), "race" in sys.argv, "moves" in sys.argv)
         return
     if "--timeattack" in sys.argv:
         which = next((a for a in sys.argv if a in ("closed", "race", "free")), "")

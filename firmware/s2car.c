@@ -29,6 +29,7 @@
 #endif
 #include "s2car.h"
 #include "s2params.h"
+#include "s2env.h"
 #include "track.h"
 #include "car.h"
 #include "dat.h"
@@ -1172,6 +1173,13 @@ float s2car_ground_grip(const struct s2car_state *s)
 const struct s2_road_kind *s2car_road_kind(int id)
 {
     return kind_of(id);
+}
+
+/* the reflection's picture by the kind of the ground under the fourth wheel (record +0x6b0): s2env.h */
+uint32_t s2car_reflection(const struct s2car_state *s, float *rate)
+{
+    const car_t *c = s;
+    return s2_env_phase(RI(0x6b0), rate);
 }
 
 const uint8_t *s2car_map_dat(uint32_t *size)

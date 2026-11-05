@@ -442,7 +442,8 @@ geometry unit +36,000 clocks, start frame 1,338,092 clocks = 18.0 ms.
 In Screamer 2 the picture is not the glass material's own (a placeholder of 8 x 8) but the first material of the
 track's `ENV.MLB`, 128 x 128, which the game's filler wraps at 128 (`& 0x7f7f`). The unit and the rasterizer stay as
 they are: the image builder stores each frame of that picture tiled 2 x 2 as 256 x 256 and points the windows'
-materials at it (docs/development.md, "The windows").
+materials at it (docs/development.md, "The windows"). The race's picture is the track's (`ENVP<track><look>1.DAT`), the CAR page's the team's (`ENVM<team>1.DAT`, one picture for the four teams); in the race each car's
+object slides it by the way the car moved and picks its frame by the kind of the ground under its fourth wheel (`s2_env_phase()`), as the original's 0x1f1ee does.
 
 ## Sound
 

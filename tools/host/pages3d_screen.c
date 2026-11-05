@@ -52,6 +52,29 @@ static const uint8_t *r_logo_mlb, *r_badge[4], *r_letter, *r_car_mlb[5], *r_car_
 static int32_t r_rd32(const uint8_t *p) { return (int32_t)((uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24); }
 static int r_rd16s(const uint8_t *p) { return (int16_t)(p[0] | p[1] << 8); }
 
+/* The cars' windows as the reference has them (the game draws routine 160 with ENVM<team>1's picture, a 128 x 128 frame its filler wraps at 128): the
+   frame tiled 2 x 2 as 256 x 256 under a texture record of its own (frames 1, the picture's word, the frame's place) after the car's file, and every
+   routine-160 material record of the car pointing at it (a record's texture offset, its word +4: the records run up to the lowest texture record). */
+static void ref_windows(uint8_t *mlb, uint32_t size, const uint8_t *env, uint8_t *block)
+{
+    const int32_t ero = r_rd32(env + 4);                        /* ENV.MLB: the first material, its texture record: count, word, frame offsets */
+    const uint8_t *pic = env + r_rd32(env + ero + 8);
+    const uint32_t at = (uint32_t)(block - mlb);
+    memset(block, 0, 256);
+    *(int32_t *)block = 1;
+    *(int32_t *)(block + 4) = r_rd32(env + ero + 4);
+    *(uint32_t *)(block + 8) = at + 256;
+    for (int r = 0; r < 256; r++)
+        for (int c = 0; c < 256; c++) block[256 + r * 256 + c] = pic[(r & 127) * 256 + (c & 127)];
+    uint32_t table = size;
+    for (uint32_t k = 0; (k + 1) * 16 <= table; k++) {
+        const int32_t ro = r_rd32(mlb + 16 * k + 4);
+        if (ro > 0 && (uint32_t)ro + 12 <= size && (uint32_t)ro < table) table = (uint32_t)ro;
+    }
+    for (uint32_t k = 0; k < table / 16; k++)
+        if (r_rd32(mlb + 16 * k) == 160 && r_rd32(mlb + 16 * k + 4) > 0) *(uint32_t *)(mlb + 16 * k + 4) = at;
+}
+
 static int ref_load(struct zip *z, int team)
 {
     static struct s2_cont c;
@@ -73,6 +96,10 @@ static int ref_load(struct zip *z, int team)
     if (!s2scene_entry(&c, "ALETTER.3DX", to, 0x10000)) return 0;
     char path[24] = "GFX/CARS101.DAT";
     path[8] = (char)('0' + team);
+    uint8_t *env_blocks = REFMEM + 0x100000 + 5 * 0x38000, *env = env_blocks + 5 * 0x10100;
+    char env_path[24] = "GFX/ENVM11.DAT";
+    env_path[8] = (char)('0' + team);
+    if (!s2scene_open(z, &c, env_path) || !s2scene_entry(&c, "ENV.MLB", env, 0x10000)) return 0;
     if (!s2scene_open(z, &c, path)) return 0;
     for (int k = 0; k < 5; k++) {
         char nm[16] = "AUTO1.MLB";
@@ -80,10 +107,12 @@ static int ref_load(struct zip *z, int team)
         uint8_t *at = REFMEM + 0x100000 + (uint32_t)k * 0x38000;
         uint32_t m = s2scene_entry(&c, nm, at, 0x38000);
         r_car_mlb[k] = at;
+        const uint32_t mlb_size = m;
         m = (m + 255) & ~255u;
         memcpy(nm + 5, ".3DX", 5);
         r_car_mesh[k] = at + m;
         if (!m || !s2scene_entry(&c, nm, at + m, 0x38000 - m)) return 0;
+        ref_windows(at, mlb_size, env, env_blocks + (uint32_t)k * 0x10100);
     }
     return 1;
 }
@@ -150,10 +179,16 @@ static void ref_draw(volatile uint8_t *fb, const uint8_t *pic, const struct ref_
             const struct car_look lk = { (float)o->pos[0], (float)o->pos[2], (float)o->pos[1], (float)o->a1 * (6.2831853f / 2048.0f), 0, 0, 0, 0, 0, 0, 0 };
             struct track_block b[CAR_BLOCKS];
             const int nb = car_mesh_draw(o->mesh, &lk, &tc, b);
+            /* the windows' reflection offsets: the original's object adds its way since it was last drawn, rotated into the view, times the rate to three accumulators
+               (the page's rate 0.002, measured), so a car that stands at its place has the camera's right and forward axes' share of the whole place: u from -(right . p),
+               v from -(forward . p), p the place as (x, z, y), each rounded and kept to 8 bits */
+            const double sp = sin(cam->pitch), cp = cos(cam->pitch), place[3] = { (double)o->pos[0], (double)o->pos[2], (double)o->pos[1] };
+            const uint32_t refl = (uint32_t)((int)lrint(0.002 * place[0]) & 255) << 16 | (uint32_t)((int)lrint(0.002 * (cp * place[1] - sp * place[2])) & 255) << 24;
             for (int k = 0; k < nb; k++) {
                 double M[9], O[3] = { b[k].o[0], b[k].o[1], b[k].o[2] };
                 for (int j = 0; j < 9; j++) M[j] = b[k].m[j];
                 ref_piece(o->mesh, b[k].blk, M, O, cam, b[k].phase, &g);
+                g.refl = refl;
                 gu_draw(fb, &clip, &v, o->mlb, &g, &st);
                 ref_pieces++;
                 ref_faces += st.faces;

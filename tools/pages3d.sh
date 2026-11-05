@@ -3,12 +3,13 @@
 # screenshots that `python -I tools/s2/dosbox_arcade.py --pages3d` took (build/check/dosbox3d/*.png, never committed) are turned into indices
 # (tools/pages3d_idx.py) and tools/host/pages3d_match.c looks for the state of the firmware's page that draws each one: where the objects stand and the angle
 # each has, then compares the pictures pixel for pixel (see the file's header). Prints one line per screenshot. Windows: Docker as tools/menu_screens.sh.
-# Usage: [ONLY=<part of a name>] [DUMP=<part of a name>] tools/pages3d.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2"; DUMP: pictures (mine, ref, diff) of that frame in build/check/pages3d
+# Usage: [SHOTS=<folder of screenshots>] [ONLY=<part of a name>] [DUMP=<part of a name>] [TEAM=<1..4>] [REFL_FIT=<x0,y0,x1,y1>] tools/pages3d.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2"; DUMP: pictures (mine, ref, diff) of that frame in build/check/pages3d;
+# TEAM: the team whose cars the screenshots show (default 1); REFL_FIT: searches the windows' reflection offsets (u, v: 65,536 pictures) that make this box of the screen equal the screenshot's most
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
 game=${1:-${GAME_DIR:-C:/GOG Games/Screamer 2}}
 image="verilator/verilator:v5.050"
-shots="$root/build/check/dosbox3d"
+shots="${SHOTS:-$root/build/check/dosbox3d}"
 out="$root/build/check/pages3d"
 [ -f "$game/SCREAMER2.zip" ] || { echo "$game/SCREAMER2.zip is missing: name the game's folder"; exit 1; }
 ls "$shots"/*.png > /dev/null 2>&1 || { echo "no screenshots in build/check/dosbox3d: python -I tools/s2/dosbox_arcade.py --pages3d first"; exit 1; }
@@ -40,9 +41,9 @@ else
     mount=$root/build
     game_mount=$game
 fi
-MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
+MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -e REFL_FIT="$REFL_FIT" -e REFL_TRY="$REFL_TRY" -e TEAM="$TEAM" -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
     cd /b/host/pages3d && gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -D'ZIP_ADDR(p)=zip_addr(p)' -o ../pages3d_match host/pages3d_match.c \
-        dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c s2showroom.c s2params.c blit.c geom.c setup.c raster.c track.c car.c -lm &&
+        dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c s2showroom.c s2env.c s2params.c blit.c geom.c setup.c raster.c track.c car.c -lm &&
     cd /b/check/pages3d && /b/host/pages3d_match /game/SCREAMER2.zip /b/check/pages3d/idx /b/check/pages3d/p" | tee "$out/match.log"
 for f in "$out"/*.rgb; do
     [ -f "$f" ] || continue

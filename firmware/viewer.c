@@ -340,6 +340,7 @@ static int race_start(int n, float floor_z)
     uint32_t t0 = rdcycle();
     race_car(0)->manual = manual;                       /* (before the cars are set up: the first gear depends on it; the other kinds of race clear it and it is set again) */
     int ok = race_init(n, floor_z);
+    road_race_reset();
     race_car(0)->manual = manual;
     static int logged;                                  /* the log has 4 KB: the first start of the run tells how long it took */
     if (!ok) dlog_str("viewer: race_init failed\n");

@@ -1107,6 +1107,14 @@ static uint32_t refl_offsets(const struct track_object *ob, const float f[3], co
     return (uint32_t)(n[0] & 255) << 16 | (uint32_t)(n[2] & 255) << 24;
 }
 
+uint32_t track_object_reflection(const struct track_cam *cam, float x, float y, float h, struct track_refl *s)
+{
+    float f[3], r[3], u[3];
+    cam_frame(cam, f, r, u);
+    const struct track_object ob = { x, y, h, 0.0f, 0, 0, 0, 0, 0, s, 0 };
+    return refl_offsets(&ob, f, r, u);
+}
+
 /* The view from the point c along forward f, with right r and up u (unit vectors) */
 static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam, const float c[3],
                  const float f[3], const float r[3], const float u[3], struct track_object *objs, int nobj,

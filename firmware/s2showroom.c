@@ -11,6 +11,7 @@
  */
 #include "s2showroom.h"
 #include "s2scene.h"
+#include "s2env.h"
 #include "s2gfx.h"
 #include "s2params.h"
 #include "car.h"
@@ -24,11 +25,16 @@
 #define PI          3.1415927f
 #define TWO_PI      6.2831853f
 #define ROOM        0x38000u                /* a car's unpacked .MLB and .3DX (the largest pair: 211,000 bytes) */
+#define ENV_ROOM    S2_ENV_BYTES(1)         /* a car's windows' picture: ENVM's one frame tiled 256 x 256 and its texture record (s2env.h) */
+#define ENV_TEMP    0x10000u                /* ENV.MLB unpacked (33,580 bytes) before it is tiled */
+_Static_assert(S2SHOW_MAX * (ROOM + ENV_ROOM) + ENV_TEMP <= S3D_MODELS_MAX, "the showroom's cars, their windows' pictures and the temporary ENV.MLB fit the toolkit's models");
 
 static struct car {
     int32_t pos[3];
     int a1;
     const uint8_t *mlb, *mesh;
+    uint32_t mlb_size;
+    struct track_refl refl;                 /* the windows' reflection state (the original's object record +0x24 ..) */
 } car[S2SHOW_MAX];
 static int32_t slot[S2SHOW_MAX][3];
 static int n_cars, chosen_car, loaded_team, loaded_n, fresh;
@@ -73,9 +79,18 @@ int s2showroom_load(struct zip *z, int team, int n)
     path[8] = (char)('0' + team);
     static struct s2_cont c;
     const uint32_t t0 = rdcycle();
-    if (!s2scene_open(z, &c, path)) return 0;
     loaded_team = 0;
     uint8_t *base = s2scene_models();
+    /* The cars' windows: the game loads the team's GFX/ENVM<team>1.DAT with the team's cars (STARTL.EXE 0x44afa) and routine 160 draws its picture, the
+       same for the four teams, through the page's palette. Each car's .MLB gets its own copy (the windows' records are offsets from the car's file),
+       after the five cars' rooms: the picture is read first, into the room after them. */
+    char env_path[24] = "GFX/ENVM11.DAT";
+    env_path[8] = (char)('0' + team);
+    uint8_t *envs = base + (uint32_t)S2SHOW_MAX * ROOM, *env_mlb = envs + (uint32_t)S2SHOW_MAX * ENV_ROOM;
+    if (!s2scene_open(z, &c, env_path)) return 0;
+    const uint32_t env_size = s2scene_entry(&c, "ENV.MLB", env_mlb, ENV_TEMP);
+    if (!env_size || s2_env_frames(env_mlb, env_size) != 1) return 0;
+    if (!s2scene_open(z, &c, path)) return 0;
     for (int k = 0; k < n; k++) {
         char name[16] = "AUTO1.MLB";
         name[4] = (char)('1' + k);
@@ -83,11 +98,16 @@ int s2showroom_load(struct zip *z, int team, int n)
         uint32_t room = ROOM, m = s2scene_entry(&c, name, to, room);
         if (!m) return 0;
         car[k].mlb = to;
+        car[k].mlb_size = m;
         m = (m + 255) & ~255u;
         memcpy(name + 5, ".3DX", 5);
         car[k].mesh = to + m;
         if (!s2scene_entry(&c, name, to + m, room - m)) return 0;
+        uint8_t *block = envs + (uint32_t)k * ENV_ROOM;
+        s2_env_write(block, env_mlb, 1, (uint32_t)(block - to));
+        s2_env_windows(to, car[k].mlb_size, (uint32_t)(block - to));
     }
+    s2scene_settle();
     loaded_team = team;
     loaded_n = n;
     loaded_gen = s2scene_generation();
@@ -116,6 +136,7 @@ void s2showroom_init(int n, int chosen)
     for (int i = 0; i < n; i++) {
         memcpy(car[i].pos, slot[i], sizeof car[i].pos);
         car[i].a1 = 0;
+        car[i].refl = (struct track_refl){ { 0, 0, 0 }, { 0.0f, 0.0f, 0.0f } };
     }
 }
 
@@ -171,13 +192,14 @@ void s2showroom_draw(struct blit_list *l)
     }
     s2scene_begin(car[0].mlb, buffer, fresh);
     fresh = 0;
+    track_reflection_rate(0.002f);                          /* how fast the windows' picture slides: the page's value (measured: the offsets of the original's cars at their places) */
     for (int j = 0; j < m; j++) {
         const struct car *c = &car[order[j]];
         struct track_block b[CAR_BLOCKS];
         const struct car_look lk = { (float)c->pos[0], (float)c->pos[2], (float)c->pos[1], s2scene_rad(c->a1), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0 };
         const int nb = car_mesh_draw(c->mesh, &lk, &cam, b);
         s2scene_mlb(c->mlb);
-        s2scene_blocks(&cam, b, nb);
+        s2scene_blocks_refl(&cam, b, nb, track_object_reflection(&cam, lk.x, lk.y, lk.z, &car[order[j]].refl));
     }
     s2scene_end();
     blit_start(l, buffer);

@@ -28,7 +28,7 @@ uint32_t s2scene_generation(void)
 }
 
 /* the SDRAM holds what the CPU wrote (the geometry unit reads the meshes there) */
-static void settle(void)
+void s2scene_settle(void)
 {
     while (!(MEM_STATUS & MEM_WRITES_IDLE))
         ;
@@ -68,7 +68,7 @@ uint32_t s2scene_entry(struct s2_cont *c, const char *name, uint8_t *out, uint32
         d.offset = 0;                                       /* the bytes begin at the stage now */
         n = dat_extract(STAGE, d.stored, &d, out, max);
     }
-    settle();
+    s2scene_settle();
     return n;
 }
 
@@ -105,13 +105,19 @@ void s2scene_mlb(const uint8_t *mlb)
     GU_MLB = (uint32_t)((uintptr_t)mlb - SDRAM_BASE);
 }
 
-void s2scene_blocks(const struct track_cam *cam, const struct track_block *b, int n)
+void s2scene_blocks_refl(const struct track_cam *cam, const struct track_block *b, int n, uint32_t refl)
 {
     for (int i = 0; i < n; i++) {
         struct gu_piece g;
         track_block_piece(cam, &b[i], &g);
+        g.refl = refl;
         hw_piece(&g);
     }
+}
+
+void s2scene_blocks(const struct track_cam *cam, const struct track_block *b, int n)
+{
+    s2scene_blocks_refl(cam, b, n, 0);
 }
 
 void s2scene_end(void)

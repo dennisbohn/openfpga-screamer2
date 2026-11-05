@@ -123,6 +123,11 @@ void s2car_step(struct s2car_state *s, const struct s2car_input *in);
    steering, the texture phase (look >> 2). */
 void s2car_look(const struct s2car_state *s, struct car_look *lk);
 
+/* The picture the car's windows show: the object's +0x3c (0x1737b copies the car's +0xc80), the phase of the reflection's picture (frame n x phase >> 16 of
+   ENV.MLB's first material), by the kind of the ground under the car's fourth wheel (record +0x6b0): s2_env_phase() in s2env.h. *rate (if not 0): what the player's
+   car alone sets, how fast the reflection slides across the glass as an object moves (track_reflection_rate()). */
+uint32_t s2car_reflection(const struct s2car_state *s, float *rate);
+
 /* A test of the reference (OpenScreamer's s2_put): the car at (x, y), height 0, facing heading, its corners worked out
    and the last frame's record made the same. */
 void s2car_put(struct s2car_state *s, int x, int y, float heading);

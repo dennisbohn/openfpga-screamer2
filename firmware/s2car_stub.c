@@ -131,6 +131,13 @@ void s2car_look(const struct s2car_state *s, struct car_look *lk)
                              -s->wheel_spin[0], s->wheel_steer, phase };
 }
 
+uint32_t s2car_reflection(const struct s2car_state *s, float *rate)
+{
+    (void)s;
+    if (rate) *rate = 0.002f;
+    return 0;
+}
+
 void s2car_camera(const struct s2car_state *s, struct track_cam *cam)
 {
     *cam = (struct track_cam){ s->cam[0], s->cam[1], s->cam[2], s->cam[3], s->cam[4], s->cam[5] };
