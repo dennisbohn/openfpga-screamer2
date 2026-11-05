@@ -68,6 +68,11 @@ int s2gfx_ready(void)
     return ready;
 }
 
+struct zip *s2gfx_zip(void)
+{
+    return zip;
+}
+
 static uint32_t rd32(const uint8_t *p)
 {
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;

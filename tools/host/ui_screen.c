@@ -938,6 +938,7 @@ static void check_menu_hook(const char *prefix)
     char script[400];
     struct s2_menu_cfg c;
     s2save_reset();
+    s2save_set(S2S_PROFILE, 1);                                     /* (a new save shows TEAM SELECTION before the menu: its own test, check_pages3d) */
     s2menu_load(&c);
     /* five D from ARCADE to GAME SETTINGS, A; in the page D D B (laps 3 -> 5), A out (a cut); D to HI SCORES, A; A out; U U U to START RACE, A */
     put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:A 16:D 18:D 20:B 22:A 30:D 32:A 40:A 46:U 48:U 50:U 52:A");
@@ -960,6 +961,9 @@ static void draw_banner(int track, uint8_t *out)
     memcpy(out, (const void *)FB(0), S2G_PIC_BYTES);
 }
 
+/* the pages with 3D objects (TEAM SELECTION, ENTER YOUR NAME, the CAR page): pages3d_screen.c, with the stand-ins of the geometry unit */
+#include "pages3d_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -981,6 +985,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_arcade_cases(ref, prefix);
     check_arcade_chain(prefix);
     check_arcade_reach(prefix);
+    check_pages3d(prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
     int stored_banners = s2gfx_banner(1) != 0x13;

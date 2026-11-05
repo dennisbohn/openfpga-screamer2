@@ -11,6 +11,11 @@ program): the TRACK page whole, the others in the parts the model draws (the ori
 page's title, badge and the left half of the plate, the TRANSMISSION page's title, badge and buttons). DOSBox's window must stay in front while it runs
 (about 2 minutes; the keys go to the window in front).
 Output: build/check/dosbox/*.png (never committed) and one line per screenshot; exit code 0 if every one equals a frame of the model.
+
+--pages3d (menus row 5): the same run through the pages with 3D objects instead: TEAM SELECTION (the four badges turning, a move of the choice), ENTER YOUR NAME
+(the letter tyres flying in, the wheel turning, the cursor moving) and the CAR page (the carousel at rest and moving, the plate), on a private CHOICE.DAT with the
+team, the name and the chosen car set. It only collects the raw screenshots (build/check/dosbox3d/*.png and labels.txt, never committed): tools/pages3d.sh compares
+them with the firmware's pages (tools/host/pages3d_screen.c): for every object the angle at which the firmware's picture of it is nearest to the original's.
 """
 import atexit
 import ctypes
@@ -83,13 +88,20 @@ def front(pid):
 
 # ------------------------------------------------------------------------------------------------ the private game folder
 
-def choice_with_extra_tracks(src, dst, extra):
-    """CONFIG/CHOICE.DAT: word i is kept as (v + i * 0x1050c) ^ i; word 10 (+0x28) is the tracks opened beyond the first three"""
+def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None):
+    """CONFIG/CHOICE.DAT: word i is kept as (v + i * 0x1050c) ^ i; word 10 (+0x28) is the tracks opened beyond the first three; team (word 0), the
+    team's chosen car (the first word of its record at +0xb0 + team * 0x188) and the player's name (+8) as given (--pages3d)"""
     d = open(src, "rb").read()
     w = list(struct.unpack("<%dI" % (len(d) // 4), d))
     dec = [((v ^ i) - i * 0x1050C) & 0xFFFFFFFF for i, v in enumerate(w)]
     dec[10] = extra
     dec[0xB0 // 4 + 1] = 1                      # the first team's fifth car won
+    if team is not None:
+        dec[0] = team
+    if car is not None:
+        dec[(0xB0 + 0x188 * dec[0]) // 4] = car
+    if name is not None:
+        dec[2] = struct.unpack("<I", name.encode().ljust(4, b"\0"))[0]
     out = [((v + i * 0x1050C) ^ i) & 0xFFFFFFFF for i, v in enumerate(dec)]
     open(dst, "wb").write(struct.pack("<%dI" % len(out), *out) + d[len(out) * 4:])
 
@@ -107,7 +119,7 @@ def drop_junctions():
         assert not left, "a junction could not be removed: " + str(left)
 
 
-def make_private(extra):
+def make_private(extra, **choice):
     drop_junctions()
     shutil.rmtree(private, ignore_errors=True)
     os.makedirs(private)
@@ -117,7 +129,7 @@ def make_private(extra):
             continue
         if name.upper() == "CONFIG":
             shutil.copytree(s, d)
-            choice_with_extra_tracks(os.path.join(s, "CHOICE.DAT"), os.path.join(d, "CHOICE.DAT"), extra)
+            choice_with_extra_tracks(os.path.join(s, "CHOICE.DAT"), os.path.join(d, "CHOICE.DAT"), extra, **choice)
         elif os.path.isdir(s):
             shutil.copytree(s, d)                   # (a copy, never a junction: a recursive delete of build/ must not be able to reach the game's own folders)
         else:
@@ -138,7 +150,7 @@ def session(steps):
     p = subprocess.Popen([game + "/DOSBOX/dosbox.exe", "-conf", game + "/dosbox_screamer2.conf", "-conf", conf, "-noconsole"], cwd=work)
     time.sleep(2)
     pid = dosbox_pid() or p.pid
-    label, shots = "", []
+    label, shots, times = "", [], []
     for st in steps.split():
         if st[0] == "w":
             time.sleep(float(st[1:]))
@@ -156,6 +168,7 @@ def session(steps):
             for _ in range(int(n)):
                 if st[0] == "r":
                     front(pid)
+                times.append(time.time())
                 for sc, up in ((0x1D, 0), (0x3F, 0), (0x3F, 1), (0x1D, 1)):
                     key(sc, up)
                     time.sleep(0.04 if st[0] == "r" else 0.02)
@@ -167,7 +180,15 @@ def session(steps):
             p.kill()
     time.sleep(0.5)
     files = sorted(glob.glob(os.path.join(work, "*.png")))
-    assert len(files) == len(shots), f"{len(files)} screenshots for {len(shots)} requests"
+    if len(files) != len(shots):
+        # DOSBox drops a capture that comes too quickly after the last (the fast R requests): each file takes the label of the latest request before its time
+        print(f"{len(files)} screenshots for {len(shots)} requests: the files are labelled by the time of the request before them")
+        got = []
+        for f in files:
+            t = os.path.getmtime(f)
+            before = [i for i, r in enumerate(times) if r <= t + 0.05 and t - r < 1.5]
+            got.append(shots[before[-1]] if before else "?")
+        shots = got
     open(os.path.join(work, "labels.txt"), "w").write("\n".join(shots) + "\n")
     return list(zip(files, shots))
 
@@ -282,7 +303,26 @@ def check(shots, extra, ref):
     return bad
 
 
+def pages3d():
+    """the screenshots of the 3D pages for tools/pages3d.sh (build/check/dosbox3d): team 1 (CONDOR) with the name MIL and its second car chosen"""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox3d")
+    atexit.register(drop_junctions)
+    make_private(0, team=0, car=1, name="MIL")
+    # TEAM SELECTION: the badges turning (the chosen one at half a turn a second, the others at an eighth), then a move to the right and back
+    # (the badges glide 10 % of the way a frame), ENTER YOUR NAME: the badges fly off and the letter tyres in, the wheel turns a letter (right, left), the
+    # cursor moves down; ENTER leaves for the options room, whose ARCADE row leads over the title and TRACK pages to the CAR page: the carousel turning, one move
+    steps = ("w12 k1c w1.2 Lteam r12,0.25 Ke4d R5,0 w0.8 Lteam_move r3,0.1 w2 Lteam_after r2,0.5 Ke4b R5,0 w2.5 "
+             "k1c R6,0 w0.6 Lname r5,0.15 w1.5 Lname_rest r4,0.3 Ke4d R5,0 w0.6 Lname_move r4,0.2 Ke50 R3,0 w0.6 Lname_cursor r3,0.3 "
+             "k1c w6 k1c w6 k1c w5 k1c w5 Lcar r10,0.3 Ke4d R5,0 w1.5 Lcar_move r6,0.2 q")
+    shots = session(steps)
+    print(f"{len(shots)} screenshots in {work}")
+
+
 def main():
+    if "--pages3d" in sys.argv:
+        pages3d()
+        return
     extra = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 0
     if "--check" in sys.argv:                   # the screenshots of the last run again (build/check/dosbox)
         files = sorted(glob.glob(os.path.join(work, "*.png")))
