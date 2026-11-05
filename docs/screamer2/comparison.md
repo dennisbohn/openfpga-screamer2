@@ -111,7 +111,7 @@ code, against about 2,400 lines of car, drive and opp in our firmware.
 | `track.c` | image: MLB, UNR, pieces, ground, walls | works with `MAX_OBJ` 1024, `MAX_PIECES` 4096, class key 0 (E3). `MAX_CFACES` 8192: drivable faces 4,697 to 8,079 (track 2 at 98.6 %); grass/kind from the piece record `+0x3C` instead of the block name; fade (`DEPTH`) not there | small change | constants, kinds |
 | `car.c`, `drive.c` | `CARS_DATA`, OpenScreamer `drive.c` (engine, gearbox, grip) | new model: per-wheel grip and traction, springs and body lean, road kinds with tyre/weather grip, damage (look = texture picture, power loss), wheelspin smoke (N2 S2-5o, 5u, 5zd, 5zq) | **new** | large |
 | `opp.c` | `OPPONENTS` rows, 10 splines | `OPP.SPL` aim line, `DIR.SPL`, `SKILLS` catch-up by distance and level (`0x2da06`), computer cars from teams | new | large |
-| `scenery.c` | `ANM/CNG/SLA/OST.SPL`, `MAPnDAT.DTR` | `ANIMATIONS` rows + `.PTH` cubic paths (17 on track 1), obstacles (cones fly and bounce), sounds on paths | new | medium |
+| `scenery.c` | `ANM/CNG/SLA/OST.SPL`, `MAPnDAT.DTR` | `ANIMATIONS` rows + `.PTH` cubic paths (17 on track 1), obstacles (cones fly and bounce), sounds on paths | new | medium. **Built: the animated rows, their objects and their sounds (`firmware/s2anim.c`, docs/development.md "Animated scenery"; their meshes use the track's `MISC.MLB`, which the image now holds); the obstacles are not** |
 | camera views | `CAM.SPL`, `RPL.SPL` | `CAMERASn.MCM` trackside records, mirror (second pass: 160x35 rows, camera 3, N2 S2-5zh) | new | medium |
 | `ghost.c` | recorded keys in `ATTACK.DAT` | S2 time attack: 2 cars, the ghost is the controls record | small change (follows the physics) | small |
 | `champ.c` | stages 0 to 52, `CHAMP.TXT` | leagues with CUSTOMIZE set-ups, weather by chance, points, LEAGUE REPORT | new | medium |
@@ -179,7 +179,7 @@ commits). Sizes: small = under a day, medium = 1 to 2 days, large = 3 days or mo
 | Hardware: 7-bit see-through table, routine 208 (the reflection's wrap is done in the image, E10) | small to medium | Quartus cycles; block RAM 95 % |
 | Fade by depth (night, fog) | medium to large | new unit logic; may stay out at first |
 | Car, physics, wheels, body, road kinds, damage | large | the heart; 8,000-line reference |
-| Opponents, skills, cones, animations (`.PTH`), cameras (`.MCM`), mirror | large | together |
+| Opponents, skills, cones, animations (`.PTH`), cameras (`.MCM`), mirror | large | together (the animations are built, `s2anim.c`; their rotors wait for the see-through table) |
 | HUD, cockpits, dashboards | medium | the race screen in the chase camera is done (docs/screamer2/hud.md); cockpits, dashboards, mirror open |
 | Sound (new tables), CD cue | small | |
 | Menus (3D rooms, `.BKK`, league), intro, attract race | large | a plain menu first: small |

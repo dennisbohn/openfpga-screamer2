@@ -200,7 +200,7 @@ and every writer of the constants searched; **p** probable; **u** unread.
 | Far plane (faces are cut at this depth) | 0.8 x | 0.8 x | TRACK_DATA's first number (-50,000; track 4: -60,000) | `0x2efc7`: `cmp detail,2`; below it `fild [0x1240f8]; fmul 0.8 [0x110ccb]; fistp`; `0x7f6d4` writes it into the face routines' immediates (`0x779c7`...`0x77a54`), `0xc9ad8`, `0xc9adc`, `0x76788`. No table like S1's `0x21d4` | c |
 | Placements considered (distance of the placement's position) | to 48,192 (track 4: 56,192) | the same | to **58,192** (track 4: 68,192) | `0x7f6d4`: (far - 0x2000)^2 >> 3 into the five `d^2 >> 3 < K` tests (`0x76f4f`, `0x76fb3`, `0x77039`, `0x7709d` the map's cells, `0x7e772` the moving objects); the file's own K is S1's 52,000. **Far plane + 8192, not 1.2 x** | c |
 | Wheel smoke (`asmoke`, `a2smoke`, 8 + 8 puffs a car) | no | no | yes | `0x204c1` (spawn), `0x2f21b` (loads `misc` and the puffs) | c |
-| Animated scenery rows (`ANIMATIONS`, objects moving along paths) | no | no | yes | `0x3106d`: `[0x124208] = (detail == 2)`, read at `0x2cef0` | c (HIGH only); what a row is: p |
+| Animated scenery rows (`ANIMATIONS`, objects moving along paths) | no | no | yes | `0x3106d`: `[0x124208] = (detail == 2)`, read at `0x2cef0` | c (HIGH only); what a row is: p. Built since: `firmware/s2anim.c`, docs/development.md "Animated scenery" (the rules read in `0x2cee4`, compared with the running original's memory) |
 | Block level of detail (below) | the same | the same | the same | no read of the detail in `0x7ee38`...`0x7f330` | c |
 
 Nothing else reads it (the other references are the menu, the attract race `0x3cab4` and the replay copy

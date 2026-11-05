@@ -326,7 +326,7 @@ Known gaps (accepted): the cars' windows show the original's environment picture
 first material of `ENV.MLB`, `GFX/ENVPn01.DAT` in the race, `GFX/ENVM<team>1.DAT` on the CAR page; no hardware change, see "The windows" below);
 in the race the picture slides with each car's travel and changes by the road's kind (the tunnels' ceiling frames of tracks 3, 4, 6, 7), but the viewer's own
 ride mode (`road_scene`) and the ghost car keep offsets 0 and phase 0, the palette of tracks 2 and 5 is the track's,
-not `ENV.COL`'s, no shadows, smoke, props or animated scenery (nor its sounds), no fade by depth, no night or fog, no mirror, the S1
+not `ENV.COL`'s, no shadows, smoke, props, no fade by depth, no night or fog, no mirror (the animated scenery is built, "Animated scenery" below, in the race only: the ride shows none), the S1
 see-through table (64 rows) where Screamer 2 has 112, the sky and ground colour of `TRACK_DATA` only
 where the backdrop picture ends.
 
@@ -374,8 +374,9 @@ no four cars of any team make it larger than 0.82 MB of cars (the five cars of t
 | image before (team 1's five cars), bytes | 4,695,040 | 5,236,224 | 5,224,448 | 5,415,936 | 4,863,744 | 5,542,144 | 3,694,592 |
 | image now (the four teams' cars), bytes | 4,544,512 | 5,085,696 | 5,073,920 | 5,265,408 | 4,713,216 | 5,391,616 | 3,544,064 |
 | worst grid (four of the dearest cars), at most | 4.65 MB | 5.19 MB | 5.17 MB | 5.37 MB | 4.81 MB | 5.49 MB | 3.64 MB |
+| image with the track's `MISC.MLB` (the animated scenery's materials, "Animated scenery"; the default grid), bytes | 4,619,520 | 5,189,120 | 5,148,672 | 5,402,624 | 4,784,128 | 5,491,200 | 3,618,560 |
 
-All of them in the 7 MB window (7,340,032 bytes); the builder's scratch needs 0.25 to 0.57 MB (track 4), and sits above the cars'
+All of them in the 7 MB window (7,340,032 bytes); the builder's scratch needs 0.32 to 0.71 MB (track 4; 0.25 to 0.57 MB before the unpacked `MISC.MLB` joined it), and sits above the cars'
 blobs from `0x12E4_0000` (1.75 MB). The load takes less time than before: the first track load reads 0.20 s of cars at the
 Pocket's 1.2 MB/s (before: 0.6 s for the whole `CARS101.DAT`) and unpacks 713 KB once, 0.23 s at 3 MB/s (before: 863 KB for every
 build, 0.27 s), so the first load is about 0.4 s faster and every later one 0.27 s faster; only a deflated ZIP reads more
@@ -448,14 +449,15 @@ the sound manager) and tested natively (`tools/s2/check_sound.sh`).
 | Wall | the player's car | `HIT1..3` (0xc..0xe) for a knock harder than 500, 4,000, 10,000 (`0x29571`, the sounds at `0x2a301..0x2a34b`; the physics' `hit_hard`) |
 | Car against car | the player's car | `CRASH1..3` (0xf..0x11) harder than 0, 5,000, 10,000 (`0x245a3`, the thresholds at `0x27abd`; the firmware's cars touch as the game's solver does and the sound goes by its knock: the speed of the corner against the edge, to the unit; `race.c`, docs/screamer2/driving.md "Cars touching") |
 | Landing | the player's car | `GROUND1` (0x12) when all four wheels were in the air and any is down again (`0x1c45e`) |
-| Start lights, gears | - | nothing: the original has no sound for them (every call to the sound manager in the race code is one of the above; the cones' and the scenery's sounds are not run) |
+| Start lights, gears | - | nothing: the original has no sound for them (every call to the sound manager in the race code is one of the above; the cones' sounds are not run) |
+| Scenery | the rows of the track's `ANIMATIONS` that name a sample, while they are heard | a looping voice each (voices 11 to 31), heard from the camera within 80,000 units: "Animated scenery" below |
 
 `DATA/SOUND.DAT` (1.4 MB) is a `.DAT` container of `.RAW` samples (8-bit unsigned mono, stored) and `.DTR` tables;
 `GAME.DTR` lists the 33 samples of the race by number with their own rate (8,000 to 22,050 Hz), volume and loop, in a section
 `SOUND_DATA` (`sNAME.RAW xID xLOOPLEN xLOOPCOUNT xVOLUME`, then `dRATE dBITS dCHANNELS dFORMAT`). It is read whole from the ZIP once,
 when the viewer starts (about a second on a stored ZIP, longer on a deflated one), to `0x11C0_0000` (docs/soc.md), and the
 mixer plays the samples straight from there. The mixer's step is the rate over 48,000 (2.16), at most 4 samples a value. `MENU.DTR` and the
-`AMBIENT*.DTR` of the tracks (birds, mill, crowd, ...) belong to the menu and to the scenery's animations, which are not run.
+`AMBIENT*.DTR` of the tracks (birds, mill, crowd, ...) hold the scenery's samples ("Animated scenery" below); `MENU.DTR` is the menu's.
 
 Voices of the mixer: 0 to 3 the engines, 5 the player's tyres, 6 to 9 the knocks (round robin). Volumes: the sample's volume (`0x3fff`
 for the engines, `0x5fff` for `M_ACUV1`, `0x7fff` for the rest) times the game's factor, then the effects' master `S2SND_FX_MASTER` `0x2000`
@@ -488,8 +490,99 @@ restart of the race on the same track (Select + Start) keeps its song. A frame a
 
 What is open: the original's volume balance is not known (the CD drive's analogue mix is not in the program; the two thirds are
 Screamer 1's choice), the pan law of the effects is HMI's as Screamer 1's `sound.c` has it, the car against car knock is the
-firmware's closing speed, the cones' knock and the scenery's sounds (`ANIMATIONS` rows with a sound, `AMBIENT*.DTR`) are not
-done, no menu sounds in the start menu (the clicks of `MENU.DTR` exist, `s2sound_menu()`, the pause menu uses them), the pause eases the effects out (above).
+firmware's closing speed, the cones' knock is not done and the scenery's sounds have no Doppler (the game asks for their rate with a pitch of 0, "Animated scenery" below), no menu sounds in the start menu (the clicks of `MENU.DTR` exist, `s2sound_menu()`, the pause menu uses them), the pause eases the effects out (above).
+
+### Animated scenery
+
+The tracks' moving things and the sounds that stand in their places (`firmware/s2anim.c`; STARTL.EXE `0x30ec2` reads the paths, `0x31060` sets the rows up, `0x2cee4` runs them every frame of
+the race). The original has them at DETAIL HIGH only (`0x3106d`: `[0x124208] = (detail == 2)`, read at `0x2cef0`); the core always runs them, as it draws everything at HIGH (the DETAIL LEVEL
+setting keeps only its value). In the race (the arcade's, the championship's, time attack's, the replay), not in the viewer's ride.
+
+| Track (file) | Rows of `ANIMATIONS` in `DATA/MAPn.DAT`'s `MAPnDAT.DTR` (seconds a run takes, the clock it starts at, flags) |
+|---|---|
+| 1 England | 12 bird rows (`a1birds`, `a2birds`: 5 s, flags 7, the lap 1, 2 or 3 of each, 30,000 to 46,000 units), the mill, 2 horses, 2 crowds (sounds) |
+| 2 Columbia | the helicopter `aeli` (50 s, from 0 s, flags 0), 12 bird rows (5 to 7 s, flags 7), the waterfall, 4 jungle, 2 crowds (sounds) |
+| 3 Egypt | `aeli` (30 s, from 10 s), 2 market, 2 crowds (sounds) |
+| 4 California | the airship `adirigib` (40 s), 2 cable cars `acable` (30 s), 3 bulldozers `adoz` (20 s), 2 works, 4 crowds, 2 traffic (sounds) |
+| 5 Finland | 6 trains (`a1trn` one row, `a2trn` five rows, 30 s), 2 wolves, a crowd (sounds) |
+| 6 Switzerland | `aeli` (30 s, from 60 s), the cows, 3 crowds (sounds) |
+| 7 The Tunnel | none |
+
+(The track numbers are the files'; the menu's order is England, Egypt, California, Finland, Switzerland, Columbia, The Tunnel: 1, 3, 4, 5, 6, 2, 7. The original's limits, 40 rows, 40 paths, 24 keys a channel, 8
+kinds of mesh, hold on every track: the most is 20 rows, 22 keys, 3 kinds.)
+
+**The rules** (read in the program, written again in Python, `tools/s2/anim_ref.py`, and compared with the running original, below). A path is `MAPn.PTH`: a count, then per path 100 bytes (the name `MV_<c>..`:
+`c` is the path's number, `1` to `9` are 0 to 8 and `a` on 9 on, not its place in the file; the floats at `+0x28` and `+0x2c` are the span of the run that its keys cover, 0 to 1, but 0 to 0.5 for the trains and
+Columbia's birds, which are at the end of their path from half the run on: `0x129d5` reads the channels at `part / span`) and three channels, x, y and height, each a list of keys (time 0 to 1, value, the slopes out and in); between two keys
+the value is the cubic with the controls `v_p`, `v_p + out_p h`, `v_q - in_q h`, `v_q`, h a third of the time between them (`0x126ad`); the way is the three channels' rates made a unit vector (`0x129d5`). A row's run
+is `(race clock - start) / seconds`, and the row is **alive** when the player (his car's whole-number place) is within 52,000 units of it in x and in y or, a row that has an object and neither of the flags 1 and
+2, always; and it must belong to the lap (`row.lap`: the player's lap counter + 1, 0 any). Flag 1: it starts when the player comes within its range (-1: 52,000), so it is not there before; flag 2: it runs once
+(the birds: a flock a lap); a flag-1 row that has run waits to be set off again; flag 0: it runs round and round, whether the player is near or not. The race clock is the steps run x 20 ms (the original's
+`0x13335c`: 0 at the grid, the lights are out at 3 s, so the helicopter of Egypt comes 7 s into the racing). A row's place is truncated to whole numbers (`0x2cee4` stores it so, in the row and in the object's record);
+its heading is the angle of the path's way on the ground, `atan2(x, -y)`, and its climb the angle of the height against what is left of the way along the ground once it is turned back by the heading, both in
+2048ths of a turn (the object's `+0x18` and `+0x14`, roll 0; `anim_ref.py` has the program's own steps). A row with the flag 4 (the birds) is not turned along its way: it faces the screen (the engine's
+billboard: the camera's heading less a half turn, its pitch, its roll the other way). An `@` row has no object: its sound stands at the first place of its path.
+
+**Drawn** as the cars are, as objects of the scene (`s2anim_objects()` after the cars in `viewer.c`; their blocks are made when the drawing comes to them, `car_mesh_draw()`: the blocks' places in the mesh, the
+original's order for a moving object's blocks, its level of detail at 2,000 and 6,000 units; the key of the sort 300 nearer than a piece's, as a car's). The meshes are `GFX/MAPnH01.DAT`'s `A1BIRDS`, `A2BIRDS`, `AELI`,
+`ADIRIGIB`, `ACABLE`, `ADOZ`, `A1TRN`, `A2TRN` (`.3DX`, 0.9 to 11 KB, 20 KB at most a track, unpacked at the load into the program's memory). **Their materials are the track's `MISC.MLB`, not its `MLB`**
+(the helicopter of Egypt: records 272 to 352 of `MISC.MLB`), and the geometry unit takes a face's material at a signed 16-bit offset from the `MLB`: so the track image holds `MISC.MLB` as one more library after
+the cars' (its records in front of the `MLB` after the cars', its textures after the cars' libraries; `track_build_s2()` and `make_track_s2.py`; the image grows by 74 to 136 KB), and `s2anim_load()` moves each
+mesh's faces onto those records by the builder's `misc_delta` (`s2_faces_onto()`, the cars' routine). The helicopter's rotor is a second block (`fai`, a flat quad of 5,600 units) with a **routine 208 material of 20
+frames** (64 x 64, the disc as texel values 33 to 41, 0 outside): a see-through material that turns with the texture clock (the geometry unit's frame is the frames x the clock, one turn of the clock in 3.33 s;
+the object has no frames of its own, header `+0x10` = -1); the body has two more faces of it (the tail rotor). **That part needs the see-through table** (the game's routines 224 / 208): until it is there the
+geometry unit draws routine 208 as an opaque picture, so the rotor shows as a black square with a sand-coloured disc in it (palette entry 33) and the tail rotor as a small sand-coloured leaf. Everything else is drawn.
+
+**Sound.** A row with a sample (the fourth column: a sample of the track's `AMBIENT<n - 1>.DTR` in `SOUND.DAT`, numbered from 0x40: bird, mill, horse, crowd, market, waterfall, jungle, helicopter, works, traffic,
+tram, train, wolf, cow; the `SOUND_FX` list of the `.DTR` is empty on every track) has a looping voice while it is heard: an `@` row while it is alive, an object while it is shown. It is heard from the camera within
+80,000 units, the volume the sample's x ((80,000 - d) / 80,000)^2, panned by its side, the rate the sample's own with the Doppler shift of an engine's (the engines' rule, `s2snd_heard()`); voices 11 to 31 of the mixer, one for each row (at most 9 rows are heard at once on the
+longest tour of any track; the samples are in `SOUND.DAT`, read once with the effects). Measured in the running original (`dosbox_anim.py <track> --voices <seconds>` samples the sound manager's slots and the
+driver's voice records every 100 ms): the rows' voices are slots 7 up in the order of the rows (the crowd of Egypt's fourth row is slot 10), a voice farther than 80,000 units has its rate 11,025 and no volume, and a voice
+within the range has the rate 10,857 to 10,935 for the 11,025 Hz crowd and 10,913 to 10,927 for the helicopter: the sample's own rate less the Doppler term of the player's 130 to 240 units a frame (the original's frame was 20 ms in that run; the firmware's shift is the engines', scaled by 50 / 30 for a game at 30 frames a second). The game's call has a pitch of 0, which
+by the routine as read (`0xaf338`: the rate is the sample's x the pitch squared) would make the rate 0; the original's own numbers say otherwise, and the firmware follows them. Not measured: the volume's level (the CD's
+analogue mix is not in the program) and the pan.
+
+**Not built:** the objects in the viewer's ride; the window box of the walk (`0x7e772`: the original lists a moving object only when its place is in the camera's window and within the far plane + 8,192 units; ours
+draws it when its sphere is in view and within the far plane, which draws the same); the car the rows watch is the player's, not the one a replay's camera follows (the original takes the camera's). A row whose
+mesh is not there, or is beyond the limits, is not run.
+
+**Cost** (counted, not timed on the Pocket: the instructions of the compiled code in `build/firmware/program.lst`, the geometry unit's counters of the PC model; the CPU runs about 1.5 cycles an instruction on the
+frame's code). A frame: `s2anim_frame()` steps every row: a row that is not alive costs a few compares, an `@` row about 50 instructions, an object on its path three channels' cubics (`chan_at`: 85 instructions and 2
+divisions, 6 more for each key looked past, 22 at most), about 450 to 600 instructions, 700 to 1,000 cycles; so on the busiest track (4: 6 objects, 8 sounds) about 5,000 cycles, 0.07 ms. Each sound heard: a square root and
+`s2snd_heard()` (61 instructions, a cosine), about 1,500 cycles; 9 at most. The objects' blocks only when the drawing comes to them (an object out of the view costs nothing more): `s2anim_angles()` (139
+instructions, two arctangents of 109, a sine and a cosine, 6 divisions) and `draw_model()` (265 instructions and, for each block, `place_block()` 61 with four `block_point()` of 84): about 2,500 instructions for a helicopter
+(2 blocks), 3,500 for a bulldozer (4 blocks), 4,000 to 5,500 cycles, 0.05 to 0.07 ms an object in view. The geometry unit: the helicopter of Egypt in the 14 pictures of the original's recording, drawn by the firmware's
+code on the PC (`tools/s2/anim_shots.py`): 2 pieces, 54 to 62 faces, up to 96 triangles and 157 vertices (the 130 faces of its meshes before the faces turned away are left out), about 6 % of the 900 faces of a
+frame; the rotor in the rasterizer: up to 70 pixels wide at 10,000 units, 3,000 to 15,000 pixels at 0.83 clocks, 0.2 ms at the most. Taken together: 0.1 ms a frame with nothing in view, 0.3 to 0.5 ms with a
+helicopter or a few bulldozers in view, against a race frame of 11.4 ms on average and 12.5 worst (the simulation of the main branch); not simulated here (`tools/s2/sim_race.sh` is the main session's).
+
+**Compared with the running original** (2026-11-06, `tools/s2/dosbox_anim.py`: an arcade race on each track at DETAIL HIGH, three laps, the player's car driven by the game's driver, every frame of the game recorded; 5 to
+6 minutes of racing a track; the firmware's model fed the same clock, place and lap of the player frame by frame; a row is equal if its place is within 1 unit of this frame's or of one of the five frames before
+it: the recording samples between the game's own steps, 15 to 30 % of a moving row's samples are a frame behind). The rows' places, whole numbers in the original's row (`+0x30`, `+0x34`, `+0x38`), the sounds' on / off (`+0x48`) and
+the headings and climbs the original stores in the objects (`+0x18`, `+0x14`):
+
+| Track | frames | places equal | sounds on / off equal | headings and climbs equal |
+|---|---|---|---|---|
+| 1 England | 15,000 | 255,000 of 255,000 | 165,000 of 165,000 | (the birds face the screen: none stored) |
+| 2 Columbia | 14,999 | 299,979 of 299,980 | 209,986 of 209,986 | 14,998 of 14,999 |
+| 3 Egypt | 13,462 | 67,306 of 67,310 | 67,310 of 67,310 | 13,458 of 13,462 |
+| 4 California | 13,499 | 188,983 of 188,986 | 148,489 of 148,489 | 80,994 of 80,994 |
+| 5 Finland | 10,000 | 90,000 of 90,000 | 70,000 of 70,000 | 60,000 of 60,000 |
+| 6 Switzerland | 15,001 | 75,005 of 75,005 | 75,005 of 75,005 | 13,041 of 13,045 |
+
+That is every row of every track, the birds' laps and once-only runs (England: three laps), the helicopters' starts (10 s, 60 s) and the trains, which this comparison found out (the path's span, above).
+The helicopter's picture, from the 14 screenshots taken where it came near the camera on Egypt (`anim_shots.py`): its body is where the original draws it and has its shape, tilt and colours
+(the climb's sign: with the other sign the tail boom and the cockpit are drawn elsewhere, with this one on the original's pixels by eye; 95 to 98 % of the pixels the firmware draws of the body are pixels the original
+changed, but only 26 to 45 % have a colour within 24 of 765 of the original's: the object is 10 to 30 pixels across, the original maps its textures without perspective correction, the screenshot's frame is known to a
+frame or two, and the rotors are drawn opaque). England's and Columbia's birds are flocks of white cards that face the screen, as in the original's screenshot of Columbia, not compared pixel for pixel. The airship, the cable cars,
+the bulldozers and the trains were never in sight of the camera in the recordings (the driver's lap passes none of them close): their positions and angles are equal to the original's numbers, their pictures
+are not compared with the original's.
+
+**Tests.** `tools/s2/check_anim_s2.sh`: the firmware's model (natively under the sanitizers) against `anim_ref.py` on every track over a tour of the player (20,000 frames each, three laps; shown and heard equal, places and
+angles within 1) with a negative control (a wrong reach must differ); the image's `MISC.MLB` against the container (every material the meshes use, every frame); and the recordings of the running original if there
+are any (`tools/s2/dosbox_anim.py <track> [seconds]`): its rows (`0x126d5c`, `0x4c` bytes each) and its objects' records (`+0x14` climb, `+0x18` heading) frame by frame. `tools/s2/check_sound.sh` also reads every track's
+`AMBIENT` table (35 samples) by two readings. The pictures: `python -I tools/s2/anim_shots.py <track>` draws the firmware's scenery for the state of each screenshot of a recording (`render_s2.sh`'s camera letter `a`)
+and compares what the objects cover.
 
 ## PC renderer
 
@@ -583,12 +676,14 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/s2/check_cars_s2.sh`, `tools/s2/check_cars_s2.c` | the cars' loader `firmware/s2teams.c` natively under the sanitizers on a stored and a deflated ZIP of the team containers: the cars equal the containers' own entries, the bytes read are counted, a repeated or partly changed grid reads nothing or only the changed cars |
 | `tools/s2/check_params.sh`, `tools/s2/check_params.py`, `tools/s2/check_params.c` | the car's numbers: `firmware/s2params.c` (CAR_PARAMS of `DATA/GAME.DAT`, TRACK_DATA with the road kinds of `DATA/MAPn.DAT`) natively against an independent reading in Python, every field of 20 cars and 7 tracks |
 | `tools/s2/check_sound.sh`, `tools/s2/check_sound.py`, `tools/s2/check_sound.c` | the race's sound rules `firmware/s2snd.c` natively in Docker: `DATA/SOUND.DAT`'s `GAME.DTR` (the 33 samples: where their bytes are in the container, length, rate, volume, loop, CRC-32 of the bytes) and `CD_TRACKS` read by the firmware's code and by an independent reading in Python, line by line; an engine's rate, volume and pan over a sweep of revs, distance, last distance and side (223,560 cases), the tyres' rule (13,650 cases) and the knocks' thresholds against the game's routine as OpenScreamer's notes have it in double precision (the constants checked in `STARTL.EXE`) |
+| `tools/s2/check_anim_s2.sh`, `tools/s2/check_anim_s2.py`, `tools/s2/check_anim_s2.c`, `tools/s2/anim_ref.py` | the animated scenery (`firmware/s2anim.c`, "Animated scenery"): the firmware's model natively in Docker under the sanitizers against `anim_ref.py`'s independent reading of the original's routines (a tour of the player over each track's rows, 20,000 frames, shown / heard equal, places and angles within 1; a negative control with a wrong reach must differ), the track image's copy of `MISC.MLB` against the container (every material the meshes use, every frame of it), and, for every recording of `dosbox_anim.py` in `build/check/dosbox_anim_t<n>/`, the original's own rows and objects' records frame by frame |
+| `tools/s2/dosbox_anim.py <track> [seconds [shot seconds ...]] [n<row>,<distance>,<gap>,<count> ...]`, `tools/s2/anim_shots.py <track>` | the animated scenery against the running original (Windows, a private copy `build/dosgame` of the game folder with DETAIL LEVEL HIGH in its `CHOICE.DAT`; DOSBox in front; it refuses to start while any DOSBox is running and stops if one appears): an arcade race on the track, the player's car handed to the game's driver after the start, then every frame of the game recorded (the race clock `0x13335c`, the player's car, the camera record, the `ANIMATIONS` rows `0x126d5c` and each object's record) in `frames.jsonl`, and Ctrl+F5 screenshots at the given seconds or whenever a row's object is near the camera and in front of it (`n`); `anim_shots.py` finds for each screenshot the frame whose drawing by the firmware's code (`render_s2.sh`, camera letter `a`) agrees with it most, and compares the pixels the objects cover (`NOROTOR=1` leaves the see-through rotors out, `PITCH=1.0f` turns the objects' pitch the other way, to see the sign) |
 | `tools/s2/check_refl_s2.sh`, `check_refl_s2.py`, `check_refl_s2.c` | the picture the cars' windows reflect by the kind of the ground (`s2_env_phase()`, `firmware/s2env.h`) against the program's own chain of compares at `STARTL.EXE` 0x1f372, followed for all 256 kinds (the python reads the flat image `build/exe/startl_fix.bin`) |
 | `tools/s2/check_car.sh`, `tools/s2/check_car.c`, `tools/s2/car_scenarios/` | the car physics `firmware/s2car.c` natively in float32 on the track images (built with the five cars of team 1, `S2CARS=1:1,1:2,1:3,1:4,1:5`: the wheels of every car number as the traces had them) against the reference traces of OpenScreamer's routines (the folder `ref/` next to the repository, or `$REF_DIR`; scenarios in its `scn/`, traces in `traces*/`), the place cut as the game does and kept as a float; per quantity the largest and the mean difference; also the car alone from each track's grid place and the trigonometry and ground looks a step costs. `car_scenarios/` holds the scenarios heading towards the origin (`a_origin` ..., traces made with `tools/s2/ref_trace/ref_run.sh` into `ref/traces_benign/`) |
 | `tools/s2/check_aicontact_s2.sh`, `tools/s2/aicontact_s2.py`, `tools/s2/race_replay_s2.c`, `tools/s2/dosbox_race_s2.py`, `tools/s2/ref_trace/ref_run.sh race` | the cars touching and the computers' driver (`firmware/race.c`) against the original's routines: the reference (OpenScreamer's, `ref_run.sh race`) runs a race of four cars at 20 ms steps and writes every car's whole record after every frame; for each frame at which its solver stopped a step the firmware's race is started from the reference's state six frames before (`race_replay_s2.c`, natively in Docker, the places cut to whole numbers as the game's) and run on for 175 frames, and the cars the solver stopped, the error at the touch and in the 10 and 150 frames after it, the largest difference of one frame's move (the shove) and, with no touch asked for, how long the three computers stay within 2 units are counted (`aicontact_s2.py`); passes for the new code and fails for the old in every line (62 touches on all seven tracks: the numbers in docs/screamer2/driving.md). `FW=<tree>` tests an older firmware. `dosbox_race_s2.py` records the original's own race in DOSBox, four cars a frame, and runs the reference with the recorded steps against it |
 | `tools/s2/check_vis_s2.sh`, `tools/s2/check_vis_s2.c` | the track's drawing key and walks natively in Docker (`docs/screamer2/draw_distance.md`): the key `-(sqrt(d^2 >> 3) >> 2)` against a double-precision reading, every mesh's class key (header entry 43) against the file bytes, and from cameras round the road of each track no piece within 6,000 units that the whole walk takes may be left out by the camera cell's list |
 | `tools/s2/report_carsort_s2.sh`, `tools/s2/report_carsort_s2.c` | a report (not a check) on the painter's order of a computer car against the static pieces: the race robot's cameras with a computer car taken from later steps, a per-pixel depth map of every polygon (patched temporary copies of `track.c` and `geom.c`) and the count of poses where the car is drawn through a nearer piece (`docs/screamer2/draw_distance.md`, "A car behind a wall") |
-| `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene, the lone car and the race on the PC from the firmware's own code (`NOLOD=1`: no level of detail; `g<k>`: the race, laps and places of the four cars as a table) |
+| `tools/s2/render_s2.sh`, `tools/s2/render_s2.c` | the viewer's scene, the lone car and the race on the PC from the firmware's own code (`NOLOD=1`: no level of detail; `g<k>`: the race, laps and places of the four cars as a table; `a<clock>,<px>,<py>,<lap>,<x>,<y>,<h>,<yaw>,<pitch>,<roll>,<show>`: the animated scenery at a race clock seen from a free camera, also `<prefix><k>.idx`, the palette indices; `@<file>`: cameras listed in a file) |
 | `tools/s2/map_shift.py <old.map> <new.map>` | which objects of the program moved between two builds (`build/firmware/program.map`): the I-cache is 8 KB and direct mapped, so code added in front of the frame's code shifts what follows (`docs/screamer2/performance.md` section 7); judge the shift by the race in the simulation (`tools/s2/sim_race.sh`) |
 | `tools/s2/framestats.sh`, `tools/s2/perf_patch.py`, `tools/s2/perf_model.py`, `tools/s2/lod_report.py` | the study's counting build (counters in copies of the firmware) and cost model, `docs/screamer2/performance.md` |
 | `tools/s2/framestats.sh race`, `tools/s2/racestats.c`, `tools/s2/perf_race.py`, `tools/s2/check_cull_s2.sh <commit>`, `tools/s2/sim_race.sh` | the race's frame time (`docs/screamer2/performance.md` section 7): a race on the PC with the game's driver at all four cars and the counters per frame (and per piece), the frame times along a lap from them, a check that the cull of this tree hands on the same pieces in the same order and draws the same pictures as the tree of another commit (7 tracks), and the viewer's race in the simulation with its frame timeline; `tools/fw.sh PROF=1` builds the cycle counters of `firmware/prof.h` for it, `CODE_PAD=n` / `CODE_PAD2=n` move the code to see what the caches' alignment costs |
