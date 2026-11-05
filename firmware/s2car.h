@@ -168,6 +168,24 @@ void s2car_put(struct s2car_state *s, int x, int y, float heading);
 /* The chase camera as a track_cam (the same as cam[]) */
 void s2car_camera(const struct s2car_state *s, struct track_cam *cam);
 
+/* What the effects of s2fx.h read of a car after its step (the game's record +0x4d8 .. +0x510, +0x574 .. +0x6c4, +0xc0c ..; the wheels' and corners' words are the physics' own):
+   the smoke's rule (0x204af) looks at the rear wheels 1 and 3 with the road kinds of the wheels 0 and 2 beside them, the shadow's (0x1f4a7) at the ground under the car */
+struct s2car_fx {
+    int on_ground;                      /* the engine / tyres' flag +0x510 is above 0: the car is on the ground */
+    float slip;                         /* +0xc34: 1 grips, below 0.93 the tyres slide */
+    float speed;                        /* +0x500, in the physics' units (the smoke goes by 20) */
+    int x, y, z;                        /* the car's place cut to whole numbers (the game's object record, [car +0x990]: what its x & 7 and z & 7 are), y the height */
+    float yaw, pitch;                   /* +0x4e8, +0x4e4 */
+    struct {
+        int flags, dispersion;          /* the road kind's smoke flags (1 asmoke, 2 a2smoke, 4 smokes at speed too) and dispersion */
+        int world[3];                   /* the rear corner's place: x, the ground's height under it, z (whole numbers) */
+        int local[3];                   /* the wheel's place in the car (x, up, z) */
+    } rear[2];
+    int ground;                         /* +0x4f8: the ground's height under the car (the mean of its four corners') */
+    float slope_along, slope_across;    /* +0xc0c, +0xc14 */
+};
+void s2car_fx(const struct s2car_state *s, struct s2car_fx *out);
+
 /* The ROAD KINDS row of the track's kind id (its smoke[2] and smoke[3] number the tyres' rolling and squealing
    sounds, s2snd.h); a row of zeros for any the track does not list */
 struct s2_road_kind;
