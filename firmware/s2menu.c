@@ -1,11 +1,9 @@
 /*
- * The start menu (s2menu.h)
+ * The menu (s2menu.h)
  */
 #include "s2menu.h"
-#include "hw.h"
 #include "console.h"
 #include "dlog.h"
-#include "screen.h"
 #include "zip.h"
 #include "dat.h"
 #include "s2save.h"
@@ -23,8 +21,6 @@ const uint8_t s2_menu_laps[S2M_LAPS] = { 1, 3, 5, 10 };
 static const char *track_name[S2M_TRACKS] = { "ENGLAND", "COLUMBIA", "EGYPT", "CALIFORNIA", "FINLAND", "SWITZERLAND", "THE TUNNEL" };
 static const char *team_name[S2M_TEAMS] = { "CONDOR", "ANGELS", "WASP", "ZEUS" };
 static const char *skill_name[S2M_SKILLS] = { "ROOKIE", "NORMAL", "PRO" };
-static const char *lab_arcade = "ARCADE", *lab_champ = "CHAMPIONSHIP", *lab_attack = "TIME ATTACK", *lab_laps = "NUMBER OF LAPS", *lab_skill = "ARCADE ENEMIES SKILL";
-static const char *title = "OPTIONS ROOM";
 
 #define LOCAL_MAX   0x2000u             /* LOCAL.DAT is 2.7 KB stored */
 #define TEXT_MAX    0xC00u              /* STRINGS.TXT is 2.6 KB */
@@ -78,16 +74,6 @@ int s2menu_init(struct zip *z)
         for (int k = 0; k < S2M_SKILLS; k++) skill_name[k] = line[i + k] + 1;
         found++;
     }
-    static const struct { const char **dst; const char *key; } lab[] = {
-        { &lab_arcade, "ARCADE" }, { &lab_champ, "CHAMPIONSHIP" }, { &lab_attack, "TIME ATTACK" }, { &lab_laps, "NUMBER OF LAPS" }, { &lab_skill, "ARCADE ENEMIES SKILL" }, { &title, "OPTIONS ROOM" },
-    };
-    for (unsigned k = 0; k < sizeof lab / sizeof lab[0]; k++) {
-        i = find_line(lines, lab[k].key);
-        if (i >= 0) {
-            *lab[k].dst = line[i];
-            found++;
-        }
-    }
     return found;
 }
 
@@ -133,226 +119,62 @@ void s2menu_grid(const struct s2_menu_cfg *c, struct s2_pick grid[4])
         if (t != c->team) grid[k++] = (struct s2_pick){ (uint8_t)t, (uint8_t)t };
 }
 
-/* ------------------------------------------------------------------------------------------------ the keys */
+/* ------------------------------------------------------------------------------------------------ the menu */
 
-static int ring(int v, int d, int first, int count)
+void s2menu_log(const struct s2_menu_cfg *c)
 {
-    return (v - first + d + count * 4) % count + first;
-}
-
-int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press)
-{
-    if (press & KEY_UP) *cursor = ring(*cursor, -1, 0, S2M_ROWS);
-    if (press & KEY_DOWN) *cursor = ring(*cursor, 1, 0, S2M_ROWS);
-    if (press & (KEY_L | KEY_R)) c->track = ring(c->track, (press & KEY_R) ? 3 : -3, 1, S2M_TRACKS);
-    int d = ((press & KEY_RIGHT) ? 1 : 0) - ((press & KEY_LEFT) ? 1 : 0);
-    if (d) switch (*cursor) {
-    case S2M_ROW_LAPS: c->laps = ring(c->laps, d, 0, S2M_LAPS); break;
-    case S2M_ROW_SKILL: c->skill = ring(c->skill, d, 0, S2M_SKILLS); break;
-    case S2M_ROW_RACE: c->track = ring(c->track, d, 1, S2M_TRACKS); break;
-    default: break;
-    }
-    if (press & KEY_X) return S2M_WATCH;
-    if ((press & KEY_SELECT) && s2menu_room) return S2M_ROOM;       /* (back to the options room) */
-    if (press & (KEY_A | KEY_B | KEY_START)) {              /* (the start menu has no page behind it: A takes the row as B does) */
-        if (*cursor == S2M_ROW_ARCADE) return S2M_ARCADE;
-        if (*cursor == S2M_ROW_CHAMP) return S2M_CHAMP;
-        if (*cursor == S2M_ROW_ATTACK) return S2M_ATTACK;
-        if (*cursor == S2M_ROW_SETTINGS) return S2M_SETTINGS;
-        if (*cursor == S2M_ROW_SCORES) return S2M_SCORES;
-        if (*cursor == S2M_ROW_TEAM) return S2M_TEAM;
-        return *cursor == S2M_ROW_WATCH ? S2M_WATCH : S2M_RACE;
-    }
-    return S2M_NONE;
-}
-
-/* ------------------------------------------------------------------------------------------------ the picture */
-
-/* the palette: black-blue, white, green, red, grey, the cursor's bar, yellow (the values), cyan */
-enum { BG, WHITE, GREEN, RED, GREY, BAR, YELLOW, CYAN, PAL_N };
-static const uint32_t pal[PAL_N] = { 0x101018, 0xFFFFFF, 0x40D070, 0xF04848, 0x909090, 0x2050B0, 0xF0D040, 0x50D8F0 };
-
-#define VALUE_COL   25                  /* the values start here, their arrows on either side */
-#define LAST_COL    38                  /* the bar covers columns 1 .. 38 */
-
-/* a row: the label from column 2, the value from VALUE_COL (adjustable: with arrows at the cursor) */
-static void row(volatile uint8_t *fb, int r, int sel, const char *label, uint8_t label_col, const char *value, int adjust)
-{
-    static const char blank[LAST_COL + 1] = "                                      ";
-    const uint8_t bg = sel ? BAR : BG;
-    con_text(fb, 1, r, blank, WHITE, bg);
-    con_text(fb, 2, r, label, sel ? WHITE : label_col, bg);
-    if (value) con_text(fb, VALUE_COL, r, value, YELLOW, bg);
-    if (sel && adjust) {
-        con_text(fb, VALUE_COL - 2, r, "<", CYAN, bg);
-        con_text(fb, LAST_COL, r, ">", CYAN, bg);
-    }
-}
-
-void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor)
-{
-    char v[64], o[128], *p;
-    for (int i = 0; i < PAL_N; i++) VID_PAL[i] = pal[i];
-    fb_fill(fb, 0, 0, FB_W, FB_H, BG);
-    fb_fill(fb, 0, 0, FB_W, 8, WHITE);
-    fmt_str(fmt_str(v, "SCREAMER 2 - "), title);
-    con_text(fb, 1, 0, v, BG, WHITE);
-
-    row(fb, 2, cursor == S2M_ROW_ARCADE, lab_arcade, WHITE, 0, 0);
-    con_text(fb, VALUE_COL - 13, 2, "track, car, gearbox, race", GREY, cursor == S2M_ROW_ARCADE ? BAR : BG);
-    row(fb, 3, cursor == S2M_ROW_CHAMP, lab_champ, WHITE, 0, 0);
-    con_text(fb, VALUE_COL - 13, 3, "four leagues of 4 to 6 races", GREY, cursor == S2M_ROW_CHAMP ? BAR : BG);
-    row(fb, 4, cursor == S2M_ROW_ATTACK, lab_attack, WHITE, 0, 0);
-    con_text(fb, VALUE_COL - 13, 4, "the ghost, free run", GREY, cursor == S2M_ROW_ATTACK ? BAR : BG);
-    fmt_udec(v, s2_menu_laps[c->laps]);
-    row(fb, 5, cursor == S2M_ROW_LAPS, lab_laps, GREY, v, 1);
-    row(fb, 6, cursor == S2M_ROW_SKILL, lab_skill, GREY, skill_name[c->skill], 1);
-
-    fmt_str(fmt_str(fmt_udec(v, (uint32_t)c->track), " "), track_name[c->track - 1]);
-    row(fb, 8, cursor == S2M_ROW_RACE, "START RACE", GREEN, v, 1);
-    row(fb, 9, cursor == S2M_ROW_WATCH, "WATCH", CYAN, 0, 0);
-    con_text(fb, 12, 9, "the ride round the track", GREY, cursor == S2M_ROW_WATCH ? BAR : BG);
-    row(fb, 10, cursor == S2M_ROW_SETTINGS, "GAME SETTINGS", CYAN, 0, 0);
-    row(fb, 11, cursor == S2M_ROW_SCORES, "HI SCORES", CYAN, 0, 0);
-    row(fb, 12, cursor == S2M_ROW_TEAM, "TEAM SELECTION", CYAN, 0, 0);
-    con_text(fb, VALUE_COL - 7, 12, "team and name", GREY, cursor == S2M_ROW_TEAM ? BAR : BG);
-
-    struct s2_pick g[4];
-    s2menu_grid(c, g);
-    p = fmt_udec(fmt_str(fmt_str(v, team_name[g[0].team - 1]), " "), g[0].car);
-    p = fmt_str(p, c->manual ? "  MANUAL" : "  AUTOMATIC");
-    con_text(fb, 2, 13, "YOU", GREY, BG);
-    con_text(fb, 12, 13, v, WHITE, BG);
-    p = o;
-    *p = 0;
-    for (int k = 1; k < 4; k++) {
-        if (k > 1) p = fmt_str(p, "  ");
-        p = fmt_udec(fmt_str(fmt_str(p, team_name[g[k].team - 1]), " "), g[k].car);
-    }
-    con_text(fb, 2, 14, "AGAINST", GREY, BG);
-    con_text(fb, 12, 14, o, WHITE, BG);
-
-    if (s2menu_room) con_text(fb, 2, 15, "Select: back to the options room", GREY, BG);
-    con_text(fb, 2, 16, "d-pad: up/down row, left/right value", GREY, BG);
-    con_text(fb, 2, 17, "B or Start: take the row   X: watch", GREY, BG);
-    con_text(fb, 2, 18, "L / R: track -3 / +3 from any row", GREY, BG);
-    con_text(fb, 2, 19, "in the race or the ride:", WHITE, BG);
-    static const char *const keys[4][2] = { { "Select+B", "back to this menu" }, { "Select+Start", "race again" },
-                                            { "Select+left/right", "other track" }, { "Start", "ride / drive" } };
-    for (int k = 0; k < 4; k++) {
-        con_text(fb, 3, 20 + k, keys[k][0], GREY, BG);
-        con_text(fb, 22, 20 + k, keys[k][1], GREY, BG);
-    }
-}
-
-void s2menu_log(const struct s2_menu_cfg *c, int go)
-{
-    char l[96], *p = fmt_udec(fmt_str(l, go == S2M_RACE ? "menu: race T" : "menu: watch T"), (uint32_t)c->track);
+    char l[96], *p = fmt_udec(fmt_str(l, "menu: race T"), (uint32_t)c->track);
     p = fmt_udec(fmt_str(fmt_str(p, " "), team_name[c->team - 1]), (uint32_t)c->car);
     p = fmt_str(fmt_udec(fmt_str(p, " "), s2_menu_laps[c->laps]), "L ");
     fmt_str(fmt_str(fmt_str(p, skill_name[c->skill]), c->manual ? " MAN" : " AUTO"), "\n");
     dlog_str(l);
 }
 
-#define REPEAT_FIRST    25              /* a held d-pad button repeats after 0.5 s, every 6th frame */
-#define REPEAT_EVERY    6
-
-int s2menu_row = S2M_ROW_ARCADE;                           /* (the row stays for the next visit) */
-
 int (*s2menu_room)(const struct s2_menu_cfg *c) = s2room_menu;
-static int developer;                                       /* the list is the menu now (X in the room, or the room could not be shown) until Select goes back */
 
-/* One visit of the options room: what it ends with as the list's results (S2M_NONE: nothing to do here, the room or the list comes next) */
-static int room_step(struct s2_menu_cfg *c)
+/* the original's arcade pages (s2arcade.h) from a station, or, with no room, instead of it: 1 if a race follows, 0 if ESC came back */
+static int arcade(struct s2_menu_cfg *c)
 {
-    switch (s2menu_room(c)) {
-    case S2ROOM_ARCADE: return S2M_ARCADE;
-    case S2ROOM_CHAMP: return S2M_CHAMP;
-    case S2ROOM_ATTACK: return S2M_ATTACK;
-    case S2ROOM_SETTINGS: return S2M_SETTINGS;
-    case S2ROOM_MULTI:
-        s2_page_multi();
-        return S2M_NONE;
-    case S2ROOM_BACK: {                                     /* ESC: TEAM SELECTION (the name after it), then the room again; YES to leaving the program: the list */
-        s2menu_store(c);
-        const int t = s2_page_team(c);
-        s2menu_load(c);
-        if (t == S2P3D_QUIT) developer = 1;
-        return S2M_NONE;
-    }
-    case S2ROOM_FAIL:
-        dlog_str("menu: the options room could not be shown, the list instead\n");
-        developer = 1;
-        return S2M_NONE;
-    default:                                                /* X */
-        developer = 1;
-        return S2M_NONE;
-    }
+    const int chain = s2arcade_run(c);
+    s2menu_store(c);
+    return chain != S2ARC_BACK;
 }
 
 int s2menu_run(struct s2_menu_cfg *c)
 {
-    int cursor = s2menu_row;
     static int started;
     if (!started) {                                         /* the first start with a new save: TEAM SELECTION and ENTER YOUR NAME, as the original's every start */
         started = 1;
         if (!s2save_get(S2S_PROFILE) && s2_page_team(c) == S2P3D_DONE) s2menu_store(c);
     }
-    uint32_t keys_before = in_keys(), held = 0;             /* (the button that left the files screen is still down) */
-    const uint32_t dirs = KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT;
-    for (;;) {
-        uint32_t st = 0;
-        int r, room = s2menu_room && !developer;
-        if (room) {                                         /* the options room is the menu: it ends with a choice, which the list's own actions below carry out */
-            r = room_step(c);
-            keys_before = in_keys();
-            held = 0;
-            if (r == S2M_NONE) continue;
-        } else {
-            st = wait_swap_done();
-            uint32_t keys = in_keys(), press = keys & ~keys_before;
-            held = (keys & dirs) && keys == keys_before ? held + 1 : 0;
-            if (held >= REPEAT_FIRST && (held - REPEAT_FIRST) % REPEAT_EVERY == 0) press |= keys & dirs;
-            keys_before = keys;
-            r = s2menu_key(c, &cursor, press);
-            if (r == S2M_ROOM) {                            /* Select: the options room again */
-                developer = 0;
-                continue;
-            }
-        }
-        if (r == S2M_ARCADE) {                              /* the original's arcade pages; without them the row starts the race */
-            int chain = s2arcade_run(c);
+    for (;;) {                                              /* the options room is the menu: it ends with a choice, ESC or a failure */
+        switch (s2menu_room(c)) {
+        case S2ROOM_ARCADE:
+            if (arcade(c)) return S2M_RACE;
+            break;
+        case S2ROOM_CHAMP:
             s2menu_store(c);
-            if (chain == S2ARC_BACK) {
-                keys_before = in_keys();
-                held = 0;
-                continue;
-            }
-            r = S2M_RACE;
-        }
-        if (r == S2M_TEAM) {                                /* the team and the name again: the choices go in and come back as the page left them */
+            return S2M_CHAMP;
+        case S2ROOM_ATTACK:
+            s2menu_store(c);
+            return S2M_ATTACK;
+        case S2ROOM_SETTINGS:                               /* a page of GAME SETTINGS (s2pages.h): the choices go in, and come back as it left them */
+            s2menu_store(c);
+            s2_page_settings();
+            s2menu_load(c);
+            break;
+        case S2ROOM_MULTI:
+            s2_page_multi();
+            break;
+        case S2ROOM_BACK:                                   /* ESC: TEAM SELECTION (the name after it), then the room again, also after YES to leaving the program (the core is left from the Pocket's menu) */
             s2menu_store(c);
             s2_page_team(c);
             s2menu_load(c);
-            keys_before = in_keys();
-            held = 0;
-            continue;
+            break;
+        default:                                            /* the room could not be shown: the arcade pages instead */
+            dlog_str("menu: the options room could not be shown, the arcade pages instead\n");
+            if (arcade(c)) return S2M_RACE;
+            break;
         }
-        if (r == S2M_SETTINGS || r == S2M_SCORES) {         /* a page of GAME SETTINGS / HI SCORES (s2pages.h): the choices go in, and come back as it left them */
-            s2menu_store(c);
-            if (r == S2M_SETTINGS) s2_page_settings();
-            else s2_page_hiscores();
-            s2menu_load(c);
-            keys_before = in_keys();
-            held = 0;
-            continue;
-        }
-        if (!room) s2menu_row = cursor;
-        if (r) {
-            s2menu_store(c);
-            return r;
-        }
-        s2menu_draw(FB(!(st & VID_FRONT)), c, cursor);
-        VID_SWAP = 1;
     }
 }

@@ -1,10 +1,10 @@
 /*
- * The options room on the PC (firmware/s2room.c, the MULTIPLAYER MENU of s2pages.c, the start menu's use of them in s2menu.c): included by ui_screen.c, which has the stand-ins of the
+ * The options room on the PC (firmware/s2room.c, the MULTIPLAYER MENU of s2pages.c, the menu's use of them in s2menu.c): included by ui_screen.c, which has the stand-ins of the
  * hardware (the swap, the scripted buttons, the sounds) and pages3d_screen.c's geometry unit model. What is tested here is the page with the real files: the team's room built from
- * MENU<t>1.DAT of the real ZIP (the stations read from P_<t>.MCM against the game's own file as tools/ui_room_ref.py reads it), the texts, and eleven scripted visits: every frame's station,
+ * MENU<t>1.DAT of the real ZIP (the stations read from P_<t>.MCM against the game's own file as tools/ui_room_ref.py reads it), the texts, and ten scripted visits: every frame's station,
  * camera place and angles equal to the model of tools/ui_room_ref.py (a second reading of the rules, in Python, checked against the running original's memory by
- * tools/s2/dosbox_arcade.py --options), the result, the frames the page took, the sounds; the MULTIPLAYER MENU's keys and message; and the start menu with the room in front of the list
- * (a stand-in room that answers what the test says): the choices, ESC to TEAM SELECTION, X and Select, a room that cannot be shown. The pictures were compared with the running
+ * tools/s2/dosbox_arcade.py --options), the result, the frames the page took, the sounds; the MULTIPLAYER MENU's keys and message; and the menu on the room
+ * (a stand-in room that answers what the test says): the choices, ESC to TEAM SELECTION, a room that cannot be shown. The pictures were compared with the running
  * original's screenshots (tools/room.sh): the 3D room agrees at the outline and not pixel for pixel, the texts and arrows and the MULTIPLAYER MENU and GAME SETTINGS pages do.
  */
 #include "../s2room.h"
@@ -52,15 +52,6 @@ static void room_goto(int k, const char *prefix)
     snprintf(item, sizeof item, "%d:A", at + 3);
     strcat(spec, item);
     room_visit(spec, prefix, &frames);
-}
-
-static int answers[8], answered, asked;
-
-static int room_stand_in(const struct s2_menu_cfg *cc)
-{
-    (void)cc;
-    asked++;
-    return answers[answered++];
 }
 
 static void check_room(const char *ref, const char *prefix)
@@ -155,7 +146,7 @@ static void check_room(const char *ref, const char *prefix)
         }
     }
     fclose(f);
-    CHECK(runs == 11 && stations_ok == 4, "eleven scripted visits of the room (%d), the stations of the four teams' rooms: %d of 4", runs, stations_ok);
+    CHECK(runs == 10 && stations_ok == 4, "ten scripted visits of the room (%d), the stations of the four teams' rooms: %d of 4", runs, stations_ok);
 
     /* the MULTIPLAYER MENU: DOWN to NETWORK GAME, ENTER: its message under the items (5 s: 250 frames), then gone; ESC leaves at once with a cut */
     char script[640];
@@ -185,36 +176,34 @@ static void check_room(const char *ref, const char *prefix)
     s2_page_multi();                                            /* the cursor starts on COMBAT MODE: ENTER answers NOT AVAILABLE, ESC leaves */
     CHECK(calls == 6, "MULTIPLAYER MENU: ENTER on COMBAT MODE and ESC (%u frames)", calls);
 
-    /* the start menu with the room in front of the list: a stand-in room answers what the test says */
+    /* the menu on the room: a stand-in room answers what the test says */
     int (*saved)(const struct s2_menu_cfg *) = s2menu_room;
     struct s2_menu_cfg c = { .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1 };
     s2menu_room = room_stand_in;
-    s2menu_row = S2M_ROW_ARCADE;
     s2menu_load(&c);
-    /* the MULTIPLAYER station runs its page (ESC), and the room comes again; X opens the list (Select goes back to the room); CHAMPIONSHIP ends the menu with it */
+    /* the MULTIPLAYER station runs its page (ESC), and the room comes again; CHAMPIONSHIP ends the menu with it */
     answers[0] = S2ROOM_MULTI;
-    answers[1] = S2ROOM_DEV;
-    answers[2] = S2ROOM_CHAMP;
+    answers[1] = S2ROOM_CHAMP;
     answered = asked = 0;
-    put_keys(script, sizeof script, "2:A 10:s");
+    put_keys(script, sizeof script, "2:A");
     begin_run(script, prefix);
     front = 0;
     int r = s2menu_run(&c);
-    CHECK(r == S2M_CHAMP && asked == 3, "start menu with the room: the MULTIPLAYER page, X to the list, Select back, CHAMPIONSHIP: result %d after %d visits", r, asked);
+    CHECK(r == S2M_CHAMP && asked == 2, "menu on the room: the MULTIPLAYER page, CHAMPIONSHIP: result %d after %d visits", r, asked);
     answers[0] = S2ROOM_ATTACK;
     answered = asked = 0;
     r = s2menu_run(&c);
-    CHECK(r == S2M_ATTACK && asked == 1, "start menu with the room: TIME ATTACK (%d)", r);
-    /* GAME SETTINGS runs the page (ESC), ESC in the room is TEAM SELECTION (ESC asks EXIT, ENTER on YES leaves: the list, as where the original leaves the program), Select to the room */
+    CHECK(r == S2M_ATTACK && asked == 1, "menu on the room: TIME ATTACK (%d)", r);
+    /* GAME SETTINGS runs the page (ESC), ESC in the room is TEAM SELECTION (ESC asks EXIT, ENTER on YES leaves it: the room again, as the core is left from the Pocket's menu) */
     answers[0] = S2ROOM_SETTINGS;
     answers[1] = S2ROOM_BACK;
     answers[2] = S2ROOM_ATTACK;
     answered = asked = 0;
-    put_keys(script, sizeof script, "3:A 20:A 25:B 80:s");
+    put_keys(script, sizeof script, "3:A 20:A 25:B");
     begin_run(script, prefix);
     front = 0;
     r = s2menu_run(&c);
-    CHECK(r == S2M_ATTACK && asked == 3, "start menu with the room: GAME SETTINGS and back, ESC to TEAM SELECTION and YES, Select to the room, TIME ATTACK: result %d after %d visits", r, asked);
+    CHECK(r == S2M_ATTACK && asked == 3, "menu on the room: GAME SETTINGS and back, ESC to TEAM SELECTION and YES, TIME ATTACK: result %d after %d visits", r, asked);
     /* the name comes after the team: ESC in the room, ENTER, ENTER (the name is kept), the room again */
     answers[0] = S2ROOM_BACK;
     answers[1] = S2ROOM_CHAMP;
@@ -223,19 +212,19 @@ static void check_room(const char *ref, const char *prefix)
     begin_run(script, prefix);
     front = 0;
     r = s2menu_run(&c);
-    CHECK(r == S2M_CHAMP && asked == 2 && s2save_get(S2S_PROFILE) == 1, "start menu with the room: ESC to TEAM SELECTION, the name, the room again (%d after %d visits)", r, asked);
-    /* a room that cannot be shown leaves the list as the menu (a race on START RACE: D x 5, B) */
+    CHECK(r == S2M_CHAMP && asked == 2 && s2save_get(S2S_PROFILE) == 1, "menu on the room: ESC to TEAM SELECTION, the name, the room again (%d after %d visits)", r, asked);
+    /* a room that cannot be shown leaves the arcade pages instead (ESC on the title is back), and the room is asked again */
     answers[0] = S2ROOM_FAIL;
+    answers[1] = S2ROOM_CHAMP;
     answered = asked = 0;
-    s2menu_row = S2M_ROW_ARCADE;
-    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:B");
+    put_keys(script, sizeof script, "3:A");
     begin_run(script, prefix);
     front = 0;
     r = s2menu_run(&c);
-    CHECK(r == S2M_RACE && asked == 1, "start menu: the room could not be shown, the list: START RACE (%d, %d visits)", r, asked);
+    CHECK(r == S2M_CHAMP && asked == 2, "menu: the room could not be shown, the arcade pages (ESC), the room again (%d, %d visits)", r, asked);
     s2menu_room = saved;
     s2room_forget();
     s2save_reset();
-    printf("ui: options room: the four rooms built from the ZIP, the stations, %d visits' %d frames of the camera equal to the model, the MULTIPLAYER MENU, the start menu in front of the list\n", runs,
+    printf("ui: options room: the four rooms built from the ZIP, the stations, %d visits' %d frames of the camera equal to the model, the MULTIPLAYER MENU, the menu on the room\n", runs,
            frames_checked);
 }

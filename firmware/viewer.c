@@ -1080,9 +1080,9 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
                 continue;
             }
             n = cfg.track;
-            drive = go == S2M_RACE;
+            drive = 1;
             apply_cfg();
-            s2menu_log(&cfg, go);
+            s2menu_log(&cfg);
         }
         for (;;) {                                      /* the track, its visits, until the player asks for the menu */
             const char *what = "";

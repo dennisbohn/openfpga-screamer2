@@ -48,7 +48,7 @@ libraries merged after the track's (the face's material is a signed 16-bit offse
 cars' material records are collected in a section in front of the MLB and the cars' faces point there; the
 texture records and pixels stay in the cars' own `.MLB` files, appended after the track's), and the picture of
 the cars' windows (below). The cars are the four of the grid, each its own team's ("Teams" below). The image is 3.5 to 5.4 MB of the 7 MB window at `0x1210_0000`. There is no camera path, no markers file (Screamer 2 counts the laps on
-the line of `MAPnOPP.SPL`, which the firmware reads from `DATA/MAPn.DAT` itself, `firmware/race.c`) and none of the original's menus (a plain start menu, "Start menu" below). Nothing is converted on the PC.
+the line of `MAPnOPP.SPL`, which the firmware reads from `DATA/MAPn.DAT` itself, `firmware/race.c`) and none of the original's menus (the options room as the menu, "The menu" below). Nothing is converted on the PC.
 
 `tools/s2/make_track_s2.py <game folder> <n> <out.bin>` builds the same image on the PC. It only serves
 as the reference for `tools/s2/check_track_build_s2.sh [game folder]`, which compiles the firmware's
@@ -69,41 +69,21 @@ PC (`build/check/screens/*.png`).
 
 ## Viewer (milestone 2)
 
-After the files screen (A, B or START, or 5 s once the read test passed) the core shows the start menu
-(next section); WATCH there loads the chosen track and shows it from the game's near chase camera over a car that drives
-the road at 150 km/h in a loop, with the player's car and three more ahead (`firmware/viewer.c`, `firmware/road.c`). Frames go through the
+After the files screen (A, B or START, or 5 s once the read test passed) the core shows the menu
+(next section). The viewer's ride, which the simulation (`SIM_*`) runs for timing, loads a track and shows it from the game's near chase camera over a car that drives
+the road at 150 km/h in a loop, with the player's car and three more ahead (`firmware/viewer.c`, `firmware/road.c`); the menu has no way to it. Frames go through the
 hardware path (geometry unit, setup unit, rasterizer, blitter) with the original's level of detail at
 DETAIL HIGH (`track_lod_level()`: placed meshes switch at 6,000 and 9,000 units, cars at 2,000 and 6,000;
 far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). The ride is silent (the race has sound and music,
-"Sound" below). Start starts the driving mode ("Driving mode" below); the way back to the ride is the start menu's WATCH.
+"Sound" below). Start starts the driving mode ("Driving mode" below).
 
-### Start menu
+### The menu
 
-The menu is the original's options room ("The options room" below); this list in the console's text style (`firmware/s2menu.c`, 40 x 25 characters) is the developer's menu behind it: X in the
-room opens it, Select in it goes back to the room, and a YES to EXIT SCREAMER 2? on TEAM SELECTION (where the original leaves the program) or a room that could not be built lands in it (the original's own menu
-screens are in docs/screamer2/menus.md). Everything is open from the start (the build default `S2SAVE_UNLOCK_ALL`): all seven tracks, all four teams and their five cars, all four leagues of the championship.
-
-| Row | |
-|---|---|
-| ARCADE | the original's arcade pages (below), then the race |
-| CHAMPIONSHIP | the four leagues: LEAGUE SELECTION, WELCOME, the races with the LEAGUE REPORT after each ("The championship" below) |
-| TIME ATTACK | TRACK SELECTION with the turning map, the CAR page with 3 LAPS / FREE RUN, a race against the ghost of the track's best run or the free run ("Time attack" below) |
-| NUMBER OF LAPS | 1, 3, 5, 10 (the original's options; `race_laps`; a GAME SETTINGS row) |
-| ARCADE ENEMIES SKILL | ROOKIE, NORMAL, PRO (the original's levels; `race_level = 2 - skill`, the row of `SKILLS` the computers' pace is read from; a GAME SETTINGS row) |
-| START RACE | the race at once with the choices as they are; left / right change the track (1 ENGLAND, 2 COLUMBIA, 3 EGYPT, 4 CALIFORNIA, 5 FINLAND, 6 SWITZERLAND, 7 THE TUNNEL: the files' numbers, names read from `STRINGS.TXT` in `DATA/LOCAL.DAT` of the ZIP, the built-in text is the same) |
-| WATCH | the viewer's ride (for timing) |
-| GAME SETTINGS, HI SCORES | the original's two pages (`firmware/s2pages.c`, "End of the race and the two pages" below); B or Start (A) opens one, A or Select leaves it |
-
-| Button (menu) | |
-|---|---|
-| d-pad up / down | row (wraps) |
-| d-pad left / right | the row's value (wraps); on START RACE the track; a docked controller's stick works as the d-pad |
-| L / R | the track three back / on, from any row: every track is at most two moves from every other, so with B or Start at most three presses (track 4 from track 1: R, then B or Start on START RACE) |
-| A, B or Start | the row's action: the arcade pages on ARCADE, WATCH on its row, the GAME SETTINGS and HI SCORES pages on theirs, the race on the others; X: WATCH |
+The menu is the original's options room ("The options room" below, `firmware/s2room.c`, `firmware/s2menu.c`): the team's room with five stations, ARCADE, CHAMPIONSHIP, TIME ATTACK, MULTIPLAYER and GAME SETTINGS (laps, level, gearbox, ... with VIEW HIGH SCORES), and ESC for TEAM SELECTION and ENTER YOUR NAME (docs/screamer2/menus.md has the original's screens). Everything is open from the start (the build default `S2SAVE_UNLOCK_ALL`): all seven tracks, all four teams and their five cars, all four leagues of the championship. If the room cannot be built (the log says so) the arcade pages stand in for it. The list that was the menu before the room (START RACE on any track at once, the ride, laps and level rows) is gone.
 
 **The arcade pages** (`firmware/s2arcade.c`, details in docs/screamer2/menus.md section 6): title (ARCADE_L, ACCELERATE TO CONTINUE blinking) -> TRACK (the tracks' pictures with their banners,
 the lit frame) -> CAR (a 2D stand-in for the 3D page: team, car and its name plate) -> TRANSMISSION (AUTOMATIC / MANUAL) -> the race. B or Start go on (the picture fades out over half a
-second, with the page's click), A or Select go back (a cut): the TRACK page's A leaves to the start menu, the CAR page's to TRACK, the TRANSMISSION page's to CAR.
+second, with the page's click), A or Select go back (a cut): the TRACK page's A leaves to the options room, the CAR page's to TRACK, the TRANSMISSION page's to CAR.
 
 | Button (arcade pages) | |
 |---|---|
@@ -116,11 +96,9 @@ second, with the page's click), A or Select go back (a cut): the TRACK page's A 
 The choices are kept: in the session, and across power-ups in the nonvolatile `CHOICE.DAT` (data slot 23), Screamer 2's save in a layout of its
 own (`firmware/s2save.c`, docs/screamer2/menus.md section 7.1; `s2menu_store()` sets the track, team and car, and the laps, level and gearbox settings, also after the arcade pages
 are left with A), which the
-Pocket writes back when the core exits (the first start with the new firmware reads the old 1,120-byte file once and turns it into the 19,348-byte one). After the files screen the menu shows the last choices, so the usual start is two presses (A on the
-files screen, then B or Start with the cursor on START RACE; the cursor starts on ARCADE and stays where it was left in a session). The grid is applied when the track image is built (`load_track()`), so every start from the menu loads the track again
+Pocket writes back when the core exits (the first start with the new firmware reads the old 1,120-byte file once and turns it into the 19,348-byte one). After the files screen the arcade pages show the last choices, so a race with the same choices is ARCADE and B on each of its four pages. The grid is applied when the track image is built (`load_track()`), so every start from the menu loads the track again
 (3 to 5 s; the cars that did not change are not read again). The log gets one line per start: `menu: race T4 CONDOR 1 3L NORMAL AUTO`.
-`tools/menu_screens.sh` runs the menu's code on the PC: tests of the keys, the grid, the kept choices and the texts read from the real ZIP,
-and pictures of the list in `build/check/menu/`; the arcade pages are compared with a model (below, Tools).
+`tools/menu_screens.sh` runs the menu's code on the PC: tests of the grid, the kept choices and the texts read from the real ZIP, and of the menu's run on a stand-in room (the real room's tests are in "The options room" below); the arcade pages are compared with a model (below, Tools).
 
 Back to the menu: EXIT in the race's pause menu (Start, "Loading screen and pause menu" below), Select + B in the ride (the music stops), and EXIT on the end screen
 of a finished race ("End of the race and the two pages" below). The simulation (`SIM_*`) has no menu: it takes the track from the testbench as before.
@@ -137,7 +115,7 @@ of a finished race ("End of the race and the two pages" below). The simulation (
 
 Menus row 5 (docs/screamer2/menus.md section 6): three pages with a few 3D objects over a 320 x 200 picture, through the geometry unit with the page's own material file (`GU_MLB`): `firmware/s2scene.c` is the toolkit (a container's entries read from the ZIP into `0x1180_0000`,
 the unit set up after the picture is blitted, blocks handed on by `track_block_piece()`), `s2pages3d.c` the team and name page (one page in two states, as the original), `s2showroom.c` the CAR page's carousel, drawn by `s2arcade.c` (one page for the CAR and TRANSMISSION states). A save
-without a profile (`S2S_PROFILE`) shows the team and name pages once before the start menu; the start menu's last row, TEAM SELECTION, shows them again. The pages' sounds, keys and clocks are the original's (read from `STARTL.EXE`); the log has the load times (`pages3d: LOGO1.DAT in N ms`,
+without a profile (`S2S_PROFILE`) shows the team and name pages once before the menu; ESC in the options room shows them again. The pages' sounds, keys and clocks are the original's (read from `STARTL.EXE`); the log has the load times (`pages3d: LOGO1.DAT in N ms`,
 `showroom: 5 cars of team 1 in N ms`).
 
 Tests: `tools/menu_screens.sh` (scripted buttons through the pages on the PC with the geometry unit's C model, `tools/host/pages3d_screen.c`: results, sounds, the save, the first-start flow; the pictures against an independent reference with a piece builder of its own, in double precision) and
@@ -146,7 +124,7 @@ objects' angles are searched) and counts the pixels that differ (`tools/host/pag
 
 ### The championship
 
-Menus row 6 (docs/screamer2/menus.md section 6): CHAMPIONSHIP on the start menu (second row; B, Start or A) runs LEAGUE SELECTION (`firmware/s2leaguepages.c`) -> WELCOME TO LEAGUE n -> the league's first race -> LEAGUE REPORT -> the next
+Menus row 6 (docs/screamer2/menus.md section 6): CHAMPIONSHIP in the options room (the second station) runs LEAGUE SELECTION (`firmware/s2leaguepages.c`) -> WELCOME TO LEAGUE n -> the league's first race -> LEAGUE REPORT -> the next
 race ... The rules are `firmware/s2league.c` (read from `STARTL.EXE`: leagues of 4, 5, 6 and 6 races on England, Egypt, California, Finland, Switzerland, Columbia in turn; the computers ROOKIE, NORMAL, PRO, NORMAL and in league 4 all on their teams' fifth cars; 10 / 6 / 3 / 0 points by place;
 the league is won by being first on points after the last race, which opens the next league, one more track (league 4: the seventh when all four teams' fifth cars are won) and in league 4 the team's fifth car), the flow is the viewer's (`league_run()`). The team, car and gearbox are the start menu's,
 the laps GAME SETTINGS' NUMBER OF LAPS. The race is the arcade's: a league race has the pause menu without RESTART (EXIT counts the player last), no Select + Start and no track switching, and ends on the end screen's CONTINUE (B or Start), which lists the cars that have done their laps with their times and points.
@@ -155,7 +133,7 @@ the laps GAME SETTINGS' NUMBER OF LAPS. The race is the arcade's: a league race 
 |---|---|
 | d-pad left / right | LEAGUE SELECTION: the league (two of four in view); the question LEAVING LEAGUE?: YES / NO |
 | B or Start | LEAGUE SELECTION: take an open league (a league that is NOT AVAILABLE does nothing); WELCOME and the REPORT: on; the end screen: CONTINUE |
-| A or Select | LEAGUE SELECTION: back to the start menu; WELCOME: back to the selection; the TRACK page and the REPORT between two races: ask LEAVING LEAGUE? ARE YOU SURE ? (the TRACK page before the first race goes back to the selection), YES leaves the league for LEAGUE SELECTION |
+| A or Select | LEAGUE SELECTION: back to the options room; WELCOME: back to the selection; the TRACK page and the REPORT between two races: ask LEAVING LEAGUE? ARE YOU SURE ? (the TRACK page before the first race goes back to the selection), YES leaves the league for LEAGUE SELECTION |
 
 The original's TRACK page (the turning 3D map, row 7, `firmware/s2trackpage.c`) comes between WELCOME / the report and each race. Left out: the CAR page with set-ups between the TRACK page and each race (row 12), WELCOME's flying 3D plates, the weather. The leagues open, the tracks opened and the fifth cars are the save's (`S2S_LEAGUE_OPEN`, `S2S_TRACKS_OPEN`, `s2save_car5_open`; no new field);
 the build opens everything by default (`S2SAVE_UNLOCK_ALL` 1), so NOT AVAILABLE shows with `tools/fw.sh EXTRA_CFLAGS=-DS2SAVE_UNLOCK_ALL=0 TAG=x`. The player's total and best lap of a league race go into the championship's best-times lists (HI SCORES, CHAMPIONSHIP; the LOADING screen shows them). The log has
@@ -165,7 +143,7 @@ Tests: `tools/s2/check_league_s2.sh` (the rules on the PC with the real `s2save.
 
 ### Time attack
 
-Menus row 7 (docs/screamer2/menus.md section 6, which has the numbers): TIME ATTACK on the start menu (third row; B, Start or A) runs TRACK SELECTION (`firmware/s2trackpage.c`: the track's map turns in front of `LEAG_0L.BKK`, LEFT / RIGHT choose among the open tracks, the map of `MAPS1.DAT` read by `s2trackmap.c`
+Menus row 7 (docs/screamer2/menus.md section 6, which has the numbers): TIME ATTACK in the options room (the third station) runs TRACK SELECTION (`firmware/s2trackpage.c`: the track's map turns in front of `LEAG_0L.BKK`, LEFT / RIGHT choose among the open tracks, the map of `MAPS1.DAT` read by `s2trackmap.c`
 and cut into pieces of at most 512 vertices for the geometry unit) -> the CAR page (`S2ARC_ATTACK` in `s2arcade.c`: the carousel, then 3 LAPS or FREE RUN) -> LOADING with time attack's best times -> the race -> the end screen (RACE AGAIN / EXIT) -> the start menu. The same TRACK page, with the league's pictures (`TKG_nL.BKK`), comes before each championship race.
 In the race (`race.c`, `race_kind`): **time attack** is the player and, when GAME SETTINGS' TIME ATTACK GHOST CAR is ON and the track has a kept run, the **ghost** as a second car on the grid's first row (no computers, no places, no collisions); **FREE RUN** is the player alone on a lap that never ends with the original's five splits (A to E, at the fifths of the lap) in two columns and the 4 s difference at the top.
 The ghost is **re-simulated from the controls**, which the physics' fixed 20 ms step allows: one byte of the player's controls a step, a block of 51,440 bytes a track in `ATTACK.DAT` (data slot 24, 360,096 bytes: seven blocks, `core/data.json` unchanged) with a CRC-32, the physics' version and the DAMAGES setting in its head; the run is kept when the laps are done and RACE AGAIN or EXIT is chosen, if the track has none or it is quicker.
@@ -175,7 +153,7 @@ The best times are `CHOICE.DAT`'s kind 2 lists (the save is unchanged). The free
 |---|---|
 | d-pad left / right | TRACK SELECTION: the track before / after (13 frames for the map to fly in; a press during it is not taken); CAR: the car, then 3 LAPS / FREE RUN |
 | B or Start | TRACK SELECTION: on (fade out 13 frames); CAR: to the choice, then the race; the end screen: RACE AGAIN / EXIT |
-| A or Select | back one page (TRACK SELECTION: to the start menu); in the race the pause menu (RESUME, RESTART, EXIT) as in the arcade |
+| A or Select | back one page (TRACK SELECTION: to the options room); in the race the pause menu (RESUME, RESTART, EXIT) as in the arcade |
 
 Left out (stand-ins listed in menus.md): weather, multiplayer, CUSTOMIZE and the set-ups (the original's CAR page has a Standard / Custom list before 3 LAPS / FREE RUN), the attract sequence, the options room. (The original's time attack has no REPLAY either: its end screen has two choices.)
 
@@ -213,7 +191,7 @@ The log has `end: T4 place 1 ...` as before (the replay's end screen puts nothin
 Menus row 8 (docs/screamer2/menus.md section 6, which has the numbers): after TEAM SELECTION and ENTER YOUR NAME the team's room, `GFX/MENU<t>1.DAT`, is shown as the original shows it: built like a track by `track_build_s2()` (no cars, no road,
 no walls: `firmware/track_build.c`, 3.0 to 3.6 MB in the track window, 0.8 to 0.9 MB of container read first; about two seconds the first time, estimated, the log has `room: T1 3120640 bytes in N ms`), drawn by the track's engine from the five stations of its `P_<t>.MCM`
 (`firmware/s2room.c`). LEFT / RIGHT glide the camera to the next station (about 1.4 s, the original's easing frame by frame), the name of the choice and arrows show at the bottom, B or Start take it (the picture fades out over half a second while the camera drifts
-towards the point it looks at), A or Select go back to TEAM SELECTION, X opens the developer's list. The stations: ARCADE (the arcade pages), CHAMPIONSHIP (LEAGUE SELECTION), TIME ATTACK (TRACK SELECTION with the turning map), MULTIPLAYER (the MULTIPLAYER MENU as the original shows it without a network or a serial link:
+towards the point it looks at), A or Select go back to TEAM SELECTION. The stations: ARCADE (the arcade pages), CHAMPIONSHIP (LEAGUE SELECTION), TIME ATTACK (TRACK SELECTION with the turning map), MULTIPLAYER (the MULTIPLAYER MENU as the original shows it without a network or a serial link:
 `firmware/s2pages.c`, `s2_page_multi()`; COMBAT MODE answers NOT AVAILABLE, the original's page for it is not built), GAME SETTINGS (the page of row 3, with VIEW HIGH SCORES). Each page's own ESC comes back to the room, at the station it left.
 
 | Button (options room) | |
@@ -221,10 +199,9 @@ towards the point it looks at), A or Select go back to TEAM SELECTION, X opens t
 | d-pad left / right | the station before / after (a fresh press: holding the button moves one station) |
 | B or Start | take the choice (fade out, then its page) |
 | A or Select | back to TEAM SELECTION (a cut; ESC there asks EXIT SCREAMER 2?) |
-| X | the developer's list (the old start menu: the race on any track at once, the ride; Select in it goes back) |
 
-Tests: `tools/menu_screens.sh` (`tools/host/room_screen.c`: the four rooms built from the real ZIP, the stations against `tools/ui_room_ref.py`'s reading of the game's own `P_<t>.MCM`, eleven scripted visits with every frame's station, place and angles equal to that model's, the
-results, frames and sounds, the MULTIPLAYER MENU's keys and message, the start menu with the room in front of the list), `tools/s2/check_track_build_s2.sh` (the four rooms' images byte for byte against `make_track_s2.py`'s with `S2ROOM=1`) and, against the running original
+Tests: `tools/menu_screens.sh` (`tools/host/room_screen.c`: the four rooms built from the real ZIP, the stations against `tools/ui_room_ref.py`'s reading of the game's own `P_<t>.MCM`, ten scripted visits with every frame's station, place and angles equal to that model's, the
+results, frames and sounds, the MULTIPLAYER MENU's keys and message, the menu on the room), `tools/s2/check_track_build_s2.sh` (the four rooms' images byte for byte against `make_track_s2.py`'s with `S2ROOM=1`) and, against the running original
 (Windows, DOSBox in front for about 2 minutes a run), `python -I tools/s2/dosbox_arcade.py --options` / `--options pages` / `--options team2` .. `team4`, then `tools/room.sh`: the camera of the game's memory at each screenshot, the firmware's page drawn from it and compared pixel for pixel; the camera model against
 the polls of the game's memory: `python -I tools/ui_room_ref.py <game folder> --polls build/check/dosbox_room`.
 
@@ -268,7 +245,7 @@ about 60 ms there), and once at the start `ui: 111 sprites, 6 fonts ... ms` (the
 The Pocket's log of 2026-11-04 (the build before this one) has the time the picture covers: track 4 `T4 load 4487 ms` (read 2,413 KB 2,117 ms, build 1,742 ms, road 424 ms)
 and `race init 160 ms`, 4.65 s in all. **Pause:** Start in the race stops it over the darkened picture; the race loop is not
 run, so the clock, the cars and the frame statistics stand still (the first frame after it takes one 20 ms step); the effects (engines, tyres) ease out over a
-second and come back whole, the music plays on. RESTART is the race again from the grid (the track stays loaded), EXIT the start menu. The pause adds nothing to a
+second and come back whole, the music plays on. RESTART is the race again from the grid (the track stays loaded), EXIT the menu. The pause adds nothing to a
 frame of the race but the test of one button bit: the race in the simulation (220 frames from the grid, track 4 and track 1, the code shifted by the new objects) took 10.7 ms
 mean and 11.5 worst, and 10.2 and 11.1, against 10.8 / 11.5 and 10.3 / 11.1 of the build before. Opening the menu takes 74 ms in the simulation (`pause: still and
 palette N ms` in the log, once: the darkening table and the copy of the screen, then the screen stands); a frame of the menu itself is one blitter list (the still and
@@ -282,7 +259,7 @@ seconds of CONGRATULATIONS ! (first place only), `1ST POSITION` and his total ti
 right choose, B or Start take; the race from the grid again, or the start menu) and the track's 15 best times for the race's length, the player's new row lit and scrolled into view. At that moment his total time
 and best lap go into the save's lists (name from the save, team and car of the grid, arcade), and the LOADING screen of the next race shows the track's best total time and best lap from them. Nothing is
 drawn or run for it before the finish; the draw is after the rasterizer, like the old FINISH text it replaces (which stays for a core without the toolkit). **GAME SETTINGS** and **HI SCORES** (`firmware/s2pages.c`):
-the start menu's last two rows open them. GAME SETTINGS: up / down choose a row, B or Start (or left / right) step its value, A or Select leave; the eight settings are kept in the save and TRANSMISSION, NUMBER OF LAPS,
+GAME SETTINGS is a station of the options room and HI SCORES is reached from it (VIEW HIGH SCORES). GAME SETTINGS: up / down choose a row, B or Start (or left / right) step its value, A or Select leave; the eight settings are kept in the save and TRANSMISSION, NUMBER OF LAPS,
 ARCADE ENEMIES SKILL, DAMAGES (off by default as in the game: no damage marks or damage from a knock until it is on) and MUSIC act in the race, DETAIL LEVEL, MULTIPLAYER ENEMIES and TIME ATTACK GHOST CAR only keep their value.
 HI SCORES TABLE: up / down choose a row of the list of 15, left / right the box above (TOTAL TIME / LAP TIME, the kind of game, the laps, the track, VIEW REPLAY), B or Start step the value in that box, A or
 Select leave; VIEW REPLAY stays dark (no replays yet). Both are tested on the PC against references made from the game's files (`tools/menu_screens.sh`).

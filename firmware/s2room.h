@@ -7,7 +7,6 @@
  *   LEFT / RIGHT   the next station (a fresh press, no repeat: the original's own); the camera glides there (about 1.3 s), the choice's name changes at once
  *   ENTER          (B or Start) the choice is taken: the picture fades out over 25 frames, the camera drifting towards the point it looks at
  *   ESC            (A or Select) back to TEAM SELECTION, at once
- *   X              (not the original's) the developer's list, the stand-in start menu (s2menu.h): the race on any track, the ride
  *
  * The page's frame (every number read from the code; the camera's easing was checked against the running original frame by frame, docs/screamer2/menus.md):
  * the picture is the backdrop (MAP<t>.BCK, as the race draws it but with the eye line at row 100) and the room's placements seen from the camera, the band
@@ -20,8 +19,8 @@
 #include "zip.h"
 #include "s2menu.h"
 
-/* what the page ends with: the station's choice (the fade out is done), ESC, or X */
-enum { S2ROOM_FAIL = 0, S2ROOM_ARCADE, S2ROOM_CHAMP, S2ROOM_ATTACK, S2ROOM_MULTI, S2ROOM_SETTINGS, S2ROOM_BACK = -1, S2ROOM_DEV = -2 };
+/* what the page ends with: the station's choice (the fade out is done), or ESC */
+enum { S2ROOM_FAIL = 0, S2ROOM_ARCADE, S2ROOM_CHAMP, S2ROOM_ATTACK, S2ROOM_MULTI, S2ROOM_SETTINGS, S2ROOM_BACK = -1 };
 #define S2ROOM_STATIONS 5
 
 /* The SDRAM the room is built in (viewer.c's track window and the memory the track's containers are read to): the container GFX/MENU<t>1.DAT (0.8 to 0.9 MB),
@@ -44,7 +43,7 @@ void s2room_forget(void);
 /* The menu's room: s2menu_room (s2menu.h) when the options room is the menu. The memory is the viewer's track window (trackmem.h), whose record of what its image holds it clears. */
 int s2room_menu(const struct s2_menu_cfg *c);
 
-/* The page until a choice is taken, ESC or X: S2ROOM_*; S2ROOM_FAIL if the room could not be built or the toolkit (s2gfx_init()) is not up (nothing is shown).
+/* The page until a choice is taken or ESC: S2ROOM_*; S2ROOM_FAIL if the room could not be built or the toolkit (s2gfx_init()) is not up (nothing is shown).
    The station the player was at stays for the next visit, as the original keeps it (0x132378: zero when the menu starts). */
 int s2room_run(struct zip *z, const struct s2room_mem *m, int team);
 

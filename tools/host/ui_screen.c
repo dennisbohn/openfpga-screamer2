@@ -16,6 +16,7 @@
 #include "../s2save.h"
 #include "../s2snd.h"
 #include "../s2pages.h"
+#include "../s2room.h"
 #include "../s2end.h"
 #include "../s2save.h"
 #include "../s2menu.h"
@@ -960,39 +961,54 @@ static void check_end(const char *ref, const char *prefix)
     printf("ui: end of the race: seven runs of frames (D is time attack's, E to G have REPLAY in thirds and the replay's own screen) equal to the reference, ENTER, the best times and the loading screen's records checked\n");
 }
 
-/* the start menu's two rows open the pages and take the settings back */
+/* the menu's room is a stand-in in these tests (room_screen.c tests the room itself): it answers what the test says, one answer a visit */
+static int answers[8], answered, asked;
+
+static int room_stand_in(const struct s2_menu_cfg *cc)
+{
+    (void)cc;
+    asked++;
+    return answers[answered++];
+}
+
+/* the menu on the room: the first start's pages, the pages of the stations take the choices in and bring them back */
 static void check_menu_hook(const char *prefix)
 {
     char script[400];
     struct s2_menu_cfg c;
-    /* a new save shows TEAM SELECTION and ENTER YOUR NAME before the menu, once (ENTER, ENTER); then D D D to START RACE and A */
+    /* a new save shows TEAM SELECTION and ENTER YOUR NAME before the menu, once (ENTER, ENTER); then the room's CHAMPIONSHIP ends the menu */
     s2save_reset();
     s2menu_load(&c);
     CHECK(s2save_get(S2S_PROFILE) == 0, "a new save has no profile");
-    put_keys(script, sizeof script, "5:B 40:B 80:D 82:D 84:D 86:D 90:A");
+    answers[0] = S2ROOM_CHAMP;
+    answered = asked = 0;
+    put_keys(script, sizeof script, "5:B 40:B");
     begin_run(script, prefix);
     int r0 = s2menu_run(&c);
-    CHECK(r0 == S2M_RACE && s2save_get(S2S_PROFILE) == 1 && c.team == 1 && !strcmp(s2save_name(), "MIL"), "first start: the menu ended with %d, profile %d", r0, s2save_get(S2S_PROFILE));
-    /* the TEAM SELECTION row (U from ARCADE wraps to it): B runs the page, A (ESC) and B (YES) leave it with nothing changed, back in the menu: U x 4 to START RACE, A */
-    put_keys(script, sizeof script, "3:U 6:B 20:A 30:B 80:U 82:U 84:U 86:U 90:A");
+    CHECK(r0 == S2M_CHAMP && s2save_get(S2S_PROFILE) == 1 && c.team == 1 && !strcmp(s2save_name(), "MIL") && asked == 1, "first start: the menu ended with %d, profile %d", r0, s2save_get(S2S_PROFILE));
+    /* ESC in the room is TEAM SELECTION: ESC asks EXIT SCREAMER 2?, YES (ENTER) leaves it with nothing changed, the room comes again (CHAMPIONSHIP) */
+    answers[0] = S2ROOM_BACK;
+    answers[1] = S2ROOM_CHAMP;
+    answered = asked = 0;
+    put_keys(script, sizeof script, "20:A 30:B");
     begin_run(script, prefix);
-    s2menu_row = S2M_ROW_ARCADE;
     s2save_set(S2S_TEAM, 3);
     s2menu_load(&c);
     r0 = s2menu_run(&c);
-    CHECK(r0 == S2M_RACE && c.team == 3 && s2save_get(S2S_TEAM) == 3, "the TEAM row and YES: the menu ended with %d, team %d", r0, c.team);
+    CHECK(r0 == S2M_CHAMP && c.team == 3 && s2save_get(S2S_TEAM) == 3 && asked == 2, "ESC and YES: the menu ended with %d, team %d (%d visits)", r0, c.team, asked);
     s2save_reset();
     s2save_set(S2S_PROFILE, 1);                                     /* (from here on a save that has been through the team pages) */
-    s2menu_row = S2M_ROW_ARCADE;
     s2menu_load(&c);
-    /* seven D from ARCADE to GAME SETTINGS, A; in the page D D B (laps 3 -> 5), A out (a cut); D to HI SCORES, A; A out; U U U to START RACE, A */
-    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:D 14:D 16:A 20:D 22:D 24:B 26:A 34:D 36:A 44:A 50:U 52:U 54:U 56:A");
+    /* GAME SETTINGS: in the page D D B (laps 3 -> 5), A out (a cut), the room again (CHAMPIONSHIP) */
+    answers[0] = S2ROOM_SETTINGS;
+    answers[1] = S2ROOM_CHAMP;
+    answered = asked = 0;
+    put_keys(script, sizeof script, "2:D 4:D 6:B 8:A");
     begin_run(script, prefix);
     int r = s2menu_run(&c);
-    CHECK(r == S2M_RACE, "the menu ended with %d", r);
+    CHECK(r == S2M_CHAMP && asked == 2, "the menu ended with %d (%d visits)", r, asked);
     CHECK(s2_menu_laps[c.laps] == 5 && s2save_get(S2S_LAPS) == 2, "the menu took the laps back from the page: %d", s2_menu_laps[c.laps]);
-    CHECK(c.track == 1, "track %d", c.track);
-    printf("ui: start menu: GAME SETTINGS and HI SCORES rows open the pages, the settings come back\n");
+    printf("ui: menu: the first start's pages, ESC to TEAM SELECTION, GAME SETTINGS open their pages and the settings come back\n");
 }
 
 /* the track's banner of the race screen as the toolkit draws it into the first framebuffer's rows, a copy in out */
@@ -1023,7 +1039,7 @@ static void draw_banner(int track, uint8_t *out)
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
 {
     failures = 0;
-    s2menu_room = 0;                                                /* (the list is the menu in these tests: the options room's own tests set a stand-in) */
+    s2menu_room = room_stand_in;                                    /* (the options room's own tests are room_screen.c's) */
     *(volatile uint32_t *)0xF000000Cu = 0x1Fu;                      /* MEM_STATUS: all writes done, the SDRAM ready */
     IN_KEY = 0;
     dlog_init();

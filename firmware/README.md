@@ -17,7 +17,7 @@ reads the game's ZIP from its data slot (`zip.c`) and shows the list of the game
 green where they are, red where a needed one is missing, grey for the optional ones, and in plain words
 what is wrong with the ZIP. When nothing is missing it says "ready" and reads the first race's small
 files whole as a test, logging the time of each (`zip: <name> method <m> <bytes> bytes in <ms> ms`).
-When the files are all there the menu (the options room, `s2room.c`, behind it the developer's list `s2menu.c`) follows and then the viewer and the race (`viewer.c`); the Screamer 1 game code
+When the files are all there the menu (the options room, `s2room.c`, run by `s2menu.c`) follows and then the viewer and the race (`viewer.c`); the Screamer 1 game code
 is still in the tree and not reached. A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
 
 ## Building
@@ -52,7 +52,7 @@ and package versions pinned); the script builds the image on first use. The resu
 | `champ.c`, `save.c` | the championship, saved data (nonvolatile data slots) |
 | `menu.c`, `hud.c`, `intro.c` | menus, the race screen, the intro |
 | `sound.c`, `speech.c`, `music.c` | sound effects, the race commentary, the music: streamed from the CD image, or the MIDI songs on the FM chip |
-| `s2menu.c` | Screamer 2's menu: the options room in front (`s2menu_room`, `s2room_menu()` by default) and behind it, on X, the developer's list in the console's text style: ARCADE (the arcade pages), CHAMPIONSHIP, TIME ATTACK, laps, level, START RACE / WATCH; the names from `DATA/LOCAL.DAT`, the choices kept in the save (`s2save.c`); the keys, the grid, the kept choices and the room's use are tested on the PC (`tools/menu_screens.sh`) |
+| `s2menu.c` | Screamer 2's menu: its run on the options room (`s2menu_room`, `s2room_menu()` by default; the arcade pages stand in if the room cannot be built), the names from `DATA/LOCAL.DAT`, the choices kept in the save (`s2save.c`); the grid, the kept choices and the run on a stand-in room are tested on the PC (`tools/menu_screens.sh`) |
 | `s2room.c` | the options room (docs/screamer2/menus.md section 6, row 8): the team's room (`MENU<t>1.DAT`) built like a track by `track_build_s2()` without cars and drawn by the track's engine, the five stations of `P_<t>.MCM`, the camera's glides (the original's easing, checked frame by frame against the running game), the band, texts, arrows and the fade out; `tools/menu_screens.sh` (`tools/ui_room_ref.py`), `tools/room.sh` against the running original |
 | `s2save.c` | Screamer 2's save (nonvolatile data slot `CHOICE.DAT`): its own layout with a CRC-32 per part, the settings, volumes, unlocks, set-ups and the 105 best-times lists, loaded at boot with defaults for a missing, short, foreign or damaged file and a one-time migration of the old layout; `tools/s2/check_save_s2.sh` |
 | `s2snd.c`, `s2sound.c` | Screamer 2's race sound: `s2snd.c` the rules without hardware (the samples of `DATA/SOUND.DAT`, `CD_TRACKS`, an engine's rate, volume and pan, the tyres, the knocks; `tools/s2/check_sound.sh`), `s2sound.c` the voices, the music's start and fade, called from `viewer.c` |

@@ -250,7 +250,6 @@ static int room_key(void *self, uint32_t press)
     p->before = keys;
     if (p->leaving) return 0;
     if (edge & S2PAGE_ESC) return S2ROOM_BACK;
-    if (edge & KEY_X) return S2ROOM_DEV;
     if (edge & S2PAGE_ENTER) {
         s2sound_menu(SOUND_ENTER);
         p->leaving = 1;

@@ -31,11 +31,10 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   The stations lead to ARCADE (the original's arcade pages: title, TRACK with the tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), CHAMPIONSHIP (the four leagues: LEAGUE SELECTION, WELCOME,
   the races with the LEAGUE REPORT after each, what winning opens; docs/development.md "The championship"), TIME ATTACK (TRACK SELECTION with the turning 3D map, 3 LAPS or FREE RUN with its five splits, the race
   against the ghost of the track's best run, re-simulated from recorded controls; docs/development.md "Time attack"), MULTIPLAYER (the MULTIPLAYER MENU as the original answers without a network) and GAME SETTINGS
-  (laps, level, gearbox, ...; VIEW HIGH SCORES). Everything is open from the start. X in the room opens the developer's list (`firmware/s2menu.c`, the old start menu: START RACE on any track at once with left / right,
-  WATCH (the ride), laps, level; Select goes back); Start in the race opens the pause menu (RESUME, RESTART, EXIT); the end screen of an arcade or championship race offers REPLAY (the race run again from the player's recorded
+  (laps, level, gearbox, ...; VIEW HIGH SCORES). Everything is open from the start. Start in the race opens the pause menu (RESUME, RESTART, EXIT); the end screen of an arcade or championship race offers REPLAY (the race run again from the player's recorded
   controls, from the trackside cameras with the original's band; docs/development.md "Replay"). The choices are kept across power-ups.
-  Docs: docs/development.md, "Start menu".
-- **Driving mode (a race):** the race of the start menu (or Start in the ride) puts you and three computer cars on the game's start grid, holds them for
+  Docs: docs/development.md, "The menu".
+- **Driving mode (a race):** a race from the menu puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
   L / R gears), from the physics' chase camera, with speed, gear, lap, position and times on the screen. The computer cars
   each wear their own team's model and paint (by default teams 2 to 4's cars 2 to 4, the player's is team 1's car 1; the menu changes the player's and the computers get the other teams; the image holds exactly those four, `race_grid`, docs/development.md "Teams") and are driven by the game's own driver along its line (`firmware/race.c`); laps and places are counted on that line. The car is the game's own model in single precision (`firmware/s2car.c`, ported from

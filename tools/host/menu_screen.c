@@ -1,11 +1,11 @@
 /*
- * The start menu (firmware/s2menu.c) on the PC: the same code that runs on the Pocket, with a data slot read that serves the
- * real SCREAMER2.zip (its LOCAL.DAT gives the names), tests of the menu's logic (keys, grid, kept choices) and pictures of the
- * list in several states as raw RGB frames for tools/rgb2png.py. The SDRAM and the registers are mapped at their addresses as in
+ * The menu (firmware/s2menu.c) on the PC: the same code that runs on the Pocket, with a data slot read that serves the
+ * real SCREAMER2.zip (its LOCAL.DAT gives the names), tests of the menu's choices (names, grid, kept choices; its run on the options room is in
+ * ui_screen.c and room_screen.c). The SDRAM and the registers are mapped at their addresses as in
  * tools/host/files_screen.c. Exit code 0 if every test passed.
  *
  * Usage: menu_screen <SCREAMER2.zip> <out prefix> [<reference dir of tools/ui_reference.py> [<deflated ZIP>]]
- *        writes <out prefix>_<state>.rgb; with the reference dir it also runs the 2D toolkit's tests (ui_screen.c)
+ *        with the reference dir it also runs the 2D toolkit's tests (ui_screen.c)
  */
 #define _GNU_SOURCE
 #include "../s2menu.h"
@@ -65,26 +65,6 @@ int slot_read(uint32_t id, uint32_t off, uint32_t addr, uint32_t len)
 
 #define CHECK(cond, ...) do { if (!(cond)) { failures++; printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
-static void shot(const char *prefix, const char *name, const struct s2_menu_cfg *c, int cursor)
-{
-    char path[256];
-    snprintf(path, sizeof path, "%s_%s.rgb", prefix, name);
-    s2menu_draw(FB(0), c, cursor);
-    FILE *o = fopen(path, "wb");
-    const volatile uint8_t *fb = FB(0);
-    for (int i = 0; i < FB_W * FB_H; i++) {
-        uint32_t col = VID_PAL[fb[i]];
-        uint8_t rgb[3] = { (uint8_t)(col >> 16), (uint8_t)(col >> 8), (uint8_t)col };
-        fwrite(rgb, 1, 3, o);
-    }
-    fclose(o);
-}
-
-static int press(struct s2_menu_cfg *c, int *cursor, uint32_t keys)
-{
-    return s2menu_key(c, cursor, keys);
-}
-
 int main(int argc, char **argv)
 {
     if (argc < 3) { fprintf(stderr, "usage: %s <SCREAMER2.zip> <out prefix> [<reference dir> [<deflated ZIP>]]\n", argv[0]); return 2; }
@@ -102,109 +82,17 @@ int main(int argc, char **argv)
     int r = zip_open(&zip, 3, SCRATCH, SCRATCH_MAX);
     CHECK(r == ZIP_OK, "zip_open %d", r);
     int found = s2menu_init(&zip);
-    CHECK(found == 9, "texts read from LOCAL.DAT: %d of 9", found);
+    CHECK(found == 3, "texts read from LOCAL.DAT: %d of 3", found);
     static const char *const tracks[S2M_TRACKS] = { "ENGLAND", "COLUMBIA", "EGYPT", "CALIFORNIA", "FINLAND", "SWITZERLAND", "THE TUNNEL" };
     for (int k = 0; k < S2M_TRACKS; k++) CHECK(!strcmp(s2menu_track_name(k + 1), tracks[k]), "track %d is %s", k + 1, s2menu_track_name(k + 1));
     CHECK(!strcmp(s2menu_team_name(1), "CONDOR") && !strcmp(s2menu_team_name(4), "ZEUS"), "teams");
     CHECK(!strcmp(s2menu_skill_name(0), "ROOKIE") && !strcmp(s2menu_skill_name(2), "PRO"), "levels");
 
-    /* the first start: the defaults, the cursor on ARCADE */
+    /* the first start: the defaults */
     struct s2_menu_cfg c;
-    int cursor = S2M_ROW_ARCADE;
     s2save_reset();
     s2menu_load(&c);
     CHECK(c.track == 1 && c.team == 1 && c.car == 1 && s2_menu_laps[c.laps] == 3 && c.skill == 1 && !c.manual, "defaults");
-    shot(argv[2], "first", &c, cursor);
-    CHECK(press(&c, &cursor, KEY_B) == S2M_ARCADE && press(&c, &cursor, KEY_START) == S2M_ARCADE && press(&c, &cursor, KEY_A) == S2M_ARCADE,
-          "B, Start and A on ARCADE go on to the pages");
-    int (*room)(const struct s2_menu_cfg *) = s2menu_room;          /* (the options room, when it is the menu: Select in the list goes back to it) */
-    s2menu_room = 0;
-    CHECK(press(&c, &cursor, KEY_SELECT) == S2M_NONE && press(&c, &cursor, 0) == S2M_NONE, "Select and no key do nothing");
-    s2menu_room = room;
-    CHECK(room && press(&c, &cursor, KEY_SELECT) == S2M_ROOM && press(&c, &cursor, 0) == S2M_NONE, "Select goes back to the options room, no key does nothing");
-
-    /* the player's wish: track 4 in two presses of the menu from START RACE (R is three tracks on, A starts) */
-    cursor = S2M_ROW_RACE;
-    CHECK(press(&c, &cursor, KEY_R) == S2M_NONE && c.track == 4, "R: track %d", c.track);
-    CHECK(press(&c, &cursor, KEY_A) == S2M_RACE, "A starts the race");
-    shot(argv[2], "track4", &c, cursor);
-
-    /* every track is at most two moves of d-pad left/right (one step, on START RACE) and L / R (three) away from every other one */
-    for (int from = 1; from <= S2M_TRACKS; from++)
-        for (int to = 1; to <= S2M_TRACKS; to++) {
-            int best = 99;
-            static const uint32_t moves[4] = { KEY_LEFT, KEY_RIGHT, KEY_L, KEY_R };
-            for (int a = -1; a < 4; a++)
-                for (int b = -1; b < 4; b++) {
-                    struct s2_menu_cfg t = { .track = from, .team = 1, .car = 1, .laps = 1, .skill = 1 };
-                    int cur = S2M_ROW_RACE, n = 0;
-                    if (a >= 0) { press(&t, &cur, moves[a]); n++; }
-                    if (b >= 0) { press(&t, &cur, moves[b]); n++; }
-                    if (t.track == to && n < best) best = n;
-                }
-            CHECK(best <= 2, "track %d to %d needs %d moves", from, to, best);
-        }
-
-    /* the rows and their values */
-    cursor = S2M_ROW_ARCADE;
-    c = (struct s2_menu_cfg){ .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1, .manual = 0 };
-    press(&c, &cursor, KEY_LEFT);
-    CHECK(c.track == 1 && c.laps == 1 && c.skill == 1 && c.team == 1, "left on ARCADE changes nothing");
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_CHAMP, "down: the CHAMPIONSHIP row");
-    press(&c, &cursor, KEY_LEFT);
-    press(&c, &cursor, KEY_RIGHT);
-    CHECK(c.track == 1 && c.laps == 1 && c.skill == 1, "left / right on CHAMPIONSHIP change nothing");
-    shot(argv[2], "champrow", &c, cursor);
-    CHECK(press(&c, &cursor, KEY_B) == S2M_CHAMP && press(&c, &cursor, KEY_START) == S2M_CHAMP && press(&c, &cursor, KEY_A) == S2M_CHAMP,
-          "B, Start and A on CHAMPIONSHIP go to the league pages");
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_ATTACK, "down: the TIME ATTACK row");
-    press(&c, &cursor, KEY_LEFT);
-    press(&c, &cursor, KEY_RIGHT);
-    CHECK(c.track == 1 && c.laps == 1 && c.skill == 1, "left / right on TIME ATTACK change nothing");
-    shot(argv[2], "attackrow", &c, cursor);
-    CHECK(press(&c, &cursor, KEY_B) == S2M_ATTACK && press(&c, &cursor, KEY_START) == S2M_ATTACK && press(&c, &cursor, KEY_A) == S2M_ATTACK,
-          "B, Start and A on TIME ATTACK go to its pages");
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_LAPS, "down: laps row");
-    press(&c, &cursor, KEY_RIGHT);
-    CHECK(s2_menu_laps[c.laps] == 5, "laps after one right: %d", s2_menu_laps[c.laps]);
-    press(&c, &cursor, KEY_LEFT);
-    press(&c, &cursor, KEY_LEFT);
-    press(&c, &cursor, KEY_LEFT);
-    CHECK(s2_menu_laps[c.laps] == 10, "laps wrap from 1 to 10 (%d)", s2_menu_laps[c.laps]);
-    shot(argv[2], "laps", &c, cursor);
-    press(&c, &cursor, KEY_DOWN);
-    press(&c, &cursor, KEY_RIGHT);
-    CHECK(cursor == S2M_ROW_SKILL && c.skill == 2, "skill %d", c.skill);
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_RACE, "start race row");
-    press(&c, &cursor, KEY_RIGHT);
-    CHECK(c.track == 2, "right on START RACE: track %d", c.track);
-    press(&c, &cursor, KEY_LEFT);
-    press(&c, &cursor, KEY_LEFT);
-    CHECK(c.track == 7, "track wraps from 1 to 7 (%d)", c.track);
-    shot(argv[2], "startrow", &c, cursor);
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_WATCH && press(&c, &cursor, KEY_START) == S2M_WATCH, "watch row");
-    shot(argv[2], "watchrow", &c, cursor);
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_SETTINGS && press(&c, &cursor, KEY_A) == S2M_SETTINGS, "GAME SETTINGS row");
-    shot(argv[2], "settingsrow", &c, cursor);
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_SCORES && press(&c, &cursor, KEY_START) == S2M_SCORES, "HI SCORES row");
-    shot(argv[2], "scoresrow", &c, cursor);
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_TEAM && press(&c, &cursor, KEY_B) == S2M_TEAM && press(&c, &cursor, KEY_A) == S2M_TEAM, "TEAM SELECTION row");
-    shot(argv[2], "teamrow", &c, cursor);
-    press(&c, &cursor, KEY_DOWN);
-    CHECK(cursor == S2M_ROW_ARCADE, "the cursor wraps");
-    CHECK(press(&c, &cursor, KEY_X) == S2M_WATCH, "X watches");
-    press(&c, &cursor, KEY_UP);
-    CHECK(cursor == S2M_ROW_TEAM, "up from ARCADE wraps to the last row");
-    cursor = S2M_ROW_SKILL;
-    CHECK(press(&c, &cursor, KEY_START) == S2M_RACE, "Start on a setting starts the race");
 
     /* the grid: the player's pick in slot 0, the three other teams in the others, no team twice; the default is race.c's */
     for (int team = 1; team <= S2M_TEAMS; team++)

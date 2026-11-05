@@ -23,8 +23,8 @@ f32 = lambda x: struct.unpack("<f", struct.pack("<f", x))[0]
 PI_F, TWO_PI_F = f32(3.1415927), f32(6.2831853)
 ROW_FIRST, ROW_MOVE, ROW_FADE = 0x5F, 0x55, 0x62
 FADE_STEP = f32(0.02) * 2.0                                       # 0.02 s x 2.0 a second; a float
-S_ENTER, S_ESC, S_X, S_LEFT, S_RIGHT = "B", "A", "X", "L", "R"      # the keys of the test scripts (room_screen.c's put_keys)
-RESULT = {"ARCADE": 1, "CHAMP": 2, "ATTACK": 3, "MULTI": 4, "SETTINGS": 5, "BACK": -1, "DEV": -2}
+S_ENTER, S_ESC, S_LEFT, S_RIGHT = "B", "A", "L", "R"      # the keys of the test scripts (room_screen.c's put_keys)
+RESULT = {"ARCADE": 1, "CHAMP": 2, "ATTACK": 3, "MULTI": 4, "SETTINGS": 5, "BACK": -1}
 
 
 def easing(row):
@@ -94,8 +94,8 @@ class Visit:
             pass
         else:
             edge = key if key != "." and key != self.before else ""
-            if edge == S_ESC or edge == S_X:                  # the page leaves at once, before the frame's camera step and drawing
-                self.result = RESULT["BACK"] if edge == S_ESC else RESULT["DEV"]
+            if edge == S_ESC:                                 # the page leaves at once, before the frame's camera step and drawing
+                self.result = RESULT["BACK"]
                 return self.last
             elif edge == S_ENTER:
                 self.leaving = True
@@ -155,7 +155,6 @@ SCRIPTS = [          # name, the station the visit starts at (the room keeps it 
     ("enter4", 4, "60:R 90:B"),
     ("enter_early", 1, "3:B"),
     ("esc", 3, "20:A"),
-    ("dev", 0, "20:X"),
     ("enter_then_keys", 0, "10:B 12:A 14:R 16:X"),
 ]
 

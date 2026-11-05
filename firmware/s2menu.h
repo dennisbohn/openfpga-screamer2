@@ -1,27 +1,19 @@
 /*
- * The start menu of Screamer 2 (docs/screamer2/menus.md has the plan for the rest of the original's screens): a list in the console's
- * text style, shown after the files screen and whenever the race or the ride is left with Select + B. It stands in for the original's
- * options room, whose choices are pages of their own as they get built:
+ * The menu of Screamer 2 (docs/screamer2/menus.md has the plan for the rest of the original's screens): the options room (s2room.h), the page the original
+ * shows after the files screen (and after TEAM SELECTION and ENTER YOUR NAME on a new save), and whenever the race is left with Select + B. Its five stations
+ * lead to the original's pages:
  *
- *   ARCADE               the original's arcade pages (s2arcade.h): title, TRACK, CAR (the 3D carousel) and TRANSMISSION, and then the race;
- *                        ESC goes back
- *   CHAMPIONSHIP         the championship (s2leaguepages.h, s2league.h): LEAGUE SELECTION, WELCOME TO LEAGUE n, the league's races with the LEAGUE
- *                        REPORT after each; the viewer runs it (S2M_CHAMP)
- *   TIME ATTACK          the original's TRACK SELECTION with the turning 3D maps (s2trackpage.h), the CAR page with 3 LAPS / FREE RUN, then the race
- *                        against the ghost of the track's best run, or the free run (s2ghost.h); the viewer runs it (S2M_ATTACK)
- *   NUMBER OF LAPS       the original's options, 1 / 3 / 5 / 10 (a GAME SETTINGS row; the championship races take it too)
- *   ARCADE ENEMIES SKILL ROOKIE / NORMAL / PRO (a GAME SETTINGS row)
- *   START RACE           the race with the choices as they are, at once (left / right: the track, T1 .. T7 in the files' numbering)
- *   WATCH                the viewer's ride (for timing)
- *   TEAM SELECTION       the original's TEAM SELECTION and ENTER YOUR NAME pages (s2pages3d.h): the team and the name. A new save (no profile yet:
- *                        s2save.h S2S_PROFILE) shows them once, before the menu, as the original shows them at every start.
+ *   ARCADE          the arcade pages (s2arcade.h): title, TRACK, CAR (the 3D carousel) and TRANSMISSION, and then the race; ESC goes back
+ *   CHAMPIONSHIP    the championship (s2leaguepages.h, s2league.h): LEAGUE SELECTION, WELCOME TO LEAGUE n, the league's races with the LEAGUE REPORT after each;
+ *                   the viewer runs it (S2M_CHAMP)
+ *   TIME ATTACK     the original's TRACK SELECTION with the turning 3D maps (s2trackpage.h), the CAR page with 3 LAPS / FREE RUN, then the race against the
+ *                   ghost of the track's best run, or the free run (s2ghost.h); the viewer runs it (S2M_ATTACK)
+ *   MULTIPLAYER     the MULTIPLAYER MENU (s2pages.h) as the original answers it with no network
+ *   GAME SETTINGS   the page of the laps, the level, the gearbox, ... with VIEW HIGH SCORES (s2pages.h)
  *
- * Since row 8 this list is the developer's menu behind the options room (s2room.h): the room is the menu, X in it opens the list, Select in the list goes back. What the list
- * carries that the original has on other pages, NUMBER OF LAPS and ARCADE ENEMIES SKILL (GAME SETTINGS), HI SCORES (GAME SETTINGS, VIEW HIGH SCORES) and TEAM SELECTION (ESC in the room),
- * is also reached there; START RACE (the race on any track at once, L / R: the track) and WATCH (the ride) are the core's own.
- *
- * The choices are kept in the nonvolatile CHOICE.DAT (s2save.h, data slot 23): the Pocket writes it back when the core
- * exits, so they survive a power-up. Everything is open from the start (all seven tracks, all four teams and their five cars).
+ * ESC in the room is TEAM SELECTION and ENTER YOUR NAME (s2pages3d.h), which come back to the room. The choices (track, team, car, laps, level, gearbox) are kept in
+ * the save (s2save.h, CHOICE.DAT, data slot 23): the Pocket writes it back when the core exits, so they survive a power-up. Everything is open from the start
+ * (all seven tracks, all four teams and their five cars). If the room cannot be built (the log says why) the arcade pages stand in for it.
  */
 #pragma once
 #include <stdint.h>
@@ -45,17 +37,11 @@ struct s2_menu_cfg {
 };
 extern const uint8_t s2_menu_laps[S2M_LAPS];
 
-/* what the menu ends with (S2M_ARCADE: a key press on the ARCADE row, which s2menu_run() answers by running the arcade pages; S2M_SETTINGS and
-   S2M_SCORES and S2M_TEAM: the GAME SETTINGS, HI SCORES and TEAM SELECTION rows, which s2menu_run() answers by running the page; S2M_CHAMP: the
-   CHAMPIONSHIP row, which s2menu_run() returns to the viewer, whose races the league needs) */
-enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES, S2M_TEAM, S2M_CHAMP, S2M_ATTACK, S2M_ROOM };
+/* what the menu ends with (s2menu_run() carries out the other stations itself): a race on the choices, or the championship or time attack, which the viewer runs */
+enum { S2M_NONE, S2M_RACE, S2M_CHAMP, S2M_ATTACK };
 
-/* The rows, top to bottom */
-enum { S2M_ROW_ARCADE, S2M_ROW_CHAMP, S2M_ROW_ATTACK, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROW_TEAM, S2M_ROWS };
-
-/* The names and labels from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the
-   built-in English text, which is the same. Once, before the first menu. Returns how many of the 8 texts (the tracks, the teams, the
-   levels, five labels) were read from the file. */
+/* The names from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the built-in English text,
+   which is the same. Once, before the first menu. Returns how many of the 3 texts (the tracks, the teams, the levels) were read from the file. */
 int s2menu_init(struct zip *z);
 const char *s2menu_track_name(int track);       /* track 1 .. 7 */
 const char *s2menu_team_name(int team);         /* team 1 .. 4 */
@@ -71,25 +57,12 @@ void s2menu_store(const struct s2_menu_cfg *c);
    car of its own number: the default grid for team 1 car 1). */
 void s2menu_grid(const struct s2_menu_cfg *c, struct s2_pick grid[4]);
 
-/* One press of buttons (KEY_* bits of hw.h, the ones that went down in this frame) on the list: moves *cursor, changes c, and
-   returns S2M_RACE, S2M_WATCH or S2M_ARCADE when the menu ends or goes on to the arcade pages. d-pad up / down: row; left / right:
-   the row's value (a ring; on START RACE the track); L / R: the track three on either way from any row (any track is two moves
-   away); A, B or Start: the row's action (the race on any row but ARCADE and WATCH); X: the ride. */
-int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press);
-
-/* The list into fb (palette of the back buffer too) */
-void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor);
-
 /* The one short line a start leaves in the debug log: "menu: race T4 CONDOR 1 3L NORMAL AUTO" */
-void s2menu_log(const struct s2_menu_cfg *c, int go);
+void s2menu_log(const struct s2_menu_cfg *c);
 
-/* The row the cursor is on (S2M_ROW_*), kept from one visit of the menu to the next; the tests set it */
-extern int s2menu_row;
-
-/* The options room (s2room.h, s2room_menu() at the start): s2menu_run() shows it first, as the original's menu does after TEAM SELECTION and ENTER YOUR NAME. It returns an S2ROOM_*
-   result (the choice of the station, ESC, X, or a failure when the toolkit is not up or the room cannot be built: the list is the menu then); 0, as in the PC tests of the list, no room. The list stays as the
-   developer's menu: X in the room opens it, Select in it goes back to the room, and so does a YES to EXIT SCREAMER 2? on TEAM SELECTION (where the original leaves the program). */
+/* The menu's room (s2room.h, s2room_menu() at the start): the tests put a stand-in. It returns an S2ROOM_* result: the choice of the station, ESC, or a failure when
+   the toolkit is not up or the room cannot be built (the arcade pages are shown instead). */
 extern int (*s2menu_room)(const struct s2_menu_cfg *c);
 
-/* The menu until a race or the ride is chosen; the choices are stored. Needs s2menu_init(). */
+/* The menu until a race, the championship or time attack is chosen; the choices are stored. Needs s2menu_init(). */
 int s2menu_run(struct s2_menu_cfg *c);

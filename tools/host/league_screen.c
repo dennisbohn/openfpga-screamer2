@@ -250,20 +250,12 @@ static void check_league_end(const char *ref, const char *prefix)
     printf("ui: championship end screen: %d runs, %d frames equal to the model, CONTINUE, the league's lists and the loading screen's records checked\n", runs, frames);
 }
 
-/* the start menu's CHAMPIONSHIP row leaves the menu for the viewer, and a league's pages run in order from their scripts: select, welcome, report */
+/* a league's pages run in order from their scripts: select, welcome, report */
 static void check_league_flow(const char *prefix)
 {
     char script[400];
-    struct s2_menu_cfg c;
     s2save_reset();
     s2save_set(S2S_PROFILE, 1);
-    s2menu_row = S2M_ROW_ARCADE;
-    s2menu_load(&c);
-    put_keys(script, sizeof script, "2:D 6:B");
-    begin_run(script, prefix);
-    front = 0;
-    int r = s2menu_run(&c);
-    CHECK(r == S2M_CHAMP && s2menu_row == S2M_ROW_CHAMP, "the CHAMPIONSHIP row ended the menu with %d (row %d)", r, s2menu_row);
     /* select (RIGHT, ENTER on the second league, which is open), welcome (ENTER), as the viewer runs them */
     s2save_unlock_all = 0;
     s2save_set(S2S_LEAGUE_OPEN, 1);
@@ -276,5 +268,5 @@ static void check_league_flow(const char *prefix)
     CHECK(nclicks == 2 && clicks[0] == 0 && clicks[1] == 6, "the sounds of the selection: %d", nclicks);
     s2save_unlock_all = S2SAVE_UNLOCK_ALL;
     s2save_reset();
-    printf("ui: championship flow: the start menu's row, the selection and the welcome page in order checked\n");
+    printf("ui: championship flow: the selection and the welcome page in order checked\n");
 }
