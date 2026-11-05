@@ -6,6 +6,8 @@
 #include "s2load.h"
 #include "s2page.h"
 #include "s2save.h"
+#include "s2league.h"
+#include "console.h"
 #include "dlog.h"
 #include "hw.h"
 #include <string.h>
@@ -36,8 +38,9 @@ static void record(const struct s2_end_in *in)
 {
     static int logged;
     E.recorded = 1;
-    E.rank = s2save_add_time(S2S_KIND_ARCADE, in->track, s2_laps_list(in->laps), in->time, 0, in->team, in->car, 0);
-    if (in->best_lap > 0.0f) s2save_add_time(S2S_KIND_ARCADE, in->track, S2S_LAP, in->best_lap, 0, in->team, in->car, 0);
+    const int kind = in->league ? S2S_KIND_LEAGUE : S2S_KIND_ARCADE;
+    E.rank = s2save_add_time(kind, in->track, s2_laps_list(in->laps), in->time, 0, in->team, in->car, 0);
+    if (in->best_lap > 0.0f) s2save_add_time(kind, in->track, S2S_LAP, in->best_lap, 0, in->team, in->car, 0);
     if (logged++ < 3) {                 /* (the log has 4 KB) */
         char t[16];
         s2_time_text(t, in->time);
@@ -91,6 +94,41 @@ static void choices(struct blit_list *l, const struct s2_end_in *in)
     s2gfx_clip(0, FB_H, 0, FB_H);
 }
 
+/* The championship's choices (0x48041 from 0x4842d): the banner, CONTINUE alone, centred at y 184 (lit while the clock's bit 0x20 is set), and the box of the cars
+   that have done their laps: n of them, the header at y 81 - 5 (n - 1) from x 38, the rows 12 apart from 14 below it (by place, in the order of the cars), each
+   "<byte 1><place>. <name>        <time>  <points>" (one space less before two-digit points) from x 38 with the car's side view at x 113 */
+static void league_choices(struct blit_list *l, const struct s2_end_in *in)
+{
+    char t[24], row[48];
+    int n = 0;
+    for (int i = 0; i < 4; i++) n += in->cars[i].done != 0;
+    s2gfx_sprite_centred(l, s2gfx_banner(in->track), 4);
+    const int lit = (E.blink & BLINK_BIT) != 0;
+    s2gfx_text_centred(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, 184, s2gfx_line("CONTINUE", 0, "CONTINUE"));
+    const int y0 = 81 - 5 * (n - 1);
+    s2gfx_text(l, SMALL, WHITE, 2, 38, y0, s2gfx_line("CONTINUE", 1, "   NAME CAR   TIME    PTS"));
+    for (int i = 0; i < 4; i++) {
+        const struct s2_end_car *c = &in->cars[i];
+        if (!c->done || c->place < 1 || c->place > 4) continue;
+        const int y = y0 + 14 + 12 * (c->place - 1), points = s2l_points[c->place - 1];
+        char *p = row;
+        *p++ = 1;
+        *p++ = (char)('0' + c->place);
+        *p++ = '.';
+        *p++ = ' ';
+        for (int k = 0; k < 3 && c->name[k]; k++) *p++ = c->name[k];
+        for (int k = 0; k < 8; k++) *p++ = ' ';
+        s2_time_text(t, c->time);
+        for (const char *s = t; *s; s++) *p++ = *s;
+        *p++ = ' ';
+        if (points < 10) *p++ = ' ';
+        p = fmt_udec(p, (uint32_t)points);
+        *p = 0;
+        s2gfx_text(l, SMALL, WHITE, 2, 38, y, row);
+        s2gfx_sprite(l, S2G_SPR_CAR + (c->team - 1) * 5 + (c->car - 1), 113, y - 1);
+    }
+}
+
 int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const struct s2_end_in *in, uint32_t fin_frames, uint32_t vf,
                 uint32_t press)
 {
@@ -110,6 +148,14 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
     struct blit_list *l = s2gfx_begin_on(buffer);
     if (E.clock < CONGRATS_END) {
         congratulations(l, in);
+    } else if (in->league) {
+        if (!E.recorded) record(in);
+        if (press & S2PAGE_ENTER) result = S2END_CONTINUE;
+        int n = 0;
+        for (int i = 0; i < 4; i++) n += in->cars[i].done != 0;
+        s2gfx_dark_fb(fb, 0, 180, 320, 20, E.dark);
+        if (n > 0) s2gfx_dark_fb(fb, 6, 81 - 5 * (n - 1) - 2, 312, 13 * n + 14, E.dark);
+        league_choices(l, in);
     } else {
         if (!E.recorded) record(in);
         if ((press & KEY_LEFT) && E.choice > 0) {

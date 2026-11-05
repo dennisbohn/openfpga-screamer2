@@ -16,3 +16,5 @@ enum { S2PAUSE_RESUME = 1, S2PAUSE_RESTART, S2PAUSE_EXIT };
 /* The picture on show is in framebuffer `front` with the palette `pal` (the race's, 256 x 0x00RRGGBB); the menu replaces it and runs
    until the player has chosen. Needs s2gfx_init(). Returns the item. */
 int s2pause_run(int front, const uint32_t *pal);
+/* The same with or without RESTART (the championship's race has none: STARTL.EXE 0x49f8e leaves it out, and the two items are centred as n = 2 puts them) */
+int s2pause_run_items(int front, const uint32_t *pal, int restart);

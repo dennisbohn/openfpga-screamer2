@@ -15,6 +15,8 @@ struct s2_record { float time; char name[4]; };
    lists of the save (s2save.h). A track nobody has driven has 3599.999 and MIL, which the screen shows as --:--:-- MIL, as the original
    does. */
 void s2_best_get(int track, int laps, struct s2_record *total, struct s2_record *lap);
+/* The same from the lists of a kind of game (S2S_KIND_ARCADE, S2S_KIND_LEAGUE: the original asks the lists of the kind the race is of) */
+void s2_best_get_kind(int kind, int track, int laps, struct s2_record *total, struct s2_record *lap);
 /* The place of a race of `laps` laps (1, 3, 5, 10) among the save's lists of totals: 0 .. 3 */
 int s2_laps_list(int laps);
 
@@ -31,5 +33,7 @@ void s2_record_text(char *p, const struct s2_record *r);
 /* The screen for track 1 .. 7 and a race of `laps` laps, shown at once; the palette of its picture (stays valid), or 0 if the picture,
    the sprites or the fonts are not there (the caller then shows its own text). */
 const uint32_t *s2load_show(int track, int laps);
+/* The same with the records of a kind of game's lists (the championship's race: S2S_KIND_LEAGUE) */
+const uint32_t *s2load_show_kind(int kind, int track, int laps);
 /* The track is ready: the screen fades out (0.4 s). Needs the palette s2load_show() returned. */
 void s2load_fade(void);
