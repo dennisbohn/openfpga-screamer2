@@ -392,8 +392,10 @@ int main(int argc, char **argv)
             fclose(o);
             return 0;
         }
+        const char *c1 = strchr(sweep, ':'), *c2 = c1 ? strchr(c1 + 1, ':') : 0;
+        const int from = c2 ? atoi(c2 + 1) : 0;                         /* SWEEP=<track>:<step>:<first angle>; step 2048 draws only the first angle */
         for (int tr = track ? track : 1; tr <= (track ? track : 7); tr++)         /* (track 0: all seven) */
-            for (int a = 0; a < 2048; a += step) {
+            for (int a = from; a < 2048; a += step) {
                 render(picture_buf[0], tr, a);
                 char path[512];
                 snprintf(path, sizeof path, "%s_t%d_a%04d.rgb", argv[4], tr, a);

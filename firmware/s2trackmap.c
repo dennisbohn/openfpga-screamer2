@@ -29,17 +29,6 @@ static void place_of(const uint8_t *mesh, const uint8_t *blk, float t[3])
     for (int i = 0; i < 3; i++) t[i] = so > 0 ? (float)rd32(mesh + so + 0x10 + 4 * i) : 0.0f;
 }
 
-/* the middle of the n vertices at verts */
-static void middle(const uint8_t *verts, int n, float c[3])
-{
-    double s[3] = { 0, 0, 0 };
-    for (int i = 0; i < n; i++) {
-        const uint8_t *v = verts + 6 * i;
-        for (int k = 0; k < 3; k++) s[k] += rd16(v + 2 * k);
-    }
-    for (int k = 0; k < 3; k++) c[k] = n ? (float)(s[k] / n) : 0.0f;
-}
-
 /* The pieces of one face row of a block with more than max_vert vertices: the row's faces in its order, taken in turn while the vertices they use stay within max_vert; each run
    is a block of its own (header, the faces, their vertices and texture coordinates compacted, all 16 rows the run's one list). Drawn one after the other they paint the faces in
    the order of the block's row. Returns how many pieces (0: the block has no such row, nothing is drawn; -1: they do not fit), their blocks in out[]; *at is the next free byte of dst. */
@@ -151,7 +140,7 @@ int s2map_cut(const uint8_t *mesh, int k, int max_vert, uint8_t *dst, uint32_t r
     out->file = mesh;
     out->blk = blk;
     place_of(mesh, blk, out->t);
-    middle(mesh + rd32(blk + 0x1C), nv, out->c);
+    for (int i = 0; i < 3; i++) out->c[i] = (float)rd16(blk + 4 + 2 * i);       /* (the header's centre, 0 in all maps' blocks: the key is the distance of the block's place, 0x8b04c) */
     if (nv <= max_vert) return 1;
     if (rd32(blk + 0x18) & 0x2000) return 0;                    /* (a block with normals of its own, the reflecting kind: not cut; no map has one) */
     out->cut = 1;

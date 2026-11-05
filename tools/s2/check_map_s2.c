@@ -102,6 +102,12 @@ int main(int argc, char **argv)
             const uint32_t before = used;
             const int ok = s2map_cut(mesh, k, 512, dst, sizeof dst, &used, &pc);
             total_blocks++;
+            if (getenv("MAP_INFO") && ok) {                 /* MAP_INFO=1: every block's name, header centre (+4) and place: the point whose distance orders the blocks */
+                char nm[9] = { 0 };
+                memcpy(nm, blk + 0x68, 8);
+                printf("  info %s block %d '%s': %d vertices, header centre (%.0f %.0f %.0f), place (%.0f %.0f %.0f)\n", name, k, nm, nv, pc.c[0], pc.c[1], pc.c[2], pc.t[0], pc.t[1], pc.t[2]);
+                CHECK(pc.c[0] == 0.0f && pc.c[1] == 0.0f && pc.c[2] == 0.0f, "%s block %d: the header's centre is 0 (the key is the block's place)", name, k);
+            }
             CHECK(ok, "%s block %d: cut", name, k);
             if (!ok) continue;
             CHECK(pc.file == mesh && pc.blk == blk, "%s block %d: the block is the mesh's", name, k);

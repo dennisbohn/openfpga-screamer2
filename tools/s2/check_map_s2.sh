@@ -27,6 +27,6 @@ open(p, "w").write(t)
 PY
 sed -i 's|"../../firmware/|"|' "$src/check_map_s2.c"
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
-MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh verilator/verilator:v5.050 -c "
+MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -e MAP_INFO="$MAP_INFO" -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2/mapsrc && gcc -O2 -g -w -fsanitize=address,undefined -fno-sanitize-recover -o ../check_map_s2 check_map_s2.c s2trackmap.c dat.c -lm &&
     cd /b/s2 && ./check_map_s2 /game"

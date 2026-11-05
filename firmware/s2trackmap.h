@@ -25,7 +25,7 @@
 struct s2map_block {
     const uint8_t *file, *blk;                  /* the mesh (offsets of the block are from it) and the block */
     float t[3];                                 /* the block's place in the mesh's frame: its position record (a few units), the engine's x, y up, z */
-    float c[3];                                 /* the middle of the block's vertices in the same frame (the key that orders the blocks far to near) */
+    float c[3];                                 /* the block's centre from its header (+4; 0 in every block of the maps), added to t: the point whose distance orders the blocks far to near, as the original's 0x8b04c does */
     int cut;                                    /* 1: the block has more vertices than the unit takes, chunk[row][0 .. nchunks[row]) are drawn in its place */
     uint8_t nchunks[S2MAP_ROWS];
     const uint8_t *chunk[S2MAP_ROWS][S2MAP_CHUNKS];     /* blocks of their own (their own file), in drawing order */
