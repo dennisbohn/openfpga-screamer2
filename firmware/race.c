@@ -208,6 +208,7 @@ static struct {
     float floor_z;
     float skills[3][7];                                 /* MISC.DTR's SKILLS: the pace taken off a computer's car */
     int skills_ok;
+    float damages[3];                                   /* and its DAMAGES: what a car's touch hurts, by level (pro 5, normal 2.5, rookie 1) */
     int kind, slot;                                     /* the kind of race (race_kind), the side the player took (time attack) */
     const struct s2gh_head *ghost;                      /* time attack: the run being raced, 0 for none */
     uint32_t gsteps;                                    /* the ghost's steps taken: its own count, so that a frame of several steps does not move it */
@@ -257,9 +258,13 @@ static void load_skills(void)
     struct dat_entry e;
     uint32_t w[21];
     R.skills_ok = 0;
+    R.damages[0] = R.damages[1] = R.damages[2] = 1.0f;
     if(!game || !dat_find(game, size, "MISC.DTR", &e)) return;
     uint32_t n = dat_extract(game, size, &e, scratch, sizeof scratch);
-    if(!n || s2_dtr_words(scratch, n, "SKILLS", w, 21) != 21) return;
+    if(!n) return;
+    uint32_t d[3];
+    if(s2_dtr_words(scratch, n, "DAMAGES", d, 3) == 3) memcpy(R.damages, d, sizeof d);
+    if(s2_dtr_words(scratch, n, "SKILLS", w, 21) != 21) return;
     memcpy(R.skills, w, sizeof w);
     R.skills_ok = 1;
 }
@@ -557,51 +562,319 @@ static void places_and_pace(void)
 
 static float knock_max;                                 /* the hardest touch of the player's car since race_knock_take() */
 
-/* Two cars that overlap are pushed apart and swap the speed they close at along the line of least overlap. The game's
-   solver (0x245a3) sweeps the cars' outlines (the wheel corners 1.4 times as wide) through the step for the first
-   touch and runs the rest of the step again; this is the same outline tested at the end of the step. No damage or sparks;
-   the player's touches are heard (race_knock_take). */
-static void collide(void)
+/* The game's solver of touching cars, in its place in the frame (0x2baa4): after every car's passes over tyres, walls and ground (s2car_move),
+   0x245a3 sweeps the cars' outlines through the step (the wheel corners 1.4 times as far from their mean, last step's against this step's, each corner of one
+   against each edge of the other: 0x2348b) for the first touch of the step. If there is one (a share of the step below 2), the two cars are flagged (+0x4c
+   bit 8), put back to where they were at that share of the step, knocked (0x19aaa), and the touch gives each car's four corners a push: the corner's
+   speed against the edge's at the point, along the line from the car's middle to the point in full and across it weighted by the corner's angle from that
+   line. The rest of the step is then run for the flagged cars alone with what is left of its length (not at all when that is 0.005 s or less), after the
+   walls and ground of every car have been looked at again (0x16824), and 0x22d35 pushes apart the cars that still overlap (0x20a18). What the cars do with
+   the step's controls (s2car_finish) comes after all of that. The game does this for every car; nothing here is for the computers alone. */
+
+/* a car's outline in the solver's terms: the four wheel corners 1.4 times as far from their mean, last step's (+0x770) and this step's (+0x514) */
+struct outline {
+    float old[4][3], now[4][3];
+    float cx, cz, r;                                    /* a circle round all eight points: two cars whose circles are apart cannot touch in this step */
+};
+
+/* the mean of the four corners at `base`, summed as the solver sums them: corners 0, 2, 1, 3 */
+static void corner_mean(const struct s2car_state *c, int base, float m[3])
 {
-    for(int a = 0; a < R.n; a++)
-        for(int b = a + 1; b < R.n; b++) {
-            struct s2car_state *A = &R.car[a], *B = &R.car[b];
-            const float dx = F(B, 0x4d8) - F(A, 0x4d8), dz = F(B, 0x4e0) - F(A, 0x4e0);
-            const float reach = (float)(I(A, 0x4d0) + I(B, 0x4d0)) * 0.7f;
-            if(dx * dx + dz * dz >= reach * reach * 2.0f || I(A, 0x4dc) - I(B, 0x4dc) > 500 || I(B, 0x4dc) - I(A, 0x4dc) > 500) continue;
-            const float ya = F(A, 0x4e8), yb = F(B, 0x4e8);
-            const float ax[4][2] = { { sinf(ya), -cosf(ya) }, { cosf(ya), sinf(ya) }, { sinf(yb), -cosf(yb) }, { cosf(yb), sinf(yb) } };
-            const float hl[2] = { (float)I(A, 0x4d0) * 0.7f, (float)I(B, 0x4d0) * 0.7f }, hw[2] = { (float)I(A, 0x4c8) * 0.7f, (float)I(B, 0x4c8) * 0.7f };
-            float pen = 1e30f, n[2] = { 0.0f, 0.0f };
-            int apart = 0;
-            for(int k = 0; k < 4 && !apart; k++) {
-                const float *u = ax[k];
-                const float ea = hl[0] * fabsf(ax[0][0] * u[0] + ax[0][1] * u[1]) + hw[0] * fabsf(ax[1][0] * u[0] + ax[1][1] * u[1]);
-                const float eb = hl[1] * fabsf(ax[2][0] * u[0] + ax[2][1] * u[1]) + hw[1] * fabsf(ax[3][0] * u[0] + ax[3][1] * u[1]);
-                const float d = dx * u[0] + dz * u[1], p = ea + eb - fabsf(d);
-                if(p <= 0.0f) apart = 1;
-                else if(p < pen) { pen = p; n[0] = d < 0.0f ? -u[0] : u[0]; n[1] = d < 0.0f ? -u[1] : u[1]; }
+    for(int k = 0; k < 3; k++) {
+        const int p = base + 4 * k;
+        m[k] = (((F(c, p) + F(c, p + 0x18)) + F(c, p + 0xc)) + F(c, p + 0x24)) * 0.25f;
+    }
+}
+
+static void make_outline(const struct s2car_state *c, struct outline *o)
+{
+    float mo[3], mn[3];
+    corner_mean(c, 0x770, mo);
+    corner_mean(c, 0x514, mn);
+    float sx = 0.0f, sz = 0.0f;
+    for(int i = 0; i < 4; i++)
+        for(int k = 0; k < 3; k++) {
+            o->old[i][k] = (F(c, 0x770 + 0xc * i + 4 * k) - mo[k]) * 1.4f + mo[k];
+            o->now[i][k] = (F(c, 0x514 + 0xc * i + 4 * k) - mn[k]) * 1.4f + mn[k];
+        }
+    for(int i = 0; i < 4; i++) { sx += o->old[i][0] + o->now[i][0]; sz += o->old[i][2] + o->now[i][2]; }
+    o->cx = sx * 0.125f;
+    o->cz = sz * 0.125f;
+    float r2 = 0.0f;
+    for(int i = 0; i < 4; i++) {
+        const float *p[2] = { o->old[i], o->now[i] };
+        for(int q = 0; q < 2; q++) {
+            const float dx = p[q][0] - o->cx, dz = p[q][2] - o->cz, d2 = dx * dx + dz * dz;
+            if(d2 > r2) r2 = d2;
+        }
+    }
+    o->r = sqrtf(r2) + 1.0f;
+}
+
+static const uint8_t edge_a[4] = { 3, 2, 0, 1 }, edge_b[4] = { 2, 0, 1, 3 };        /* the outline's four edges as corner pairs (the table at 0x112e64) */
+
+/* Where a step crosses a gate (0x2348b): the corner moves p1 to p2; the edge runs from p3 to p5 at the start of the step and from p4 to p6 at its end.
+   The edge's line is its middle (the mean of the four points) and its two ends' mean direction, and it moves as the ends do: by the longer of their two
+   moves along the mean of the two. Gives the share of the step at the crossing, or 2 when the step does not cross the edge. */
+static float gate(const float p1[3], const float p2[3], const float p3[3], const float p4[3], const float p5[3], const float p6[3])
+{
+    float A[3], D1[3], D2[3], M[3], E[3], Fv[3], G[3], N[3], P[3], Q[3], S[3], Rv[3];
+    for(int k = 0; k < 3; k++) {
+        A[k] = p2[k] - p1[k];
+        D1[k] = p6[k] - p4[k];
+        D2[k] = p5[k] - p3[k];
+        M[k] = (D2[k] + D1[k]) * 0.5f;
+        E[k] = p4[k] - p3[k];
+        Fv[k] = p6[k] - p5[k];
+        G[k] = E[k] + Fv[k];
+    }
+    const float le = sqrtf(E[1] * E[1] + E[0] * E[0] + E[2] * E[2]);
+    const float lf = sqrtf(Fv[1] * Fv[1] + Fv[0] * Fv[0] + Fv[2] * Fv[2]);
+    const float len = lf >= le ? lf : le;
+    const float lg = sqrtf(G[1] * G[1] + G[0] * G[0] + G[2] * G[2]);
+    if(lg == 0.0f) N[0] = N[1] = N[2] = 0.0f;
+    else { const float inv = 1.0f / lg; for(int k = 0; k < 3; k++) N[k] = G[k] * inv; }
+    for(int k = 0; k < 3; k++) {
+        P[k] = N[k] * len;
+        Q[k] = (M[k] + P[k]) * 0.5f;
+        S[k] = (((p3[k] + p5[k]) + p4[k]) + p6[k]) * 0.25f;
+        Rv[k] = S[k] - Q[k];
+    }
+    const float x1 = p1[0], z1 = p1[2];
+    const float den = (A[2] - P[2]) * M[0] + (P[0] - A[0]) * M[2];
+    if(den == 0.0f) return 2.0f;                        /* (the game's other way round is this one with the sign turned: also nought) */
+    const float u = ((Rv[2] - z1) * M[0] + (x1 - Rv[0]) * M[2]) / den;
+    if(!(u >= 0.0f) || u > 1.0f) return 2.0f;
+    float v;
+    if(M[0] != 0.0f) v = (((A[0] - P[0]) * u + x1) - Rv[0]) / M[0];
+    else if(M[2] != 0.0f) v = (((A[2] - P[2]) * u + z1) - Rv[2]) / M[2];
+    else return 2.0f;
+    if(!(v >= 0.0f) || v > 1.0f) return 2.0f;
+    return u;
+}
+
+/* a car put back to where it was at the share `best` of the step (0x245a3): place, turns, corners, wheels' places, springs */
+static void put_back(struct s2car_state *c, float best)
+{
+    const float back = 1.0f - best;
+    F(c, 0x4d8) = s2car_placed(F(c, 0x734) * back + F(c, 0x4d8) * best);
+    F(c, 0x4e0) = s2car_placed(F(c, 0x73c) * back + F(c, 0x4e0) * best);
+    I(c, 0x4dc) = (int32_t)((float)I(c, 0x738) * back + (float)I(c, 0x4dc) * best);
+    static const uint16_t turn[3] = { 0x4e4, 0x4ec, 0x4e8 };
+    for(int k = 0; k < 3; k++) F(c, turn[k]) = ang_diff(F(c, turn[k]) * best, -F(c, turn[k] + 0x25c) * back);
+    for(int k = 0; k < 4; k++) {
+        const int now = 0x514 + 0xc * k, was = 0x770 + 0xc * k, w = 0x5a0 + 0x70 * k;
+        for(int q = 0; q < 3; q++) {
+            const float o = F(c, was + 4 * q) * back, m = F(c, now + 4 * q) * best;
+            F(c, now + 4 * q) = m + o;
+        }
+        static const uint8_t xyz[3] = { 0, 8, 4 };
+        for(int q = 0; q < 3; q++) I(c, w + xyz[q]) = (int32_t)((float)I(c, w + 0x25c + xyz[q]) * back + (float)I(c, w + xyz[q]) * best);
+        F(c, 0x588 + 0x70 * k) = back * F(c, 0x7e4 + 0x70 * k) + F(c, 0x588 + 0x70 * k) * best;
+    }
+}
+
+/* the push a touch gives the corners of one car (0x245a3's end): `r` is the speed the corner meets the edge at, turned for this car's side */
+static void push_corners(struct s2car_state *c, const float point[3], const float r[3])
+{
+    float centre[3];
+    corner_mean(c, 0x514, centre);
+    const float vx = point[0] - centre[0], vy = point[1] - centre[1], vz = point[2] - centre[2];
+    const float len = sqrtf(vy * vy + vx * vx + vz * vz);
+    float u[3] = { 0.0f, 0.0f, 0.0f };
+    if(len != 0.0f) { const float inv = 1.0f / len; u[0] = vx * inv; u[1] = vy * inv; u[2] = vz * inv; }
+    const float facing = ground_angle(u[0], u[2]);
+    const float dot = r[1] * u[1] + r[0] * u[0] + r[2] * u[2];
+    float along[3], across[3];
+    for(int k = 0; k < 3; k++) along[k] = u[k] * dot;
+    for(int k = 0; k < 3; k++) across[k] = r[k] - along[k];
+    for(int k = 0; k < 4; k++) {
+        const int corner = 0x514 + 0xc * k, push = 0x544 + 0xc * k;
+        const float cx = F(c, corner) - centre[0], cz = F(c, corner + 8) - centre[2];
+        const int32_t keep = I(c, push + 4);
+        const float ang = ground_angle(cx, cz);
+        const float w = (1.0f - fabsf(ang_diff(ang, facing)) / PI_F) * 0.3f;
+        const float rot = ang - facing;
+        const float sn = sinf(rot), cs = cosf(rot);
+        const float px = across[0] * cs - across[2] * sn, pz = across[2] * cs + across[0] * sn;
+        const float add[3] = { along[0] + px * w, along[1] + across[1] * w, along[2] + pz * w };
+        for(int q = 0; q < 3; q++) F(c, push + 4 * q) = add[q] + F(c, push + 4 * q);
+        I(c, push + 4) = keep;
+    }
+}
+
+/* the middles of two cars are nearer than `reach`, in all three ways (0x245a3's measure) or, with `game_push`, in the way 0x22d35 measures: along the ground in x and in
+   height, not in z (which would be the ground plane) -- and also in the ground plane, where the pair could not overlap otherwise */
+static int closer(const struct s2car_state *A, const struct s2car_state *B, float reach, int game_push)
+{
+    const float dx = F(B, 0x4d8) - F(A, 0x4d8), dz = F(B, 0x4e0) - F(A, 0x4e0), dh = (float)(I(B, 0x4dc) - I(A, 0x4dc));
+    if(game_push) return dx * dx + dh * dh < reach * reach && dx * dx + dz * dz < reach * reach;
+    return dx * dx + dh * dh + dz * dz < reach * reach;
+}
+
+/* 0x245a3, the sweep and, for the first touch, everything the game does at once; gives the share of the step at which it was, 2 for none. Only
+   the pairs of cars nearer than four of their lengths are swept (the game's own reach: a step is at most 280 units, a car 1,165 long with its outline). */
+static float touch_solver(void)
+{
+    struct outline ol[RACE_CARS];
+    const int n = R.n;
+    unsigned mask = 0;
+    for(int a = 0; a < n; a++)
+        for(int b = a + 1; b < n; b++)
+            if(closer(&R.car[a], &R.car[b], (float)(I(&R.car[a], 0x4d0) + I(&R.car[b], 0x4d0)) * 2.0f, 0)) mask |= (1u << a) | (1u << b);
+    if(!mask) return 2.0f;
+    for(int i = 0; i < n; i++) if(mask & (1u << i)) make_outline(&R.car[i], &ol[i]);
+    float best = 2.0f;
+    int ca = 0, cb = 0, corner = 0, edge = 0;
+    for(int a = 0; a < n; a++)
+        for(int b = 0; b < n; b++) {
+            if(a == b || !(mask & (1u << a)) || !(mask & (1u << b))) continue;
+            const float dx = ol[b].cx - ol[a].cx, dz = ol[b].cz - ol[a].cz, reach = ol[a].r + ol[b].r;
+            if(dx * dx + dz * dz >= reach * reach) continue;     /* (outlines whose circles are apart cannot touch in this step) */
+            for(int c = 0; c < 4; c++)
+                for(int e = 0; e < 4; e++) {
+                    const float t = gate(ol[a].old[c], ol[a].now[c], ol[b].old[edge_a[e]], ol[b].now[edge_a[e]], ol[b].old[edge_b[e]], ol[b].now[edge_b[e]]);
+                    if(!(t >= best)) { ca = a; cb = b; corner = c; edge = e; best = t; }
+                }
+        }
+    if(!(best < 2.0f)) return 2.0f;
+    struct s2car_state *A = &R.car[ca], *B = &R.car[cb];
+    I(A, 0x4c) |= 8; F(A, 0x30) = 1.0f;
+    I(B, 0x4c) |= 8; F(B, 0x30) = 1.0f;
+    for(int i = 0; i < n; i++) if(I(&R.car[i], 0x4c) & 8) put_back(&R.car[i], best);
+    const int ei = edge_a[edge], ej = edge_b[edge];
+    float point[3], d0, d1;
+    for(int k = 0; k < 3; k++) point[k] = F(A, 0x514 + 0xc * corner + 4 * k);
+    {
+        float x[3], y[3];
+        for(int k = 0; k < 3; k++) { x[k] = F(B, 0x514 + 0xc * ei + 4 * k) - point[k]; y[k] = F(B, 0x514 + 0xc * ej + 4 * k) - point[k]; }
+        d0 = sqrtf(x[1] * x[1] + x[0] * x[0] + x[2] * x[2]);
+        d1 = sqrtf(y[1] * y[1] + y[0] * y[0] + y[2] * y[2]);
+    }
+    const float s = d0 / (d0 + d1), om = 1.0f - s;
+    float rel[3];
+    for(int k = 0; k < 3; k++) {
+        const float bj = F(B, 0x544 + 0xc * ej + 4 * k) * s, bi = F(B, 0x544 + 0xc * ei + 4 * k) * om;
+        rel[k] = (F(A, 0x544 + 0xc * corner + 4 * k) - bi) - bj;
+    }
+    const float knock = sqrtf(rel[1] * rel[1] + rel[0] * rel[0] + rel[2] * rel[2]);
+    if((ca == 0 || cb == 0) && knock > knock_max) knock_max = knock;     /* heard (s2sound.c) */
+    s2car_knock(A, corner == 1 || corner == 3 ? 3 : 1, corner, 1.0f, knock, R.damages[race_level]);
+    s2car_knock(B, edge, s >= 0.5f ? ej : ei, fabsf(s + -0.5f) * 2.0f, knock, R.damages[race_level]);
+    const float ra[3] = { -rel[0], -rel[1], -rel[2] };
+    push_corners(A, point, ra);
+    push_corners(B, point, rel);
+    return best;
+}
+
+/* Two cars pushed apart (0x20a18): a corner of one inside the other's outline (the corners 1.4 times as far from their mean) is taken back along the line
+   between the two middles to that outline's edge; the deepest of these moves one car back and the other on by that share of the line, the corners' places
+   (+0x514 and +0x770) in x and z. Two cars both under speed 5 and not already turned (+0x58) that are nearer each other nose to tail than three of the
+   first one's width are turned away from each other (+0x54, +0x58). */
+static void push_apart(struct s2car_state *A, struct s2car_state *B)
+{
+    float ca[3], cb[3], dir[3], C[4][2][3];
+    for(int k = 0; k < 3; k++) {
+        const int pa = 0x514 + 4 * k;
+        ca[k] = (((F(A, pa + 0x18) + F(A, pa)) + F(A, pa + 0x24)) + F(A, pa + 0xc)) * 0.25f;
+        cb[k] = (((F(B, pa + 0x18) + F(B, pa)) + F(B, pa + 0x24)) + F(B, pa + 0xc)) * 0.25f;
+        dir[k] = cb[k] - ca[k];
+    }
+    for(int c = 0; c < 4; c++)
+        for(int k = 0; k < 3; k++) {
+            C[c][0][k] = (F(A, 0x514 + 0xc * c + 4 * k) - ca[k]) * 1.4f + ca[k];
+            C[c][1][k] = (F(B, 0x514 + 0xc * c + 4 * k) - cb[k]) * 1.4f + cb[k];
+        }
+    const float sn = sinf(HALF_PI_F), cs = cosf(HALF_PI_F);
+    float deepest = 0.0f, T = 0.0f, U = 0.0f;
+    for(int pass = 0; pass < 2; pass++) {
+        const int mine = pass, theirs = !pass;          /* A's corners in B's outline, then B's in A's */
+        for(int c = 0; c < 4; c++) {
+            const float *P = C[c][mine];
+            int inside = 1;
+            float first = 0.0f;
+            for(int e = 0; e < 4; e++) {
+                const float *Q = C[edge_a[e]][theirs], *Rp = C[edge_b[e]][theirs];
+                const float ex = Rp[0] - Q[0], ey = Rp[1] - Q[1], ez = Rp[2] - Q[2];
+                const float nx = ex * cs - ez * sn, nz = ez * cs + ex * sn;
+                const float vx = P[0] - Q[0], vy = P[1] - Q[1], vz = P[2] - Q[2];
+                const float side = vy * ey + vx * nx + vz * nz;
+                if(e == 0) first = side;
+                else if(0.0f > side * first) inside = 0;
             }
-            if(apart) continue;
-            for(int w = 0; w < 2; w++) {                /* apart, half each: the middle and the corners, x and z */
-                struct s2car_state *C = w ? B : A;
-                const float sx = (w ? 0.5f : -0.5f) * pen * n[0], sz = (w ? 0.5f : -0.5f) * pen * n[1];
-                F(C, 0x4d8) += sx; F(C, 0x4e0) += sz;
-                for(int k = 0; k < 4; k++) { F(C, 0x514 + 0xc * k) += sx; F(C, 0x51c + 0xc * k) += sz; }
-            }
-            float va[2] = { 0, 0 }, vb[2] = { 0, 0 };   /* the mean speed of the four corners */
-            for(int k = 0; k < 4; k++) {
-                va[0] += F(A, 0x544 + 0xc * k) * 0.25f; va[1] += F(A, 0x54c + 0xc * k) * 0.25f;
-                vb[0] += F(B, 0x544 + 0xc * k) * 0.25f; vb[1] += F(B, 0x54c + 0xc * k) * 0.25f;
-            }
-            const float vn = (va[0] - vb[0]) * n[0] + (va[1] - vb[1]) * n[1];
-            if(vn <= 0.0f) continue;                    /* already parting */
-            if((a == 0 || b == 0) && vn > knock_max) knock_max = vn;    /* heard (s2sound.c) */
-            for(int k = 0; k < 4; k++) {
-                F(A, 0x544 + 0xc * k) -= vn * n[0]; F(A, 0x54c + 0xc * k) -= vn * n[1];
-                F(B, 0x544 + 0xc * k) += vn * n[0]; F(B, 0x54c + 0xc * k) += vn * n[1];
+            if(!inside) continue;
+            for(int e = 0; e < 4; e++) {
+                const float *Q = C[edge_a[e]][theirs], *Rp = C[edge_b[e]][theirs];
+                const float E[3] = { Rp[0] - Q[0], Rp[1] - Q[1], Rp[2] - Q[2] };
+                s2car_lines_meet(P, dir, Q, E, &T, &U);
+                if(!pass) T = -T;
+                if(!(U >= 0.0f) || U > 1.0f) continue;
+                if(T > deepest) deepest = T;
             }
         }
+    }
+    if(!(deepest > 0.0f)) return;
+    const float px = dir[0] * deepest, pz = dir[2] * deepest;
+    for(int c = 0; c < 4; c++) {
+        const int at = 0x514 + 0xc * c, was = 0x770 + 0xc * c;
+        F(A, at) -= px; F(A, at + 8) -= pz;
+        F(A, was) -= px; F(A, was + 8) -= pz;
+        F(B, at) += px; F(B, at + 8) += pz;
+        F(B, was) += px; F(B, was + 8) += pz;
+    }
+    if(F(A, 0x500) < 5.0f && F(B, 0x500) < 5.0f && I(A, 0x58) == 0 && I(B, 0x58) == 0) {
+        const float x1 = F(A, 0x52c) - F(B, 0x514), z1 = F(A, 0x534) - F(B, 0x51c);
+        const float x2 = F(A, 0x514) - F(B, 0x52c), z2 = F(A, 0x51c) - F(B, 0x534);
+        const float l1 = sqrtf(0.0f * 0.0f + x1 * x1 + z1 * z1), l2 = sqrtf(0.0f * 0.0f + x2 * x2 + z2 * z2);
+        if((float)(I(A, 0x4c8) * 3) > l2 + l1) {
+            struct s2car_state *both[2] = { A, B };
+            for(int i = 0; i < 2; i++) {
+                F(both[i], 0x54) = ang_diff(F(both[i], 0x4e8), 0.628318548f);
+                I(both[i], 0x58) = 0.0f > ang_diff(F(both[i], 0x54), F(both[i], 0x4e8)) ? -1 : 1;
+            }
+        }
+    }
+}
+
+/* Cars touching, in the game's order (0x2baa4 after every car's passes up to the step on the ground): the solver and, if it found a touch, the walls and ground
+   of every car again and the rest of the step for the two cars; then every pair that still overlaps pushed apart (0x22d35). In pieces, one a call, the way the
+   viewer wants its slices (a touch costs about as much as three cars' steps, which are the biggest piece it fits into the gaps of the drawing): each call does the next
+   piece and says whether another follows. A car that is neither one of the two nor against a wall has nothing for the walls and ground to find the second time, they are not run
+   for it. */
+static struct { int phase, car; float rest; } touching;
+
+static int collide_slice(void)
+{
+    if(touching.phase == 0) {                           /* the solver */
+        const float best = touch_solver();
+        touching.rest = (1.0f - best) * DT;
+        touching.car = 0;
+        if(best < 2.0f && touching.rest > 0.005f) {
+            touching.phase = 1;
+            return 1;
+        }
+        touching.phase = 3;                             /* (no touch, or one with nothing left of the step to run: on to the pairs) */
+    }
+    if(touching.phase == 1) {                           /* the walls and ground of the cars again (0x16824) */
+        for(int i = 0; i < R.n; i++) if((I(&R.car[i], 0x4c) & 8) || I(&R.car[i], 0x150)) s2car_walls(&R.car[i]);
+        touching.phase = 2;
+        return 1;
+    }
+    if(touching.phase == 2) {                           /* the rest of the step, a car a call */
+        while(touching.car < R.n && !(I(&R.car[touching.car], 0x4c) & 8)) touching.car++;
+        if(touching.car < R.n) {
+            s2car_move_again(&R.car[touching.car++], touching.rest);
+            return 1;
+        }
+        touching.phase = 3;
+    }
+    for(int a = 0; a < R.n; a++)                        /* the pairs that overlap */
+        for(int b = a + 1; b < R.n; b++) {
+            struct s2car_state *A = &R.car[a], *B = &R.car[b];
+            if(closer(A, B, (float)(I(A, 0x4d0) + I(B, 0x4d0)), 1)) push_apart(A, B);
+        }
+    touching.phase = 0;
+    return 0;
 }
 
 /* ------------------------------------------------------------------------------------------------ the race */
@@ -642,6 +915,7 @@ int race_init(int track, float floor_z)
     R.gclock = 0.0f;
     R.grunning = 0;
     respawns = 0;
+    touching.phase = 0;
     memset(R.off, 0, sizeof R.off);
     memset(R.still, 0, sizeof R.still);
     /* four cars on the grid, or in time attack the player's and the ghost's side by side, or the free run's one */
@@ -741,11 +1015,14 @@ static void ghost_step(void)
     human_step(1, &in, R.grunning);
 }
 
-/* the second half of `count` steps: the three computer cars (each step's physics and driver), the cars touching, the cars
-   off the road. The viewer runs it while the pieces are handed to the hardware and the rasterizer finishes the picture: the
+/* the second half of `count` steps, in the game's order (0x2baa4): the three computer cars' passes over tyres, walls and ground (s2car_move), the cars
+   touching (the solver and what it sets off: collide_slice()), then what each computer does with the step's controls (s2car_finish_driven: the engine, the
+   driver) and the cars off the road. The viewer runs it while the pieces are handed to the hardware and the rasterizer finishes the picture: the
    computers' cars are drawn from the step before (road_race_scene copies the poses before the first slice), a 20 ms lag nobody sees, and their
-   physics costs the frame no time where the hardware is the bound. In slices (one car's step, or the rest of a step) so that the viewer can run
-   them while the geometry unit is behind (race_others_slice); the order of the steps is the same as in one go. */
+   physics costs the frame no time where the hardware is the bound. In slices (one car's part of a step, or the cars touching, or the rest of a step)
+   so that the viewer can run them while the geometry unit is behind (race_others_slice); the order is the same as in one go. The player's car has
+   done all of its step before the first slice (race_step_player): where a touch puts it back and runs the rest of the step again, its controls are those
+   of the whole step and its engine, wheels' picture and outputs are not worked out again. */
 static struct { uint32_t left; int stage; } others;
 
 void race_others_begin(uint32_t count)
@@ -757,26 +1034,37 @@ void race_others_begin(uint32_t count)
 int race_others_slice(void)
 {
     if(!others.left) return 0;
-    if(others.stage < R.n) {
-        const int i = others.stage++;
-        if(R.kind != RACE_NORMAL) {                     /* time attack: the ghost (car 1), stepped by its controls; nothing collides with it */
+    const int n = R.n;
+    if(R.kind != RACE_NORMAL) {                         /* time attack: the ghost (car 1), stepped by its controls; nothing collides with it */
+        if(others.stage < n) {
+            others.stage++;
             ghost_step();
             return 1;
         }
-        struct s2car_state *c = &R.car[i];
-        if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }
-        PF_VAR(pf);
-        s2car_step_driven(c, driver, (void *)(intptr_t)i);
-        PF_ADD(PF_AI_STEP, pf);
-        return 1;
-    }
-    if(R.kind != RACE_NORMAL) {
         others.stage = 1;
         return --others.left != 0;
     }
-    PF_VAR(pc);
-    collide();
-    PF_ADD(PF_COLLIDE, pc);
+    if(others.stage < n) {                              /* a computer's car: the tyres, walls and ground, the step on the ground */
+        PF_VAR(pf);
+        s2car_move(&R.car[others.stage++], 1);
+        PF_ADD(PF_AI_STEP, pf);
+        return 1;
+    }
+    if(others.stage == n) {                             /* the cars touching */
+        PF_VAR(pc);
+        if(!collide_slice()) others.stage++;
+        PF_ADD(PF_COLLIDE, pc);
+        return 1;
+    }
+    if(others.stage < 2 * n) {                          /* its clocks, the engine, the driver */
+        const int i = others.stage++ - n;
+        struct s2car_state *c = &R.car[i];
+        if(R.running && !(I(c, 0x4c) & 2)) { F(c, 0xc38) += DT; F(c, 0xc3c) += DT; }
+        PF_VAR(pf);
+        s2car_finish_driven(c, driver, (void *)(intptr_t)i);
+        PF_ADD(PF_AI_STEP, pf);
+        return 1;
+    }
     for(int i = 0; i < R.n; i++) {                      /* a car off the road for good goes back onto the line */
         struct s2car_state *c = &R.car[i];
         R.off[i] = c->off_track ? R.off[i] + 1 : 0;
