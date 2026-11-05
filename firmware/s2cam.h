@@ -38,5 +38,5 @@ int s2cam_get_follow(void);
 void s2cam_next_car(int ncars);                 /* F11 */
 
 /* The camera of this frame in *cam: `dt` seconds have passed since the last (the drifting and the circling cameras go by it). The chase camera view 3 is the followed car's
-   own (s2car_state.cam, kept by its steps); *cam is not touched in view 3 when that car has none worked out. */
+   own (s2car_state.cam, kept by its steps; all zero until it has one worked out: the viewer sets cam_on on the car followed). */
 void s2cam_frame(const struct s2car_state *const *cars, int n, float dt, struct track_cam *cam);

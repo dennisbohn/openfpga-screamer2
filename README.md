@@ -31,7 +31,8 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   after each, what winning opens; docs/development.md "The championship"), TIME ATTACK (TRACK SELECTION with the turning 3D map, 3 LAPS or FREE RUN with its five splits, the race against the ghost
   of the track's best run, re-simulated from recorded controls; docs/development.md "Time attack"), laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL, PRO), START RACE
   (the race at once; left / right the track 1 to 7) and WATCH (the ride). Everything is open from the start. d-pad up/down row, left/right value, L / R three
-  tracks on or back; Start in the race opens the pause menu (RESUME, RESTART, EXIT), and after a finished race A races again, B goes to the menu. The choices
+  tracks on or back; Start in the race opens the pause menu (RESUME, RESTART, EXIT); the end screen of an arcade or championship race offers REPLAY (the race run again from the player's recorded
+  controls, from the trackside cameras with the original's band; docs/development.md "Replay"). The choices
   are kept across power-ups. Docs: docs/development.md, "Start menu".
 - **Driving mode (a race):** the race of the start menu (or Start in the ride) puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
