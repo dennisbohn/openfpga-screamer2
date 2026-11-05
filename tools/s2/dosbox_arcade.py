@@ -26,6 +26,11 @@ its 3 LAPS / FREE RUN choice, and with `race` a race of one lap (the game's lap 
 end screen (TOTAL / LAP TIME, then the list); with `free` the free run with the car handed to the driver: the race screen with the five markers' list, the numbers of which
 (the text tables at 0x132fc8 and 0x133000) go to ram_*.txt. `--timeattack --check` compares the screenshots with the models (tools/ui_ta_ref.py). Needs the window in front
 for about 3 to 6 minutes a run.
+
+--replay (menus row 10): the arcade's race of one lap on England with the player's car handed to the game's driver, the end screen (the first four seconds, then REPLAY | RACE AGAIN | EXIT in thirds), ENTER on
+REPLAY and 33 samples of the replay with F11 (the next car), F1 and F9 pressed: the screenshots go to build/check/dosbox_replay/ with replay_<label>.txt (the camera record, the recorder's words and the cars from
+the game's memory); `--replay --check` compares the end screen's and the band's text pixels with the models and the camera record with the formulas of firmware/s2cam.c. The keys are the original's. Needs the window
+in front for about 7 minutes. Only the DOSBox this script started is keyed and written to (it is found by its configuration file): the owner may have another one running.
 """
 import atexit
 import ctypes
@@ -69,7 +74,16 @@ def press(sc, ext=False):
     time.sleep(0.12)
 
 
-def dosbox_pid():
+def dosbox_pid(marker=None):
+    """the DOSBox this script started (the one whose command line has `marker`, its configuration file) or, without a marker, the first one: another DOSBox may be running (the
+    owner playing), which must never be sent keys or have its memory written"""
+    if marker:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='dosbox.exe'\" | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CommandLine }"],
+                             capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            if marker.replace("/", "\\").lower() in line.replace("/", "\\").lower():
+                return int(line.split()[0])
+        return None
     out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True).stdout
     for line in out.splitlines():
         f = [x.strip('"') for x in line.split('","')]
@@ -216,6 +230,26 @@ class Mem:
         lines = ["%06x %s" % (a, self.g.flat(a, n).hex()) for a, n in ranges]
         open(os.path.join(folder, "bytes_%s.txt" % label), "w").write("\n".join(lines) + "\n")
 
+    def camera(self):
+        """the camera record (0xaec bytes at the pointer 0x1192f4), the car it follows (its number, from the pointer at +0xadc) and that car's object, the place the camera uses (car +0x990:
+        x, height, z as whole numbers, three angles, the speed at +0x28): (record bytes, car number or -1, object bytes)"""
+        cam = self.g.ptr(self.word(0x1192f4), 0xaec)
+        car = self.g.to_flat(struct.unpack_from("<I", cam, 0xadc)[0])
+        idx = (car - 0x119300) // 0xcc0 if car else -1
+        obj = self.g.ptr(struct.unpack("<I", self.g.flat(car + 0x990, 4))[0], 0x40) if car else b""
+        return cam, idx, obj
+
+    def replay_state(self, label, folder):
+        """the state of a replay (or of the race) for check_replay(): replay_<label>.txt with the kind of game word, the race flags, the recorder's words (0x1330b4 on, 0x1330b8 reading,
+        0x1330d0 frames written, 0x1330bc the most, 0x1330c0 the place in a replay), the camera record and its car's object, and each car's flags, laps, place, time, place on the road, speed"""
+        cam, idx, obj = self.camera()
+        lines = ["mode %d" % self.word(0x130d10), "flags %d" % self.word(0x11f0a8), "rec " + " ".join(str(self.word(a)) for a in (0x1330b4, 0x1330b8, 0x1330d0, 0x1330bc, 0x1330c0)),
+                 "follow %d" % idx, "cam " + cam.hex(), "obj " + obj.hex()]
+        for i in range(4):
+            c, e = 0x119300 + 0xcc0 * i, 0x130c58 + 0x2c * i
+            lines.append("car %d %s" % (i, " ".join(str(self.word(a)) for a in (c + 0x4c, c + 0x4a8, c + 0xc30, c + 0xc38, c + 0x4d8, c + 0x4dc, c + 0x4e0, c + 0x500, e, e + 4))))
+        open(os.path.join(folder, "replay_%s.txt" % label), "w").write("\n".join(lines) + "\n")
+
     def finished(self):
         """the player's car has done its laps (the flag +0x4c bit 1 of its record)"""
         ok = self.wait(lambda: self.word(0x11934c) & 2, 260)
@@ -241,7 +275,7 @@ def session(steps):
     p = subprocess.Popen([game + "/DOSBOX/dosbox.exe", "-conf", game + "/dosbox_screamer2.conf", "-conf", conf, "-noconsole"], cwd=work)
     atexit.register(p.kill)                     # (our own DOSBox goes with the script, also when a step fails)
     time.sleep(2)
-    pid = dosbox_pid() or p.pid
+    pid = dosbox_pid(conf) or p.pid
     label, shots, times, mem = "", [], [], None
     for st in steps.split():
         if st[0] == "w":
@@ -259,8 +293,14 @@ def session(steps):
                     mem.race(work, 4, 1)
                 elif st[1:] == "free":
                     mem.race(work, 8)
+                elif st[1:] == "arc":                       # --replay: the arcade's race (mode 1), one lap
+                    mem.race(work, 1)
                 else:
                     mem.finished()
+        elif st[0] == "P":                      # --replay: P<label> the camera record, the recorder's words and the cars to replay_<label>.txt
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.replay_state(st[1:], work)
         elif st[0] == "T":                      # --timeattack: T<label> time attack's lists to bytes_<label>.txt
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -687,8 +727,199 @@ def check_league(shots):
     return bad
 
 
+# ------------------------------------------------------------------------------------------------ the replay (menus row 10)
+
+def replay():
+    """the replay against the running original (see the header): the arcade's race of one lap on England with the player's car handed to the game's driver (the recorder then keeps what
+    a car without controls has: the replay's car does not drive the race it was recorded in, so the replay is looked at for what it shows and does, not for the race it replays), the
+    camera record and the cars at the finish, the end screen's choices (REPLAY first, in thirds), ENTER on REPLAY, the replay: the trackside cameras, the band, F11 the next car, F4 the
+    chase camera and F1 the car's own view (the band's words), and the end of it. The keys are the original's (ENTER 0x1c, ESC 0x01, F1 0x3b, F4 0x3e, F11 0x57, arrows extended)."""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox_replay")
+    atexit.register(drop_junctions)
+    make_private(0, team=0, car=1, name="MIL", laps=0)
+    steps = (
+        # the attract sequence plays while the game's memory is looked for; ENTER: TEAM SELECTION, the name, the options room (ARCADE), the title, the TRACK page (England), the CAR page,
+        # the TRANSMISSION page, then the loading screen and the race
+        "w3 M k1c w6 k1c w6 k1c w6 k1c w9 k1c w4 k1c w5 k1c w2 k1c w3 "
+        # the race: the car to the game's driver after 20 s, the lap; the camera at the finish (the cut to the trackside cameras), the end screen's first four seconds, its choices
+        "Xarc Pgrid Xfin w0.4 Pfin Lend_cong r2,0.5 w1.8 Lend_box r1,0.5 Dend Lend_c0 r4,0.45 ke4d w0.4 Lend_c1 r3,0.45 ke4d w0.4 Lend_c2 r2,0.45 ke4b w0.3 ke4b w0.4 Lend_c0b r3,0.45 "
+        # ENTER on REPLAY: the replay; the cameras, one sample a few seconds; F11 follows the next car (twice), F4 the chase camera, F1 the car's own view, F9 the trackside again
+        "k1c w2.5 Lrp_0 r1,0 Prp_0 w5 Lrp_1 r1,0 Prp_1 w5 Lrp_2 r1,0 Prp_2 w5 Lrp_3 r1,0 Prp_3 w5 Lrp_4 r1,0 Prp_4 "
+        "k57 w0.8 Lrp_5 r1,0 Prp_5 w4 Lrp_6 r1,0 Prp_6 k57 w0.8 Lrp_7 r1,0 Prp_7 w4 Lrp_8 r1,0 Prp_8 "
+        "k3e w0.8 Lrp_9 r1,0 Prp_9 w4 Lrp_10 r1,0 Prp_10 k3b w0.8 Lrp_11 r1,0 Prp_11 w3 k43 w0.8 Lrp_12 r1,0 Prp_12 "
+        "w5 Lrp_13 r1,0 Prp_13 w5 Lrp_14 r1,0 Prp_14 w5 Lrp_15 r1,0 Prp_15 w5 Lrp_16 r1,0 Prp_16 w5 Lrp_17 r1,0 Prp_17 w5 Lrp_18 r1,0 Prp_18 w5 Lrp_19 r1,0 Prp_19 "
+        "w5 Lrp_20 r1,0 Prp_20 w5 Lrp_21 r1,0 Prp_21 w5 Lrp_22 r1,0 Prp_22 w5 Lrp_23 r1,0 Prp_23 w5 Lrp_24 r1,0 Prp_24 w5 Lrp_25 r1,0 Prp_25 w5 Lrp_26 r1,0 Prp_26 "
+        "w5 Lrp_27 r1,0 Prp_27 w5 Lrp_28 r1,0 Prp_28 w5 Lrp_29 r1,0 Prp_29 w5 Lrp_30 r1,0 Prp_30 w5 Lrp_31 r1,0 Prp_31 w5 Lrp_32 r1,0 Prp_32 "
+        "q"
+    )
+    shots = session(steps)
+    print(f"{len(shots)} screenshots in {work}")
+
+
+def read_replay_state(label):
+    """replay_<label>.txt of Mem.replay_state(): {"cam": bytes, "obj": bytes, "mode", "flags", "rec": [...], "follow", "cars": [[...] ...]}"""
+    st = {"cars": []}
+    for line in open(os.path.join(work, "replay_%s.txt" % label)):
+        k, _, rest = line.rstrip("\n").partition(" ")
+        if k in ("cam", "obj"):
+            st[k] = bytes.fromhex(rest)
+        elif k == "car":
+            st["cars"].append([int(v) for v in rest.split()[1:]])
+        elif k == "rec":
+            st[k] = [int(v) for v in rest.split()]
+        else:
+            st[k] = int(rest)
+    return st
+
+
+def wrap_angle(a):
+    import math
+    while a > math.pi:
+        a -= 2 * math.pi
+    while a < -math.pi:
+        a += 2 * math.pi
+    return a
+
+
+def camera_model(st):
+    """one sample of the original's camera record against the routines written again (tools/s2/check_replay_s2.c has the firmware's, compared with the same formulas): returns
+    (view, shot, kind, consistent, errors) where consistent: the camera looks at the car's object as it is now (a sample taken between the car's step and the camera's does not),
+    errors: what differs from the formulas (place and angles) for a consistent sample"""
+    import math
+    cam, obj = st["cam"], st["obj"]
+    view, shot, n = struct.unpack_from("<i", cam, 0xae4)[0], struct.unpack_from("<i", cam, 0x24)[0], struct.unpack_from("<i", cam, 0xa60)[0]
+    if view != 1 or not 0 <= shot < n:
+        return view, shot, -1, False, {}
+    row = struct.unpack_from("<3i3fif", cam, 0x60 + 0x20 * shot)
+    kind, fig = row[6], row[7]
+    cx, ch, cz = struct.unpack_from("<3i", cam, 0x48)
+    pitch, yaw, roll = struct.unpack_from("<3f", cam, 0x54)
+    ox, oh, oz = struct.unpack_from("<3i", obj, 0)
+    dx, dy, dz = cx - ox, ch - oh, cz - oz
+    flat = math.hypot(dx, dz)
+    a = abs(math.acos(flat / math.sqrt(dx * dx + dy * dy + dz * dz))) if flat else 0.0
+    want_yaw = math.atan2(dz, dx) - math.pi / 2
+    want_pitch = a if dy < 0 else -a
+    looks = abs(wrap_angle(yaw - want_yaw)) < 0.01 and abs(wrap_angle(pitch - want_pitch)) < 0.01
+    err = {}
+    if kind == 0:                                       # fixed: the row's place and angles, whatever the car does
+        err["place"] = max(abs(cx - row[0]), abs(ch - row[1]), abs(cz - row[2]))
+        err["angles"] = max(abs(wrap_angle(pitch - row[3])), abs(wrap_angle(yaw - row[4])), abs(roll - row[5]))
+        return view, shot, kind, True, err
+    if not looks:
+        return view, shot, kind, False, {}
+    err["roll"] = abs(roll - (row[5] if kind in (1, 2) else 0.0))
+    if kind == 2:                                       # between the car and the row
+        share = 0.8 - fig * 0.75
+        err["place"] = max(abs(cx - int((row[0] - ox) * share + ox)), abs(ch - int((row[1] - oh) * share + oh)), abs(cz - int((row[2] - oz) * share + oz)))
+    elif kind == 3:                                     # 1100 round the car, 440 +- 220 up
+        err["place"] = max(abs(flat - 1100.0), 0 if 220 <= dy <= 660 else 1)
+    elif kind == 4:                                     # a place from the car turned by the row's heading + pi
+        x0, z0, ang = int(fig * 500 + 1320), 0.0, row[4] + math.pi
+        tx, tz = z0 * math.sin(ang) + x0 * math.cos(ang), z0 * math.cos(ang) - x0 * math.sin(ang)
+        err["place"] = max(abs(cx - (ox + int(tx))), abs(ch - (oh + int(fig * 200 + 550))), abs(cz - (oz + int(tz))))
+    return view, shot, kind, True, err
+
+
+def check_replay(shots):
+    """the replay run's screenshots and states against the models: the end screen's choices (REPLAY | RACE AGAIN | EXIT in thirds), the replay's band, and the camera record against the
+    formulas of the five kinds of camera; what each shows is printed"""
+    sys.path.insert(0, os.path.join(root, "tools"))
+    import hud_reference as hr
+    import ui_reference as ur
+    graf = ur.container(game, "GFX/GRAF1.DAT")
+    fnt = ur.fonts(ur.datfile.extract(graf, "MENUL.FNT"))
+    local = ur.container(game, "DATA/LOCAL.DAT")
+    gtxt = [s for s in ur.datfile.extract(local, "GAME.TXT").decode("latin-1").replace("\r", "").split("\n") if s and not s.startswith("*")]
+    strings = [s for s in ur.datfile.extract(local, "STRINGS.TXT").decode("latin-1").replace("\r", "").split("\n") if s and not s.startswith("*")]
+    teams = strings[strings.index("CONDOR"):strings.index("CONDOR") + 4]
+    hud = hr.Hud(game)
+    words = {1: "EXTERNAL", 2: "INCAR", 3: "BACK", 4: "NEAR", 6: "INSIDE"}
+    bad = 0
+    kinds_ok, kinds_seen, inconsistent = {}, {}, 0
+    for png, label in shots:
+        name = os.path.basename(png)
+        idx = read_png(png)
+        if label == "end_cong":                         # the first four seconds: CONGRATULATIONS ! (first place), "1ST POSITION", the total time, from the numbers in the game's memory
+            ram = read_ram("end")
+            place, ptime = ram[0x119300 + 0xc30], float_of(ram[0x119300 + 0xc38])
+            c = hr.Canvas()
+            if place == 1:
+                c.text_boxed(fnt[1], 1, 2, 0, 320, 70, gtxt[5])
+            c.text_boxed(fnt[1], 1, 2, 0, 320, 100, gtxt[place - 1] + " " + gtxt[4])
+            c.text_boxed(fnt[1], 1, 2, 0, 320, 130, ur.time_text(ptime))
+            drawn = [i for i in range(64000) if c.px[i]]
+            d = sum(1 for i in drawn if idx[i] != c.px[i])
+            bad += d != 0
+            print(f"{name} {label:12s} {'equal' if d == 0 else 'differs by %d of %d' % (d, len(drawn))} ({gtxt[place - 1]} {gtxt[4]}, {ur.time_text(ptime)})")
+            continue
+        if label.startswith("end_c"):                   # the choices over the band: REPLAY lit or not (the blink), the others dark
+            best = None
+            for lit in (0, 1, 2, 3):
+                c = hr.Canvas()
+                for k in range(3):
+                    on = lit == k
+                    c.text_boxed(fnt[3 if on else 2], 3 if on else 1, 2, 106 * k, 106, 184, gtxt[11 + k])
+                drawn = [i for i in range(64000) if c.px[i]]
+                d = sum(1 for i in drawn if idx[i] != c.px[i])
+                if best is None or d < best[0]:
+                    best = (d, lit)
+            ok = best[0] == 0
+            bad += not ok
+            print(f"{name} {label:12s} {'equal' if ok else 'differs by %d' % best[0]} (the choices' text, {'none lit' if best[1] == 3 else 'choice %d lit' % best[1]})")
+            continue
+        if not label.startswith("rp_"):
+            print(f"{name} {label:12s} (looked at, not compared)")
+            continue
+        st = read_replay_state(label)                   # the same label: the state taken just after the screenshot
+        cam = st["cam"]
+        view = struct.unpack_from("<i", cam, 0xae4)[0]
+        who = st["follow"]
+        done = st["cars"][0][0] & 1
+        if st["mode"] & 0x100 and not done and who >= 0 and view in words:    # the band: TEAM - VIEW of the car followed while the player's car runs
+            text = "%s - %s" % (teams[st["cars"][who][8]], words[view])
+            c = hr.Canvas()
+            hud.put_text(c, 0, 1, 2, 10, 180, text)
+            drawn = [i for i in range(64000) if c.px[i]]
+            d = sum(1 for i in drawn if idx[i] != c.px[i])
+            ok = d == 0
+            bad += not ok
+            print(f"{name} {label:12s} band {text!r}: {'equal' if ok else 'differs by %d of %d pixels' % (d, len(drawn))}")
+        else:
+            print(f"{name} {label:12s} no band expected (mode {st['mode']:#x}, player done {done}, view {view}, follows car {who})")
+        v, shot, kind, consistent, err = camera_model(st)
+        if kind >= 0:
+            kinds_seen[kind] = kinds_seen.get(kind, 0) + 1
+            if not consistent:
+                inconsistent += 1
+            elif all(e < (2.5 if k == "place" else 0.01) for k, e in err.items()):
+                kinds_ok[kind] = kinds_ok.get(kind, 0) + 1
+            else:
+                bad += 1
+                print(f"    camera {shot} (kind {kind}) differs from the formulas: {err}")
+    for name in ("grid", "fin"):                        # the grid: the player's own chase camera; the finish: the cut to the trackside cameras following the player's car
+        try:
+            st = read_replay_state(name)
+        except FileNotFoundError:
+            continue
+        view = struct.unpack_from("<i", st["cam"], 0xae4)[0]
+        print(f"state {name}: kind of game word {st['mode']:#x}, camera view {view} following car {st['follow']}, player's flags {st['cars'][0][0]:#x}, recorder {st['rec']}")
+    print(f"cameras of the replay: kinds seen {dict(sorted(kinds_seen.items()))}, equal to the formulas {dict(sorted(kinds_ok.items()))}, taken between the car's step and the camera's {inconsistent}")
+    return bad
+
+
 def main():
     global work
+    if "--replay" in sys.argv:
+        work = os.path.join(root, "build", "check", "dosbox_replay")
+        if "--check" not in sys.argv:
+            replay()
+        files = sorted(glob.glob(os.path.join(work, "*.png")))
+        labels = open(os.path.join(work, "labels.txt")).read().split()
+        bad = check_replay(list(zip(files, labels)))
+        print(f"{len(files)} screenshots, {bad} not as the models have them")
+        sys.exit(1 if bad else 0)
     if "--league" in sys.argv:
         work = os.path.join(root, "build", "check", "dosbox_league")
         if "--check" not in sys.argv:
