@@ -68,6 +68,13 @@ uint32_t s2scene_entry(struct s2_cont *c, const char *name, uint8_t *out, uint32
 
 static struct su_view view = { S3D_CX * 16, S3D_CY * 16, 128 * 16, (int32_t)((43808.0f + 128.0f) * 256.0f) };
 
+void s2scene_lens(int cx16, int cy16, int focal16)
+{
+    view.cx = cx16;
+    view.cy = cy16;
+    view.scale = (uint32_t)focal16;
+}
+
 void s2scene_begin(const uint8_t *mlb, int buffer, int fresh)
 {
     s2gfx_flush();                                          /* the picture (the list holds it): the blitter is done before the first piece */
@@ -112,8 +119,15 @@ void s2scene_object(const uint8_t *mesh, float x, float y, float z, int a0, int 
 {
     const float c = cosf(s2scene_rad(a0)), s = sinf(s2scene_rad(a0)), ch = cosf(s2scene_rad(a1)), sh = sinf(s2scene_rad(a1));
     /* the matrix: rows the track's world x, y, height = the engine's x, z, y; columns the block's x, y up, z. Turned about x, then about the vertical. */
-    *out = (struct track_block){ mesh, mesh + rd32(mesh + 0x18),
-                                 { ch, -sh * s, -sh * c, sh, ch * s, ch * c, 0.0f, c, -s }, { x, z, y }, phase };
+    const uint8_t *blk = mesh + rd32(mesh + 0x18);
+    const float m[9] = { ch, -sh * s, -sh * c, sh, ch * s, ch * c, 0.0f, c, -s };
+    /* a block with a position record (block +0x0C, its +0x10 .. +0x18 the block's place in the mesh's frame: a few units) is moved by it, turned with the object */
+    const int32_t so = rd32(blk + 0x0C);
+    const float t[3] = { so > 0 ? (float)rd32(mesh + so + 0x10) : 0.0f, so > 0 ? (float)rd32(mesh + so + 0x14) : 0.0f,
+                         so > 0 ? (float)rd32(mesh + so + 0x18) : 0.0f };
+    *out = (struct track_block){ mesh, blk, { m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8] },
+                                 { x + m[0] * t[0] + m[1] * t[1] + m[2] * t[2], z + m[3] * t[0] + m[4] * t[1] + m[5] * t[2],
+                                   y + m[6] * t[0] + m[7] * t[1] + m[8] * t[2] }, phase };
 }
 
 struct track_cam s2scene_camera(float x, float y, float z, float pitch)

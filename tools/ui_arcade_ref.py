@@ -43,12 +43,31 @@ class Ref:
         # the program draws line 15 of the table at 0x127ed8 (the pointer at 0x127f14) on the title page: the prompt
         assert self.lines[15] == "ACCELERATE TO CONTINUE", self.lines[15]
         self.team_names = self.lines[1:5]
+        # CARS.DTR's CAR_PARAMS: 22 words a car; the plate shows MAX_SPEED (word 0) and the drive from the shares of the two left wheels (words 13, 14: TRAZIONE)
+        import re
+        game_dat = container(game, "DATA/GAME.DAT")
+        text = datfile.extract(game_dat, "CARS.DTR").decode("latin-1").replace(chr(13), "").split(chr(10))
+        at = next(i for i, l in enumerate(text) if l.strip() == "CAR_PARAMS")
+        words = []
+        for line in text[at + 1:]:
+            for tok in re.sub(r"[*].*$", "", line).split():
+                if tok == "END_LIST":
+                    break
+                words.append(f32(float(tok[1:])) if tok[0] == "f" else float(int(tok[1:])))
+            else:
+                continue
+            break
+        assert len(words) == 20 * 22, len(words)
+        self.cars = [(words[22 * i], words[22 * i + 11:22 * i + 15]) for i in range(20)]
         self.cases, self.nframes = [], 0
 
     def canvas(self, name):
         c = self.h["Canvas"]()
         c.px[:] = self.pics[name][1]
         return c
+
+    def text(self, c, font, colour, space, x, y, txt):
+        c.text(self.fnt[font], colour, space, x, y, txt)
 
     def centred(self, c, font, colour, space, y, txt):
         w = c.text_width(self.fnt[font], space, txt)    # (the engine's measure, 0xc6c88: no gap after the last character)
@@ -132,52 +151,58 @@ class Ref:
                     c.sprite(s, 0, int(m.frame), 60)
         return M()
 
-    def car(self, state, car5):
+    def car(self, state, car5, second=False):
+        """the CAR page and the TRANSMISSION page: one page in two states (STARTL.EXE 0x40c31, the flag 0x1324c4). The model draws what the original
+        draws in 2D over the 3D cars (sprites and the speed's digits) and keeps the carousel's one number that the keys depend on: the last car's
+        distance from its place (the keys are taken while it is 150 or less). second: the page that starts in its second state, whose ESC leaves"""
         s, ref = self.spr, self
-
-        def cars():
-            return 5 if car5 else 4
-
-        class M:
-            def key(m, tick, keys):
-                if keys & {"A", "s"}:
-                    return -1
-                if keys & {"B", "S"}:
-                    return 1
-                dx, dy = ("R" in keys) - ("L" in keys), ("D" in keys) - ("U" in keys)
-                if dx:
-                    state["car"] = (state["car"] - 1 + dx) % cars() + 1
-                    state["clicks"].append(4)
-                elif dy:
-                    state["team"] = (state["team"] - 1 + dy) % 4 + 1
-                    if state["car"] > cars():
-                        state["car"] = 1
-                    state["clicks"].append(4)
-                return 0
-
-            def draw(m, tick, c):
-                team, car = state["team"], state["car"]
-                c.sprite(s, 34, 28, 15)
-                c.sprite(s, 35 + team - 1, 226, 1)
-                c.sprite(s, 30 + team - 1 if car == 5 else 26 + car - 1, 18, 155)
-                ref.centred(c, 0, 1, 2, 62, ref.team_names[team - 1])
-                ref.centred(c, 1, 2, 2, 100, f"{car} / {cars()}")
-                ref.centred(c, 2, 0, 2, 124, "UP / DOWN: TEAM    LEFT / RIGHT: CAR")
-        return M()
-
-    def trans(self, state):
-        s = self.spr
+        n = 5 if car5 else 4
 
         class M:
             def __init__(m):
-                m.t0 = 0
+                m.st, m.t0, m.first, m.x, m.slot = 1 if second else 0, 0, True, 0, 0
+                m.set_ring()
+
+            def set_ring(m):
+                """car n - 1's place on the ring after the chosen car's number of turns (x of the whole numbers, cut), and where it stands"""
+                import math
+                chosen = state["car"] - 1
+                z = [2800 if i == 0 else 3000 for i in range(n)]
+                x = [int(f32(z[i] * f32(math.sin(f32(-f32(f32(2 * math.pi) / n) * i))))) for i in range(n)]
+                for _ in range(chosen):
+                    x = [x[-1]] + x[:-1]
+                m.slots = x
+                if m.first:
+                    m.x = x[n - 1]
+                    m.first = False
+
+            def ring_step(m, tick):
+                """one step of the last car's x (0x41054: the whole number eased 15 % of the way to its place, cut)"""
+                if m.st and second and tick == 0:
+                    m.x = 0
+                target = 0 if m.st else m.slots[n - 1]
+                m.x = int(f32(f32(f32(m.x - target) * f32(0.5 + 70 * 0.005)) + target))
+                m.far = abs(m.x - m.slots[n - 1]) > 150
 
             def key(m, tick, keys):
                 if keys & {"A", "s"}:
+                    if m.st and not second:
+                        m.st = 0
+                        return 0
                     return -1
                 if keys & {"B", "S"}:
+                    if not m.st:
+                        m.st = 1
+                        return 0
                     state["clicks"].append(3)
                     return 1
+                if not m.st:
+                    dx = ("R" in keys) - ("L" in keys)
+                    if dx and not m.far:
+                        state["car"] = (state["car"] - 1 + dx) % n + 1
+                        state["clicks"].append(4)
+                        m.set_ring()
+                    return 0
                 if "L" in keys and state["manual"]:
                     state["manual"] = 0
                 elif "R" in keys and not state["manual"]:
@@ -189,18 +214,27 @@ class Ref:
                 return 0
 
             def draw(m, tick, c):
-                manual, lit = state["manual"], int(not (((tick - m.t0) * 2) & 0x20))
-                c.sprite(s, 39, 28, 15)
-                c.sprite(s, 35 + state["team"] - 1, 226, 1)
-                c.sprite(s, 40 + int(not manual and lit), 18, 155)
-                c.sprite(s, 42 + int(manual and lit), 159, 155)
+                team, car = state["team"], state["car"]
+                c.sprite(s, 39 if m.st else 34, 28, 15)
+                c.sprite(s, 35 + team - 1, 226, 1)
+                if not m.st:
+                    c.sprite(s, 30 + team - 1 if car == 5 else 26 + car - 1, 18, 155)
+                    c.sprite(s, 106, 166, 170)
+                    c.sprite(s, 110, 231, 171)
+                    speed, trac = ref.cars[(team - 1) * 5 + car - 1]
+                    c.sprite(s, 108 if trac[3] > 0.8 else 107 if trac[2] > 0.8 else 109, 251, 163)
+                    ref.text(c, 5, 5, 1, 213, 169, chr(1) + "%03d" % int(speed * 1.188 / 1.6))
+                else:
+                    manual, lit = state["manual"], int(not (((tick - m.t0) * 2) & 0x20))
+                    c.sprite(s, 40 + int(not manual and lit), 18, 155)
+                    c.sprite(s, 42 + int(manual and lit), 159, 155)
         return M()
 
     def run(self, name, page, start, script, frames, nopen=7, unlock=1, car5=0):
         """a scripted run of one page through its model: the result, the state it leaves, the calls the harness will make, the frames"""
         state = dict(start, clicks=[])
         pic = ("ARCADE_L.BKK", "BKG_1L.BKK", "BKG_2L.BKK", "BKG_2L.BKK")[page]
-        model = (self.title(state), self.track(state, nopen), self.car(state, 1 if unlock else car5), self.trans(state))[page]
+        model = (self.title(state), self.track(state, nopen), self.car(state, 1 if unlock else car5), self.car(state, 1 if unlock else car5, True))[page]
         pal = self.pics[pic][0]
         want = {int(f.rstrip("*")): f.endswith("*") for f in frames}
         result, fade, tick, calls = 0, FULL, 0, 0
@@ -209,9 +243,11 @@ class Ref:
             keys = set()
             if ch != "." and (tick == 0 or script[tick - 1] != ch):             # a press: the button went down in this frame
                 keys.add(ch)
+            if hasattr(model, "ring_step"):
+                model.ring_step(tick)                                               # (the car page's ring steps before the keys)
             if not result:
                 result = model.key(tick, keys)
-                if result < 0 or (result and page == 2):                        # (the car page's ENTER goes on to the transmission, a cut as well)
+                if result < 0:
                     calls = tick + 1                                            # a cut: the page returns before it draws this frame
                     break
             c = self.canvas(pic)
@@ -265,10 +301,16 @@ def build(game, graf, spr, fnt, out, helpers):
     r.run("track_five", 1, {"track": 6, "team": 1, "car": 1, "manual": 0}, "." * 10 + "R" + "." * 20 + "L" + "." * 30 + "B", ["5", "20", "40*", "70"],
           nopen=5, unlock=0)
     # the car page (the stand-in): left / right choose the car round, up / down the team
-    r.run("car_keys", 2, start, "..R.....R.....L.....D.....U.....B", ["0*", "3", "12", "20", "27", "31"])
-    r.run("car_bonus", 2, {"track": 1, "team": 3, "car": 4, "manual": 0}, "..R.....R.....D.....B", ["1", "8", "14*", "19"])
-    r.run("car_four", 2, {"track": 1, "team": 2, "car": 4, "manual": 0}, "..R.....R.....B", ["1", "8*"], unlock=0, car5=0)
-    r.run("car_esc", 2, start, "..L....A", ["2", "5"])
+    # the CAR page (the cars are 3D, the model draws the sprites and the speed's digits over them): left / right turn the ring (taken while the last car is
+    # within 150 of its place), up / down do nothing, ENTER goes on to the second state (the transmission) and ENTER there leaves with a fade
+    r.run("car_keys", 2, start, "..R" + "." * 30 + "R" + "." * 30 + "L" + "." * 30 + "D" + "." * 8 + "U" + "." * 8 + "B" + "." * 10 + "R" + "." * 8 + "B",
+          ["0*", "3", "12", "34", "40", "66", "100", "112", "121", "131*", "150"])
+    r.run("car_bonus", 2, {"track": 1, "team": 3, "car": 4, "manual": 0}, "..R" + "." * 30 + "R" + "." * 30 + "B" + "." * 6 + "B", ["1", "8", "36*", "66", "75"])
+    r.run("car_four", 2, {"track": 1, "team": 2, "car": 4, "manual": 0}, "..R" + "." * 30 + "R" + "." * 30 + "R" + "." * 30 + "B" + "." * 4 + "B", ["1", "40*", "70", "100"],
+          unlock=0, car5=0)
+    r.run("car_far", 2, start, "..R..R" + "." * 40 + "L" + "." * 20 + "B" + "." * 3 + "A" + "." * 5 + "B" + "." * 3 + "B", ["3", "8", "20", "50*", "70", "90"])
+    r.run("car_esc", 2, start, "..L" + "." * 30 + "A", ["2", "20*", "32"])
+    r.run("car_esc2", 2, start, ".B....A....A", ["2", "5", "9"])
     # the transmission page: the chosen one is lit while bit 0x20 of the hundredths is clear, the other always dim; a choice restarts the blink
     r.run("trans_blink", 3, start, "." * 40 + "R" + "." * 20 + "B", ["0*", "15", "16", "31", "32", "47", "48", "40", "41", "42", "50", "56", "57", "60"])
     r.run("trans_keys", 3, {"track": 1, "team": 4, "car": 1, "manual": 1}, ".L....L....R....R....L..S", ["1", "6", "11", "16", "21*", "30"])

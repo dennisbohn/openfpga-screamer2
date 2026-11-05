@@ -51,6 +51,9 @@ uint32_t s2scene_entry(struct s2_cont *c, const char *name, uint8_t *out, uint32
 #define S3D_CX      159
 #define S3D_CY      100
 
+/* The centre of the view in 1/16 pixel (the tests look for the original's), and the focal length times 16 */
+void s2scene_lens(int cx16, int cy16, int focal16);
+
 /* The 3D part of a frame into the back buffer `buffer`, the picture already drawn: waits until the blitter has done what is in the list
    (the picture), sets the unit up (the material file mlb, the clip, the projection) and forgets what the unit cached of earlier pages
    (fresh: the meshes or libraries changed since the last frame). Then pieces; at the end s2scene_end(). */
