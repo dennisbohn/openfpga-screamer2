@@ -12,10 +12,13 @@ page's title, badge and the left half of the plate, the TRANSMISSION page's titl
 (about 2 minutes; the keys go to the window in front).
 Output: build/check/dosbox/*.png (never committed) and one line per screenshot; exit code 0 if every one equals a frame of the model.
 
---pages3d (menus row 5): the same run through the pages with 3D objects instead: TEAM SELECTION (the four badges turning, a move of the choice), ENTER YOUR NAME
-(the letter tyres flying in, the wheel turning, the cursor moving) and the CAR page (the carousel at rest and moving, the plate), on a private CHOICE.DAT with the
-team, the name and the chosen car set. It only collects the raw screenshots (build/check/dosbox3d/*.png and labels.txt, never committed): tools/pages3d.sh compares
-them with the firmware's pages (tools/host/pages3d_screen.c): for every object the angle at which the firmware's picture of it is nearest to the original's.
+--league (menus row 6): the same run to CHAMPIONSHIP instead (first run: LEAGUE SELECTION in every state of its window, see league() for what it takes now): the desk scene, LEAGUE
+SELECTION, WELCOME TO LEAGUE 1, the TRACK page, the car page with its set-ups, the loading screen, one lap of a race (NUMBER OF LAPS 1 on the private CHOICE.DAT) with the player's car
+handed to the game's own driver (tools/dosram.py finds the game's data in DOSBox's process; the one thing written to it is that car's controls pointer, as the attract race has it),
+the championship's end screen, the LEAGUE REPORT after it and, from it, the TRACK page of the next race with the question LEAVING LEAGUE? that ESC asks there. The screenshots go to
+build/check/dosbox_league/ with text files of the game's state (ram_*.txt: the cars' places, laps and times, the points); `--league --check` compares them with the models of
+tools/ui_league_ref.py: the selection whole, the welcome page's two lines (its picture is a 3D scene), the end screen's texts and list and the report whole at any of the blink phases,
+built from the numbers in the game's memory. The game's keyboard focus is taken for about 5 minutes.
 """
 import atexit
 import ctypes
@@ -88,13 +91,17 @@ def front(pid):
 
 # ------------------------------------------------------------------------------------------------ the private game folder
 
-def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None):
+def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None):
     """CONFIG/CHOICE.DAT: word i is kept as (v + i * 0x1050c) ^ i; word 10 (+0x28) is the tracks opened beyond the first three; team (word 0), the
     team's chosen car (the first word of its record at +0xb0 + team * 0x188) and the player's name (+8) as given (--pages3d)"""
     d = open(src, "rb").read()
     w = list(struct.unpack("<%dI" % (len(d) // 4), d))
     dec = [((v ^ i) - i * 0x1050C) & 0xFFFFFFFF for i, v in enumerate(w)]
     dec[10] = extra
+    if league is not None:
+        dec[11] = league                        # +0x2c: the highest league open
+    if laps is not None:
+        dec[17] = laps                          # +0x44: the NUMBER OF LAPS row (an index: 0 is one lap)
     dec[0xB0 // 4 + 1] = 1                      # the first team's fifth car won
     if team is not None:
         dec[0] = team
@@ -136,6 +143,66 @@ def make_private(extra, **choice):
             shutil.copy2(s, d)
 
 
+# ------------------------------------------------------------------------------------------------ the game's memory (--league)
+
+# what a dump keeps (flat addresses of STARTL.EXE's data): the league in hand, the page that is next, the race's record, the four cars' records (a car's record is 0xcc0 bytes from
+# 0x119300) and entries (0x2c bytes from 0x130c58), the table of places the end screen makes, the standings the report keeps (12 bytes a car from 0x128a6c)
+DUMP = (
+    [0x128a10, 0x128a14, 0x128a18, 0x128a1c, 0x128a20, 0x132494, 0x1324c4, 0x130c48, 0x130c4c, 0x130d10, 0x130d48, 0x1289ec]
+    + [0x119300 + 0xcc0 * i + o for i in range(4) for o in (0x4c, 0x4a8, 0xc30, 0xc38)]
+    + [0x130c58 + 0x2c * i + o for i in range(4) for o in (0, 4, 8)]
+    + [0x128a6c + 12 * i + o for i in range(4) for o in (0, 4, 8)]
+    + list(range(0x132384, 0x1323c8, 4))
+)
+
+
+class Mem:
+    """the running original's data object, found in DOSBox's process by tools/dosram.py (the one thing written to it is the player's car's controls: handed to the game's own
+    driver, so that a race finishes by itself, as the attract race does). Flat addresses are STARTL.EXE's."""
+    def __init__(self, pid):
+        sys.path.insert(0, os.path.join(root, "tools"))
+        import dosram
+        self.g = dosram.Game(dosram.Proc(pid, write=True), dosram.OBJS2)
+
+    @staticmethod
+    def open(pid):
+        """the game's memory, or False (said on the screen) if it cannot be found: the run goes on with the keys alone"""
+        try:
+            return Mem(pid)
+        except SystemExit as e:
+            print("no access to the game's memory:", e)
+            return False
+
+    def word(self, addr):
+        return struct.unpack("<i", self.g.flat(addr, 4))[0]
+
+    def wait(self, what, timeout):
+        t_end = time.time() + timeout
+        while time.time() < t_end:
+            if what():
+                return True
+            time.sleep(0.4)
+        return False
+
+    def race(self, folder):
+        """the race is set up (the kind of game word 0x130d10 is 2: a championship race), then 20 s on (the loading, the lights and a few seconds of an unmoving car) the player's
+        car's controls pointer (+0xb4) is set to 0: the game's driver takes the car, which drives its lap"""
+        ok = self.wait(lambda: self.word(0x130d10) == 2, 120)
+        time.sleep(20)
+        ok = ok and self.g.poke(0x1193b4, struct.pack("<i", 0))
+        print("the player's car handed to the game's driver:", "yes" if ok else "NO (the race did not start in time)")
+
+    def finished(self):
+        """the player's car has done its laps (the flag +0x4c bit 1 of its record)"""
+        ok = self.wait(lambda: self.word(0x11934c) & 2, 260)
+        print("the player's car finished:", "yes" if ok else "NO (not within 260 s)")
+
+    def dump(self, label, folder):
+        """the words of DUMP, <address> <value> a line, to <folder>/ram_<label>.txt"""
+        lines = ["%06x %d" % (a, self.word(a)) for a in DUMP]
+        open(os.path.join(folder, "ram_%s.txt" % label), "w").write("\n".join(lines) + "\n")
+
+
 # ------------------------------------------------------------------------------------------------ the session
 
 def session(steps):
@@ -148,12 +215,25 @@ def session(steps):
     open(conf, "w").write('[sdl]\nfullscreen=false\nwindowresolution=original\n[dosbox]\ncaptures=%s\n[autoexec]\n@echo off\nmount C "%s"\n'
                           'imgmount d "%s/GAME.DAT" -t iso\nc:\nSTARTL.EXE\nexit\n' % (work, private, game))
     p = subprocess.Popen([game + "/DOSBOX/dosbox.exe", "-conf", game + "/dosbox_screamer2.conf", "-conf", conf, "-noconsole"], cwd=work)
+    atexit.register(p.kill)                     # (our own DOSBox goes with the script, also when a step fails)
     time.sleep(2)
     pid = dosbox_pid() or p.pid
-    label, shots, times = "", [], []
+    label, shots, times, mem = "", [], [], None
     for st in steps.split():
         if st[0] == "w":
             time.sleep(float(st[1:]))
+        elif st[0] == "M":                      # the game's memory found (it takes a while: before the first J)
+            t_mem = time.time()
+            mem = Mem.open(pid) if mem is None else mem
+            print("the game's memory: %s after %.1f s" % ("found" if mem else "not found", time.time() - t_mem))
+        elif st[0] == "X":                      # --league: Xrace hands the player's car to the game's driver once the race runs, Xfin waits until the car has finished
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.race(work) if st[1:] == "race" else mem.finished()
+        elif st[0] == "D":                      # the game's league state into a text file
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.dump(st[1:], work)
         elif st[0] == "k":
             front(pid)
             ext = st[1] == "e"
@@ -319,7 +399,180 @@ def pages3d():
     print(f"{len(shots)} screenshots in {work}")
 
 
+# ------------------------------------------------------------------------------------------------ the championship's pages (menus row 6)
+
+LEAGUE_TICKS = [0, 16, 17, 32, 48]              # frames of a model that cover every blink phase (clock = 2 x tick: the frame and the arrows 0x3f / 0x7f, the question's 0x3f)
+
+
+def league():
+    """the championship against the running original (see the header): CHAMPIONSHIP in the options room, the desk scene, LEAGUE SELECTION, WELCOME TO LEAGUE 1, the TRACK page, the car
+    page with its set-ups, the loading screen and a race of one lap (the NUMBER OF LAPS setting of the private CHOICE.DAT; the player's car is handed to the game's own driver once the
+    lights are out), its end screen (the first four seconds, then the list of the cars that have done their laps) and the LEAGUE REPORT, and from it the TRACK page of the next race with
+    the question LEAVING LEAGUE? that ESC asks there. League 1 only is open on the private CHOICE.DAT; the player is team 1 named MIL; the keys are the original's (ENTER 0x1c, ESC
+    0x01, the arrows extended)"""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox_league")
+    atexit.register(drop_junctions)
+    make_private(0, team=0, car=1, name="MIL", league=0, laps=0)
+    steps = (
+        # the game's memory is looked for while the attract sequence plays (87 s; a page that waits 30 s goes back to it), then ENTER: TEAM SELECTION, the name, the options room:
+        # RIGHT to the second station, CHAMPIONSHIP, ENTER: the desk scene (a 3D room that leads on by itself after about 3 s)
+        "w3 M k1c w6 k1c w6 k1c w6 ke4d w4 k1c w6 "
+        # LEAGUE SELECTION: the window over the leagues (the second one is not open), every state three or four times (the blinking), ENTER on a league that is not open does
+        # nothing; then ENTER: WELCOME TO LEAGUE 1; ENTER: the TRACK page; ENTER: the car page; ENTER: the set-ups; ENTER: the loading screen, then the race
+        "Lsel_0_0 r4,0.55 ke4d w0.8 Lsel_1_0 r4,0.55 ke4d w0.8 Lsel_2_1 r4,0.55 k1c w1.5 Lsel_2_1_enter r2,0.5 ke4d w0.8 Lsel_3_2 r4,0.55 "
+        "ke4b w0.8 Lsel_2_2 r3,0.55 ke4b w0.8 Lsel_1_1 r3,0.55 ke4b w0.8 Lsel_0_0 r3,0.55 "
+        "k1c w3 Lwelcome r3,0.6 k1c w7 Ltrackmap r2,0.6 k1c w6 Lcarpage r2,0.6 k1c w2 Lcarsetup r2,0.6 k1c w2 Lloading r2,1.0 "
+        # the race: its car to the game's driver, the lap; the end screen's first four seconds, then its list, the numbers of the cars to a file; RIGHT (CONTINUE: REPLAY is first), ENTER
+        "Xrace Xfin w1.2 Lend_cong r2,0.5 w1.8 Lend_box r3,0.6 Dend ke4d w0.6 k1c w4 Lrep_a r4,0.55 Drep_a "
+        # the report's ENTER with races left: the TRACK page of race 2, ESC asks LEAVING LEAGUE (NO first, LEFT YES, RIGHT NO)
+        "k1c w8 Ltrackmap2 r2,0.6 k01 w1.2 Lprompt r4,0.45 ke4b w0.6 Lprompt_yes r3,0.45 ke4d w0.6 Lprompt_no r3,0.45 q"
+    )
+    shots = session(steps)
+    print(f"{len(shots)} screenshots in {work}")
+
+
+def league_models():
+    """the models of tools/ui_league_ref.py (the pages) and its End class (the championship's end screen)"""
+    sys.path.insert(0, os.path.join(root, "tools"))
+    import ui_league_ref
+    import ui_reference as ur
+    graf = ur.container(game, "GFX/GRAF1.DAT")
+    spr = ur.sprites(ur.datfile.extract(graf, "MENUL.SPR"))
+    fnt = ur.fonts(ur.datfile.extract(graf, "MENUL.FNT"))
+    helpers = {"bkk": ur.bkk, "container": ur.container, "datfile": ur.datfile, "Canvas": ur.Canvas, "sprites": ur.sprites}
+    ref = ui_league_ref.Ref(game, graf, spr, fnt, work, helpers)
+    ref.end = ui_league_ref.End(game, ur.container(game, "GFX/GAME1.DAT"), spr, fnt, helpers)
+    return ref
+
+
+def read_ram(label):
+    """a dump of Mem.dump(): {flat address: word}"""
+    ram = {}
+    for line in open(os.path.join(work, "ram_%s.txt" % label)):
+        a, v = line.split()
+        ram[int(a, 16)] = int(v)
+    return ram
+
+
+def float_of(word):
+    return struct.unpack("<f", struct.pack("<i", word))[0]
+
+
+def string_of(word):
+    return struct.pack("<i", word).split(b"\0")[0].decode("latin-1")
+
+
+def league_cars(ram):
+    """the four cars as the end screen lists them: (name, team 1 .. 4, car 1 .. 5, place, has done its laps, time)"""
+    cars = []
+    for i in range(4):
+        e, c = 0x130c58 + 0x2c * i, 0x119300 + 0xcc0 * i
+        cars.append((string_of(ram[e + 8]), ram[e] + 1, ram[e + 4] + 1, ram[c + 0xc30], int(ram[c + 0x4a8] >= ram[0x130d48]), float_of(ram[c + 0xc38])))
+    return cars
+
+
+def league_candidates(ref, label):
+    """the model's frames for a screenshot's label: [(frame, drawn, whole)]: the frame as indices; whole: the picture is 2D and every pixel is compared, else drawn marks the pixels
+    the model draws over a picture the model does not have (a 3D scene), the only ones compared"""
+    parts = label.split("_")
+    out = []
+    if parts[0] == "sel":
+        cursor, first = int(parts[1]), int(parts[2])
+        lopen = 1 if parts[-1] == "o1" else 0
+        for tick in LEAGUE_TICKS:
+            st = dict(league=cursor, lopen=lopen, clicks=[])
+            m = ref.select(st)
+            m.first = first
+            a, dk, b = m.draw(tick)
+            out.append((compose(ref, a, dk, b, "BKG_3L.BKK"), None, True))
+    elif parts[0] == "welcome":
+        m = ref.welcome(dict(league=0, clicks=[]))
+        a, dk, b = m.draw(0)
+        out.append((compose(ref, a, dk, b, m.pic), bytes(1 if x else 0 for x in b.px), False))
+    elif parts[0] == "rep":
+        ram = read_ram("rep_a")
+        points = [ram[0x128a74 + 12 * i] for i in range(4)]
+        for tick in LEAGUE_TICKS:
+            st = dict(league=ram[0x128a10], done=ram[0x128a1c], points=points, team=ram[0x1289ec] + 1, name=string_of(ram[0x130c60]), lopen=0, topen=0, car5=0, clicks=[])
+            m = ref.report(st)
+            a, dk, b = m.draw(tick)
+            out.append((compose(ref, a, dk, b, m.pic), None, True))
+    elif parts[0] == "end":
+        ram = read_ram("end")
+        cars = league_cars(ram)
+        track, place, ptime = ram[0x130c4c] + 1, ram[0x119300 + 0xc30], float_of(ram[0x119300 + 0xc38])
+        for clock, blink in ((0, 0x20),) if parts[1] == "cong" else ((400, 0x00), (400, 0x20)):
+            c, dk = ref.end.draw(track, place, ptime, cars, clock, blink)
+            drawn = bytearray(1 if x else 0 for x in c.px)
+            for y in range(170, 200):                               # (the original's choices under the list: REPLAY and CONTINUE, two halves)
+                drawn[y * 320:(y + 1) * 320] = bytes(320)
+            out.append((bytes(c.px), bytes(drawn), False))
+    return out
+
+
+def compose(ref, a, dk, b, pic):
+    """a model frame as indices: the first layer, the darkened box (with the table of the picture's palette), the second layer over it"""
+    table = dark_table(ref.pics[pic][0]) if any(dk) else None
+    px = bytearray(a.px)
+    for i in range(64000):
+        if dk[i]:
+            px[i] = table[px[i]]
+        if b.px[i]:
+            px[i] = b.px[i]
+    return bytes(px)
+
+
+def dark_table(pal):
+    """the original's darkening: for each colour the entry nearest to 0.67 of it (the first of equals); where that is the colour itself, the entry nearest to 0.67 x 0.7 of it (a
+    search written here again, in double precision: the firmware's table is checked against the same rule by tools/host/ui_screen.c)"""
+    def near(c, k):
+        want = [(c >> s & 255) * k for s in (16, 8, 0)]
+        return min(range(256), key=lambda q: sum(((pal[q] >> s & 255) - w) ** 2 for s, w in zip((16, 8, 0), want)))
+    table = []
+    for i in range(256):
+        q = near(pal[i], 0.67)
+        table.append(near(pal[i], 0.67 * 0.7) if q == i else q)
+    return table
+
+
+def check_league(shots):
+    ref = league_models()
+    bad = 0
+    for png, label in shots:
+        name = os.path.basename(png)
+        try:
+            cands = league_candidates(ref, label)
+        except (FileNotFoundError, KeyError) as e:
+            print(f"{name} {label:18s} no state of the game for it ({e.__class__.__name__}: {e})")
+            bad += 1
+            continue
+        if not cands:
+            print(f"{name} {label:18s} (looked at, not compared)")
+            continue
+        idx = read_png(png)
+        best, best_d = None, None
+        for k, (frame, drawn, whole) in enumerate(cands):
+            d = diff(idx, frame) if whole else sum(1 for i in range(64000) if drawn[i] and idx[i] != frame[i])
+            if best_d is None or d < best_d:
+                best, best_d = k, d
+        ok = best_d == 0
+        bad += not ok
+        print(f"{name} {label:18s} {'equal at candidate %d' % best if ok else 'differs by %d (nearest candidate %d)' % (best_d, best)}")
+    return bad
+
+
 def main():
+    global work
+    if "--league" in sys.argv:
+        work = os.path.join(root, "build", "check", "dosbox_league")
+        if "--check" not in sys.argv:
+            league()
+        files = sorted(glob.glob(os.path.join(work, "*.png")))
+        labels = open(os.path.join(work, "labels.txt")).read().split()
+        bad = check_league(list(zip(files, labels)))
+        print(f"{len(files)} screenshots, {bad} not equal to the model")
+        sys.exit(1 if bad else 0)
     if "--pages3d" in sys.argv:
         pages3d()
         return

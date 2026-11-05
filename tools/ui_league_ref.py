@@ -299,53 +299,61 @@ END_RUNS = [
 ]
 
 
+class End:
+    """the championship's end screen (0x48041): what it draws over the race, one frame at a clock and a blink (in hundredths of a second: two a frame of 20 ms)"""
+    def __init__(self, game, game1, spr, fnt, helpers):
+        datfile, container = helpers["datfile"], helpers["container"]
+        self.Canvas, self.spr, self.fnt = helpers["Canvas"], spr, fnt
+        self.gspr = helpers["sprites"](datfile.extract(game1, "GAMEL.SPR"))
+        loc = container(game, "DATA/LOCAL.DAT")
+        self.gtxt = [l for l in datfile.extract(loc, "GAME.TXT").decode("latin-1").replace("\r", "").split("\n") if l and not l.startswith("*")]
+
+    def draw(self, track, place, ptime, cars, clock, blink):
+        """(the canvas of text and sprites, the passes of darkening) of a frame; cars: (name, team, car, place, done, time) of the four"""
+        c, dk, fnt, gtxt = self.Canvas(), bytearray(64000), self.fnt, self.gtxt
+        n = len([k for k in cars if k[4]])
+        y0 = 81 - 5 * (n - 1)
+        if clock < 400:
+            if place == 1:
+                c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 70, gtxt[5])
+            c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 100, gtxt[place - 1] + " " + gtxt[4])
+            c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 130, time_text(ptime))
+            return c, dk
+        for y in range(180, 200):                                           # the band, and the box in words of four pixels (x 6 is 4)
+            for x in range(320):
+                dk[y * 320 + x] = 1
+        for y in range(y0 - 2, y0 - 2 + 13 * n + 14):
+            for x in range(4, 4 + 312):
+                dk[y * 320 + x] = 1
+        sx, sy, w, h, _ = self.gspr[0x27 + track - 1]
+        c.sprite(self.gspr, 0x27 + track - 1, (320 - (w + sx)) // 2 - (sx - (1 if sx < 0 else 0)) // 2, 4)
+        lit = bool(blink & 0x20)
+        c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 0, 320, 184, gtxt[15])
+        c.text(fnt[SMALL], 1, 2, 38, y0, gtxt[16])
+        for (nm, t, cr, pl, dn, tm) in cars:
+            if not dn:
+                continue
+            y = y0 + 14 + 12 * (pl - 1)
+            pts = POINTS[pl - 1]
+            row = "\x01%d. %s        %s%s%d" % (pl, nm, time_text(tm), "  " if pts < 10 else " ", pts)
+            c.text(fnt[SMALL], 1, 2, 38, y, row)
+            c.sprite(self.spr, 0x55 + (t - 1) * 5 + (cr - 1), 113, y - 1)
+        return c, dk
+
+
 def end_screens(game, out, graf, game1, spr, fnt, helpers):
-    """the championship's end of a race (0x48041) over a race picture: the clocks run in frames of 20 ms (a hundredth of a second is half a frame)"""
-    datfile, container = helpers["datfile"], helpers["container"]
-    Canvas = helpers["Canvas"]
-    sprites = helpers["sprites"]
-    gspr = sprites(datfile.extract(game1, "GAMEL.SPR"))
-    loc = container(game, "DATA/LOCAL.DAT")
-    gtxt = [l for l in datfile.extract(loc, "GAME.TXT").decode("latin-1").replace("\r", "").split("\n") if l and not l.startswith("*")]
+    """the championship's end of a race over a race picture, frame by frame for the harness: the clocks run in frames of 20 ms"""
+    end = End(game, game1, spr, fnt, helpers)
     lines = []
     for name, race, track, laps, place, ptime, best, team, car, cars, keep in END_RUNS:
         clock, blink = 0, 0x20
         lines.append("run %s %s %d %d %d %r %r %d %d %s %s" % (name, race, track, laps, place, ptime, best, team, car,
                                                                  " ".join("%s %d %d %d %d %r" % c for c in cars), ",".join(str(k) for k in keep)))
-        done = [c for c in cars if c[4]]
-        n = len(done)
-        y0 = 81 - 5 * (n - 1)
         for j in range(max(keep) + 1):
             if j:
                 clock += 2
                 blink += 2
-            c = Canvas()
-            dk = bytearray(64000)
-            if clock < 400:
-                if place == 1:
-                    c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 70, gtxt[5])
-                c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 100, gtxt[place - 1] + " " + gtxt[4])
-                c.text_boxed(fnt[MEDIUM], 1, 2, 0, 320, 130, time_text(ptime))
-            else:
-                for y in range(180, 200):                                   # the band, and the box in words of four pixels (x 6 is 4)
-                    for x in range(320):
-                        dk[y * 320 + x] = 1
-                for y in range(y0 - 2, y0 - 2 + 13 * n + 14):
-                    for x in range(4, 4 + 312):
-                        dk[y * 320 + x] = 1
-                sx, sy, w, h, _ = gspr[0x27 + track - 1]
-                c.sprite(gspr, 0x27 + track - 1, (320 - (w + sx)) // 2 - (sx - (1 if sx < 0 else 0)) // 2, 4)
-                lit = bool(blink & 0x20)
-                c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 0, 320, 184, gtxt[15])
-                c.text(fnt[SMALL], 1, 2, 38, y0, gtxt[16])
-                for (nm, t, cr, pl, dn, tm) in cars:
-                    if not dn:
-                        continue
-                    y = y0 + 14 + 12 * (pl - 1)
-                    pts = POINTS[pl - 1]
-                    s = "\x01%d. %s        %s%s%d" % (pl, nm, time_text(tm), "  " if pts < 10 else " ", pts)
-                    c.text(fnt[SMALL], 1, 2, 38, y, s)
-                    c.sprite(spr, 0x55 + (t - 1) * 5 + (cr - 1), 113, y - 1)
+            c, dk = end.draw(track, place, ptime, cars, clock, blink)
             if j in keep:
                 ov = bytearray(64000)
                 for i in range(64000):
