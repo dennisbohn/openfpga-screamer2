@@ -844,7 +844,8 @@ static void league_run(struct zip *z, int *cars, int *overlay)
 {
     static int league_at;                               /* the cursor of LEAGUE SELECTION stays where it was (the original's 0x128a10) */
     for (;;) {
-        if (s2lp_select(&league_at) != S2LP_GO || s2lp_welcome(league_at) == S2LP_FAIL) return;
+        if (s2lp_select(&league_at) != S2LP_GO) return;                 /* (ESC, or the picture is missing) */
+        if (s2lp_welcome(league_at) == S2LP_BACK) continue;             /* (a missing picture leaves the page out) */
         struct s2_league L;
         s2l_begin(&L, league_at, cfg.team, cfg.car > 4 && !s2save_car5_open(cfg.team) ? 1 : cfg.car);
         dlog_str("league: ");
