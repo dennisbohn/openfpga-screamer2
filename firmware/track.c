@@ -604,7 +604,8 @@ const uint8_t *track_backdrop(void)
     return file_start + rd32(file_start + 0x78);
 }
 
-int track_ground_colour(void)
+/* (In the linker's late section, like track_clock_set(): the options room is its caller outside this file, and a function that was only inlined before must not move the code after it.) */
+__attribute__((section(".late_text"))) int track_ground_colour(void)
 {
     return rd32(file_start + 0x7C) & 255;
 }
@@ -1381,8 +1382,8 @@ void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, 
 }
 
 /* the animation clock set to a (0 .. 1 of its turn) by something that runs it at its own pace: the options room's textures play at 0.2 a turn a second (STARTL.EXE 0x39000), the
-   race's at 0.3. (At the end of the file: nothing of the drawing moves in the image for it.) */
-void track_clock_set(float a)
+   race's at 0.3. (In the linker's late section, after all other code: nothing of the drawing moves in the image for it.) */
+__attribute__((section(".late_text"))) void track_clock_set(float a)
 {
     anim = a;
     clock16 = (uint32_t)(anim * 65535.0f);
