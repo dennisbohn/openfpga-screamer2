@@ -299,7 +299,14 @@ def session(steps):
             mem = Mem.open(pid) if mem is None else mem
             if mem:
                 lab, nums = st[1:].split(":")
-                mem.find_ints(lab, work, tuple(int(v) for v in nums.split(",")))
+                if nums == "car":               # the player's car (the record at 0x119300): its place x, y (floats +0x4d8, +0x4e0) and height (+0x4dc) wherever the game keeps them
+                    rec = mem.g.flat(0x119300, 0x500)
+                    x, y, h = struct.unpack_from("<f", rec, 0x4d8)[0], struct.unpack_from("<f", rec, 0x4e0)[0], struct.unpack_from("<i", rec, 0x4dc)[0]
+                    print("the player's car at", x, y, h)
+                    mem.find_ints(lab + "_xyh", work, (int(x), int(y), h), 60)
+                    mem.find_ints(lab + "_xhy", work, (int(x), h, int(y)), 60)
+                else:
+                    mem.find_ints(lab, work, tuple(int(v) for v in nums.split(",")))
         elif st[0] == "Y":                      # the game's data object into data_<label>.bin
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -478,7 +485,7 @@ def pages3d():
 LEAGUE_TICKS = [0, 16, 17, 32, 48]              # frames of a model that cover every blink phase (clock = 2 x tick: the frame and the arrows 0x3f / 0x7f, the question's 0x3f)
 
 
-def cars(team, race):
+def cars(team, race, moves=False):
     """--cars <team 1..4> [race]: the CAR page of the team with all five cars open (screenshots of the carousel at rest and the game's data object, build/check/dosbox_cars),
     with `race` the arcade race on track 1 (the grid and the first seconds: screenshots and the data object)"""
     global work
@@ -486,7 +493,8 @@ def cars(team, race):
     atexit.register(drop_junctions)
     make_private(0, team=team - 1, car=1, name="MIL", cars5=True)
     boot = "w12 k1c w6 k1c w6 k1c w6 k1c w9 k1c w4 "
-    steps = boot + "k1c w5 Lcar r6,0.3 M Ycar Fp2:-1763,0,-2427 Fp3:1763,0,-2427 Fp0:0,0,2800 " + ("k1c w1.5 k1c w1.5 Ltrans r2,0.5 Ygrid w25 Lrace r4,1 Yrace q" if race else "q")
+    carousel = "".join("Ke4d R3,0 w2.5 Lcar%d r3,0.4 " % (k + 2) for k in range(4)) if moves else ""    # moves: the carousel one place on four times, so that every car of the team has been the chosen one
+    steps = boot + "k1c w5 Lcar r%d,0.4 M Ycar " % (3 if moves else 12) + carousel + ("k1c w1.5 k1c w20 Lgrid r3,0.5 Ygrid Fpl:car w5 Lrace r3,1 Yrace q" if race else "q")
     shots = session(steps)
     print(f"{len(shots)} screenshots in {work}")
 
@@ -750,7 +758,7 @@ def main():
         pages3d()
         return
     if "--cars" in sys.argv:
-        cars(int(sys.argv[sys.argv.index("--cars") + 1]), "race" in sys.argv)
+        cars(int(sys.argv[sys.argv.index("--cars") + 1]), "race" in sys.argv, "moves" in sys.argv)
         return
     if "--timeattack" in sys.argv:
         which = next((a for a in sys.argv if a in ("closed", "race", "free")), "")
