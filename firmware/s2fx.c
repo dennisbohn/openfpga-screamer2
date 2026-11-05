@@ -115,16 +115,15 @@ void s2fx_update(struct s2car_state *const *cars, int n, int steps, uint32_t clo
     have_before = 1;
 }
 
-/* a carried puff's place (0x2073b; checked against the game's records in tools/s2/check_smoke_s2.py): its spot in the car's frame turned about the vertical by minus
-   the heading (0x10388), its height dropped (the game zeroes it before the next turn), then about the side axis by the pitch (0x1030d), each cut to a whole number
-   (the game's rounding is set to chop), and the car's place added; out: the game's x, up, z */
-static void carried(const struct puff *q, const struct s2car_fx *f, float out[3])
+/* a carried puff's place (0x2073b; checked against the game's records in tools/s2/check_fx_s2.sh): its spot in the car's frame turned about the vertical by minus the heading
+   (0x10388), its height dropped (the game zeroes it before the next turn), then about the side axis by the pitch (0x1030d), each cut to a whole number (the game's rounding is
+   set to chop), and the car's place added; out: the game's x, up, z. t: the car's cos and sin of minus the heading and of the pitch (made once a car) */
+static void carried(const struct puff *q, const struct s2car_fx *f, const float t[4], float out[3])
 {
-    const float c = cosf(-f->yaw), s = sinf(-f->yaw), cp = cosf(f->pitch), sp = sinf(f->pitch);
-    const float x = (float)(int32_t)(q->p[2] * s + q->p[0] * c), z = (float)(int32_t)(q->p[2] * c - q->p[0] * s);
+    const float x = (float)(int32_t)(q->p[2] * t[1] + q->p[0] * t[0]), z = (float)(int32_t)(q->p[2] * t[0] - q->p[0] * t[1]);
     out[0] = (float)f->x + x;
-    out[1] = (float)f->y + (float)(int32_t)(-z * sp);
-    out[2] = (float)f->z + (float)(int32_t)(z * cp);
+    out[1] = (float)f->y + (float)(int32_t)(-z * t[3]);
+    out[2] = (float)f->z + (float)(int32_t)(z * t[2]);
 }
 
 int s2fx_objects(const struct track_cam *cam, struct s2car_state *const *cars, int n, struct track_object *objs, int max)
@@ -146,13 +145,21 @@ int s2fx_objects(const struct track_cam *cam, struct s2car_state *const *cars, i
             car_flat_block(fx.shadow, x, z, (float)(a.ground - 2), lk.yaw, lk.pitch, lk.roll, &shadow_block[i]);
             objs[count++] = (struct track_object){ x, z, (float)(a.ground - 2), SHADOW_RADIUS, 1, &shadow_block[i], 0, i, SHADOW_KEY, 0, 0 };
         }
+        float t[4];
+        int have_t = 0;
         for(int k = 0; k < 2; k++) {
             const uint8_t *mesh = k ? fx.smoke2 : fx.smoke;
             for(int j = 0; j < S2FX_PUFFS && mesh && count < max; j++) {
                 const struct puff *q = &car[i].puff[k][j];
                 if(!q->on) continue;
                 float p[3] = { q->p[0], q->p[1], q->p[2] };
-                if(q->carried) carried(q, &a, p);
+                if(q->carried) {
+                    if(!have_t) {
+                        t[0] = cosf(-a.yaw); t[1] = sinf(-a.yaw); t[2] = cosf(a.pitch); t[3] = sinf(a.pitch);
+                        have_t = 1;
+                    }
+                    carried(q, &a, t, p);
+                }
                 struct track_block *t = &puff_block[i][k][j];
                 for(int m = 0; m < 3; m++) {        /* facing the screen: the camera's right, up and forward are the block's x, y and z */
                     t->m[3 * m] = r[m];
