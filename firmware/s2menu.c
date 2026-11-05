@@ -12,6 +12,7 @@
 #include "s2pages.h"
 #include "s2arcade.h"
 #include "s2pages3d.h"
+#include "s2room.h"
 #include <string.h>
 
 const uint8_t s2_menu_laps[S2M_LAPS] = { 1, 3, 5, 10 };
@@ -152,6 +153,7 @@ int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press)
     default: break;
     }
     if (press & KEY_X) return S2M_WATCH;
+    if ((press & KEY_SELECT) && s2menu_room) return S2M_ROOM;       /* (back to the options room) */
     if (press & (KEY_A | KEY_B | KEY_START)) {              /* (the start menu has no page behind it: A takes the row as B does) */
         if (*cursor == S2M_ROW_ARCADE) return S2M_ARCADE;
         if (*cursor == S2M_ROW_CHAMP) return S2M_CHAMP;
@@ -230,6 +232,7 @@ void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor)
     con_text(fb, 2, 14, "AGAINST", GREY, BG);
     con_text(fb, 12, 14, o, WHITE, BG);
 
+    if (s2menu_room) con_text(fb, 2, 15, "Select: back to the options room", GREY, BG);
     con_text(fb, 2, 16, "d-pad: up/down row, left/right value", GREY, BG);
     con_text(fb, 2, 17, "B or Start: take the row   X: watch", GREY, BG);
     con_text(fb, 2, 18, "L / R: track -3 / +3 from any row", GREY, BG);
@@ -256,6 +259,37 @@ void s2menu_log(const struct s2_menu_cfg *c, int go)
 
 int s2menu_row = S2M_ROW_ARCADE;                           /* (the row stays for the next visit) */
 
+int (*s2menu_room)(const struct s2_menu_cfg *c);
+static int developer;                                       /* the list is the menu now (X in the room, or the room could not be shown) until Select goes back */
+
+/* One visit of the options room: what it ends with as the list's results (S2M_NONE: nothing to do here, the room or the list comes next) */
+static int room_step(struct s2_menu_cfg *c)
+{
+    switch (s2menu_room(c)) {
+    case S2ROOM_ARCADE: return S2M_ARCADE;
+    case S2ROOM_CHAMP: return S2M_CHAMP;
+    case S2ROOM_ATTACK: return S2M_ATTACK;
+    case S2ROOM_SETTINGS: return S2M_SETTINGS;
+    case S2ROOM_MULTI:
+        s2_page_multi();
+        return S2M_NONE;
+    case S2ROOM_BACK: {                                     /* ESC: TEAM SELECTION (the name after it), then the room again; YES to leaving the program: the list */
+        s2menu_store(c);
+        const int t = s2_page_team(c);
+        s2menu_load(c);
+        if (t == S2P3D_QUIT) developer = 1;
+        return S2M_NONE;
+    }
+    case S2ROOM_FAIL:
+        dlog_str("menu: the options room could not be shown, the list instead\n");
+        developer = 1;
+        return S2M_NONE;
+    default:                                                /* X */
+        developer = 1;
+        return S2M_NONE;
+    }
+}
+
 int s2menu_run(struct s2_menu_cfg *c)
 {
     int cursor = s2menu_row;
@@ -267,12 +301,25 @@ int s2menu_run(struct s2_menu_cfg *c)
     uint32_t keys_before = in_keys(), held = 0;             /* (the button that left the files screen is still down) */
     const uint32_t dirs = KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT;
     for (;;) {
-        uint32_t st = wait_swap_done();
-        uint32_t keys = in_keys(), press = keys & ~keys_before;
-        held = (keys & dirs) && keys == keys_before ? held + 1 : 0;
-        if (held >= REPEAT_FIRST && (held - REPEAT_FIRST) % REPEAT_EVERY == 0) press |= keys & dirs;
-        keys_before = keys;
-        int r = s2menu_key(c, &cursor, press);
+        uint32_t st = 0;
+        int r, room = s2menu_room && !developer;
+        if (room) {                                         /* the options room is the menu: it ends with a choice, which the list's own actions below carry out */
+            r = room_step(c);
+            keys_before = in_keys();
+            held = 0;
+            if (r == S2M_NONE) continue;
+        } else {
+            st = wait_swap_done();
+            uint32_t keys = in_keys(), press = keys & ~keys_before;
+            held = (keys & dirs) && keys == keys_before ? held + 1 : 0;
+            if (held >= REPEAT_FIRST && (held - REPEAT_FIRST) % REPEAT_EVERY == 0) press |= keys & dirs;
+            keys_before = keys;
+            r = s2menu_key(c, &cursor, press);
+            if (r == S2M_ROOM) {                            /* Select: the options room again */
+                developer = 0;
+                continue;
+            }
+        }
         if (r == S2M_ARCADE) {                              /* the original's arcade pages; without them the row starts the race */
             int chain = s2arcade_run(c);
             s2menu_store(c);
@@ -300,7 +347,7 @@ int s2menu_run(struct s2_menu_cfg *c)
             held = 0;
             continue;
         }
-        s2menu_row = cursor;
+        if (!room) s2menu_row = cursor;
         if (r) {
             s2menu_store(c);
             return r;

@@ -30,6 +30,7 @@
 #include "s2ghost.h"
 #include "s2trackpage.h"
 #include "s2arcade.h"
+#include "s2room.h"
 #include "music.h"
 #include "s2hud.h"
 #include "prof.h"
@@ -182,6 +183,7 @@ static struct { int valid, track, cars; struct s2_pick pick[RACE_CARS]; } loaded
 static int load_track(struct zip *z, int n, const char **what)
 {
     loaded.valid = 0;
+    s2room_forget();                                    /* (the track takes the window the options room's image may be in) */
     static struct s2_files f;
     static char gfx_name[24], data_name[24], env_name[24];
     struct track_build_info info = { "", 0, 0, 0 };
@@ -829,6 +831,14 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     }
 }
 
+/* the options room (s2room.h), the menu s2menu_run() shows first: its image is built in the track window, where the next track's goes */
+static int room_menu(const struct s2_menu_cfg *c)
+{
+    static const struct s2room_mem mem = { GFX_MEM, GFX_MAX, (uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000), TEX_MAX, SCRATCH_MEM, SCRATCH_MAX };
+    loaded.valid = 0;                                   /* (what the window held is gone: time attack builds its track again) */
+    return s2room_run(files_zip(), &mem, c->team);
+}
+
 /* the menu's choices into the race (race.h): the grid, the laps, the computers' level, the gearbox */
 static struct s2_menu_cfg cfg;
 
@@ -1001,6 +1011,7 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     ui_ready = !sim && s2gfx_init(z);                   /* (the simulation has no menus) */
 #endif
     s2hud_init(z);                                      /* the race screen (the simulation has it: its cost is measured there) */
+    if (ui_ready) s2menu_room = room_menu;              /* the options room is the menu (the list is the developer's, behind X) */
     for (;;) {
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
             int go = s2menu_run(&cfg);

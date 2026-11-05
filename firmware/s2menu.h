@@ -16,6 +16,10 @@
  *   TEAM SELECTION       the original's TEAM SELECTION and ENTER YOUR NAME pages (s2pages3d.h): the team and the name. A new save (no profile yet:
  *                        s2save.h S2S_PROFILE) shows them once, before the menu, as the original shows them at every start.
  *
+ * Since row 8 this list is the developer's menu behind the options room (s2room.h): the room is the menu, X in it opens the list, Select in the list goes back. What the list
+ * carries that the original has on other pages, NUMBER OF LAPS and ARCADE ENEMIES SKILL (GAME SETTINGS), HI SCORES (GAME SETTINGS, VIEW HIGH SCORES) and TEAM SELECTION (ESC in the room),
+ * is also reached there; START RACE (the race on any track at once, L / R: the track) and WATCH (the ride) are the core's own.
+ *
  * The choices are kept in the nonvolatile CHOICE.DAT (s2save.h, data slot 23): the Pocket writes it back when the core
  * exits, so they survive a power-up. Everything is open from the start (all seven tracks, all four teams and their five cars).
  */
@@ -44,7 +48,7 @@ extern const uint8_t s2_menu_laps[S2M_LAPS];
 /* what the menu ends with (S2M_ARCADE: a key press on the ARCADE row, which s2menu_run() answers by running the arcade pages; S2M_SETTINGS and
    S2M_SCORES and S2M_TEAM: the GAME SETTINGS, HI SCORES and TEAM SELECTION rows, which s2menu_run() answers by running the page; S2M_CHAMP: the
    CHAMPIONSHIP row, which s2menu_run() returns to the viewer, whose races the league needs) */
-enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES, S2M_TEAM, S2M_CHAMP, S2M_ATTACK };
+enum { S2M_NONE, S2M_RACE, S2M_WATCH, S2M_ARCADE, S2M_SETTINGS, S2M_SCORES, S2M_TEAM, S2M_CHAMP, S2M_ATTACK, S2M_ROOM };
 
 /* The rows, top to bottom */
 enum { S2M_ROW_ARCADE, S2M_ROW_CHAMP, S2M_ROW_ATTACK, S2M_ROW_LAPS, S2M_ROW_SKILL, S2M_ROW_RACE, S2M_ROW_WATCH, S2M_ROW_SETTINGS, S2M_ROW_SCORES, S2M_ROW_TEAM, S2M_ROWS };
@@ -81,6 +85,11 @@ void s2menu_log(const struct s2_menu_cfg *c, int go);
 
 /* The row the cursor is on (S2M_ROW_*), kept from one visit of the menu to the next; the tests set it */
 extern int s2menu_row;
+
+/* The options room (s2room.h), which the viewer sets when it can show one (the toolkit is up): s2menu_run() shows it first, as the original's menu does after TEAM SELECTION and ENTER
+   YOUR NAME. It returns an S2ROOM_* result (the choice of the station, ESC, X); without it (0, as in the PC tests of the list) the list below is the menu. The list stays as the
+   developer's menu: X in the room opens it, Select in it goes back to the room, and so does a YES to EXIT SCREAMER 2? on TEAM SELECTION (where the original leaves the program). */
+extern int (*s2menu_room)(const struct s2_menu_cfg *c);
 
 /* The menu until a race or the ride is chosen; the choices are stored. Needs s2menu_init(). */
 int s2menu_run(struct s2_menu_cfg *c);

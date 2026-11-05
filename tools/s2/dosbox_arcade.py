@@ -69,13 +69,19 @@ def press(sc, ext=False):
     time.sleep(0.12)
 
 
-def dosbox_pid():
+def dosbox_pids():
     out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True).stdout
+    pids = []
     for line in out.splitlines():
         f = [x.strip('"') for x in line.split('","')]
         if len(f) > 1 and "dosbox" in f[0].lower():
-            return int(f[1])
-    return None
+            pids.append(int(f[1]))
+    return pids
+
+
+def dosbox_pid(exclude=()):
+    """the first DOSBox process that is not in `exclude` (the ones that were running before ours: a player's own game is never touched)"""
+    return next((p for p in dosbox_pids() if p not in exclude), None)
 
 
 def front(pid):
@@ -168,6 +174,12 @@ FREE_BYTES = [(0x132fc8, 55), (0x133000, 55), (0x132fa4, 12), (0x132f98, 12), (0
              [(0x119300 + 0xc38, 4), (0x119300 + 0xc3c, 4), (0x119300 + 0xc40, 4), (0x119300 + 0xc44, 20), (0x119300 + 0xc58, 20), (0x119300 + 0x4b0, 8), (0x119300 + 0x4a8, 8)]
 
 
+# the options room's words (menus row 8; STARTL.EXE 0x38e00): the camera record (angles a0 a1 a2, place x y z), the station, the page's next page / leaving flag / fade /
+# done flag / sway / the look-at angles (0x1324a8 pitch, 0x1324ac heading), the frame time, the blink clock and the engine's animation clock
+ROOM_BLOCKS = [(0x131ea4, 24), (0x132378, 4), (0x132494, 28), (0x133350, 4), (0x4cfd6, 4), (0x1347a0, 4)]
+# and what a dump keeps: the cameras' table P_t.MCM was read into (3 records of 0x16c bytes from 0x131f34), the texts' pointers (the title 0x127eec, the five names 0x127ef4), the screen
+ROOM_BYTES = [(0x131f34, 3 * 0x16c), (0x127eec, 4), (0x127ef4, 20)]
+
 # time attack's lists (the totals of kind 2 for three laps, the best laps): 300 bytes a track in columns of 15 (times, names, replay numbers, teams, models), the files' track order
 TA_LISTS = [(0x12d388 + 0x4b0 * t, 300) for t in range(7)] + [(0x12f32c + 0x1068 + 0x12c * t, 300) for t in range(7)]
 
@@ -216,6 +228,37 @@ class Mem:
         lines = ["%06x %s" % (a, self.g.flat(a, n).hex()) for a, n in ranges]
         open(os.path.join(folder, "bytes_%s.txt" % label), "w").write("\n".join(lines) + "\n")
 
+    def poll(self, label, folder, secs, events, shots, times):
+        """the options room's variables read as often as the process allows for `secs` seconds (--options): the camera record (angles, place), the station, the page's
+        flags and look-at angles, the frame time, the clock and the animation clock. Every change is a row of <folder>/poll_<label>.txt: the time, then the words in hex; the events
+        ('s<label>' a screenshot, 'k<hex>' / 'ke<hex>' a key, at their time) are rows of their own, so that a screenshot and a key press can be placed among the frames."""
+        rows, last, ev, t0 = [], None, sorted(events), time.time()
+        while True:
+            now = time.time() - t0
+            if now >= secs:
+                break
+            while ev and ev[0][0] <= now:
+                at, what = ev.pop(0)
+                if what[0] == "s":
+                    times.append(time.time())
+                    shots.append(what[1:])
+                    for sc, up in ((0x1D, 0), (0x3F, 0), (0x3F, 1), (0x1D, 1)):
+                        key(sc, up)
+                        time.sleep(0.02)
+                else:
+                    ext = what[1] == "e"
+                    sc = int(what[2:] if ext else what[1:], 16)
+                    key(sc, 0, ext)
+                    time.sleep(0.03)
+                    key(sc, 1, ext)
+                rows.append("%.4f E %s" % (time.time() - t0, what))
+            cur = b"".join(self.g.flat(a, n) for a, n in ROOM_BLOCKS)
+            if cur != last:
+                rows.append("%.4f %s" % (time.time() - t0, cur.hex()))
+                last = cur
+        open(os.path.join(folder, "poll_%s.txt" % label), "w").write("\n".join(rows) + "\n")
+        print("poll %s: %d rows" % (label, len(rows)))
+
     def finished(self):
         """the player's car has done its laps (the flag +0x4c bit 1 of its record)"""
         ok = self.wait(lambda: self.word(0x11934c) & 2, 260)
@@ -238,10 +281,11 @@ def session(steps):
     conf = os.path.join(work, "run.conf")
     open(conf, "w").write('[sdl]\nfullscreen=false\nwindowresolution=original\n[dosbox]\ncaptures=%s\n[autoexec]\n@echo off\nmount C "%s"\n'
                           'imgmount d "%s/GAME.DAT" -t iso\nc:\nSTARTL.EXE\nexit\n' % (work, private, game))
+    others = set(dosbox_pids())                 # (a DOSBox that was running already, a player's own, is neither used nor touched)
     p = subprocess.Popen([game + "/DOSBOX/dosbox.exe", "-conf", game + "/dosbox_screamer2.conf", "-conf", conf, "-noconsole"], cwd=work)
     atexit.register(p.kill)                     # (our own DOSBox goes with the script, also when a step fails)
     time.sleep(2)
-    pid = dosbox_pid() or p.pid
+    pid = dosbox_pid(others) or p.pid
     label, shots, times, mem = "", [], [], None
     for st in steps.split():
         if st[0] == "w":
@@ -261,6 +305,10 @@ def session(steps):
                     mem.race(work, 8)
                 else:
                     mem.finished()
+        elif st[0] == "Z":                      # --options: Z<label> the cameras' table and the texts' pointers to bytes_<label>.txt
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.bytes_at(st[1:], work, ROOM_BYTES)
         elif st[0] == "T":                      # --timeattack: T<label> time attack's lists to bytes_<label>.txt
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -273,6 +321,16 @@ def session(steps):
             mem = Mem.open(pid) if mem is None else mem
             if mem:
                 mem.dump(st[1:], work)
+        elif st[0] == "W":                      # --options: W<label>:<seconds>[:<event>@<t> ...] polls the options room's variables for that long (mem.poll)
+            mem = Mem.open(pid) if mem is None else mem
+            front(pid)
+            if mem:
+                f = st[1:].split(":")
+                events = []
+                for e in f[2:]:
+                    what, at = e.split("@")
+                    events.append((float(at), what))
+                mem.poll(f[0], work, float(f[1]), events, shots, times)
         elif st[0] == "k":
             front(pid)
             ext = st[1] == "e"
@@ -467,6 +525,40 @@ def league():
         # the report's ENTER with races left: the TRACK page of race 2, ESC asks LEAVING LEAGUE (NO first, LEFT YES, RIGHT NO)
         "k1c w8 Ltrackmap2 r2,0.6 k01 w1.2 Lprompt r4,0.45 ke4b w0.6 Lprompt_yes r3,0.45 ke4d w0.6 Lprompt_no r3,0.45 q"
     )
+    shots = session(steps)
+    print(f"{len(shots)} screenshots in {work}")
+
+
+# ------------------------------------------------------------------------------------------------ the options room (menus row 8)
+
+def options(which):
+    """the options room against the running original (see the header): team 1 (CONDOR) named MIL on a private CHOICE.DAT. `which`: "" the room's five stations (the camera
+    flying in, each station settled, each move), "pages" ENTER on each station (the fade out and the page it leads to) and ESC (back to TEAM SELECTION). Every step that samples
+    the game's variables (W) writes poll_<label>.txt with each change of the camera record; the keys are the original's (ENTER 0x1c, ESC 0x01, the arrows extended)."""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox_room" + ("_" + which if which else ""))
+    atexit.register(drop_junctions)
+    make_private(0, team=0, car=1, name="MIL")
+    boot = "w3 M k1c w6 k1c w6 "                # the attract sequence plays while the game's memory is found; ENTER: TEAM SELECTION, ENTER: ENTER YOUR NAME, then the third ENTER:
+    if which == "":
+        steps = boot + "k1c Wfly:9:sfly0@0.3:sfly1@0.9:sfly2@1.5:sfly3@2.2:sfly4@3.2:sfly5@5:sfly6@7.5 Zroom "
+        for st in range(5):
+            steps += "Wst%d:3:sst%da@1:sst%db@2.2 " % (st, st, st)
+            if st < 4:                          # RIGHT to the next station: shots in flight and at rest
+                steps += "Wmv%d:5:ke4d@0.3:smv%da@0.55:smv%db@1.05:smv%dc@1.6:smv%dd@2.3:smv%de@3.4 " % ((st,) * 6)
+        steps += "q"
+    else:
+        # ENTER on each station (the fade out: the camera drifts towards the aim point, the frames' brightness; then the page it leads to, whose own ESC comes back to the room: the
+        # title of ARCADE, LEAGUE SELECTION after the desk scene, TRACK SELECTION, the MULTIPLAYER page, GAME SETTINGS), the fly-in again on the return, RIGHT to the next station;
+        # at the last one ESC: TEAM SELECTION
+        steps = boot + "k1c Wfly:5 Zroom "
+        wait = (4.5, 8.5, 4.5, 4.5, 4.5)       # the page's time to come up (the championship's desk scene first)
+        for st in range(5):
+            steps += "Wp%d_enter:%.1f:sp%d_room@0.2:k1c@0.7:sp%d_fade@1.0:sp%d_page@%.1f " % (st, wait[st] + 1.0, st, st, st, wait[st])
+            steps += "k01 Wp%d_back:5:sp%d_back0@0.5:sp%d_back1@3 " % (st, st, st)
+            if st < 4:
+                steps += "ke4d w3.5 "
+        steps += "Wesc:4:k01@0.3:sesc_team@2 q"
     shots = session(steps)
     print(f"{len(shots)} screenshots in {work}")
 
@@ -700,6 +792,13 @@ def main():
         sys.exit(1 if bad else 0)
     if "--pages3d" in sys.argv:
         pages3d()
+        return
+    if "--options" in sys.argv:
+        which = next((a for a in sys.argv if a in ("pages",)), "")
+        if "--check" not in sys.argv:
+            options(which)
+        work = os.path.join(root, "build", "check", "dosbox_room" + ("_" + which if which else ""))
+        print("%d screenshots in %s: compared by tools/room.sh" % (len(glob.glob(os.path.join(work, "*.png"))), work))
         return
     if "--timeattack" in sys.argv:
         which = next((a for a in sys.argv if a in ("closed", "race", "free")), "")
