@@ -293,7 +293,7 @@ static void lib_relocate(uint8_t *m, uint32_t size, uint32_t nrec, uint32_t at)
    table) moved by delta, negative. Every block of the header's table at the three levels of detail (entry
    b + 13 L), every face of its 16 rows; moved only while it is not yet negative, so a face in several rows is
    moved once. 1, or 0 if the file is malformed. */
-static int faces_onto(uint8_t *x, uint32_t size, int32_t delta)
+int s2_faces_onto(uint8_t *x, uint32_t size, int32_t delta)
 {
     if(size < 0x18) return 0;
     int32_t nb = (int32_t)ld32(x + 0x14);
@@ -396,6 +396,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
                        .track = "MAP0", .info = info };
     info->fail[0] = 0;
     info->cycles = info->unpack_cycles = info->scratch = 0;
+    info->misc_delta = 0;
     if(n < 1 || n > 9 || cap < FIRST) return (uint32_t)fail(&b, "track number");
     b.track[3] = (char)('0' + n);
     memset(out, 0, FIRST);
@@ -413,8 +414,9 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
         if(!s2_track_data(dtr, dtr_n, td) || td[0] >= 0) return (uint32_t)fail(&b, "TRACK_DATA");
     }
 
-    /* the cars' libraries: where they lie in the MLB section, how many materials they have */
-    struct { const uint8_t *mlb; uint32_t size, nrec, at; } lib[S2_CARS];
+    /* the cars' libraries: where they lie in the MLB section, how many materials they have; after them the track's MISC.MLB, the materials of its small objects (the scenery's
+       moving things, docs/development.md "Animated scenery") */
+    struct { const uint8_t *mlb; uint32_t size, nrec, at; } lib[S2_CARS + 1];
     if(ncars < 0 || ncars > S2_CARS || (ncars && !f->car)) return (uint32_t)fail(&b, "cars");
     if(!dat_find(f->gfx, f->gfx_size, name(&b, ".MLB", buf), &e)) return (uint32_t)fail(&b, buf);
     uint32_t mlb_size = e.size, nmat = 0, end = pad256(mlb_size);
@@ -426,6 +428,18 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
         lib[k].at = end;
         end += pad256(lib[k].size);
         nmat += lib[k].nrec;
+    }
+    int nlib = ncars;
+    if(!scenery) {
+        uint32_t misc_n = 0;
+        const uint8_t *misc = unpack(&b, f->gfx, f->gfx_size, "MISC.MLB", &misc_n);
+        if(!misc || misc_n < 16) return 0;
+        lib[nlib].mlb = misc;
+        lib[nlib].size = misc_n;
+        lib[nlib].nrec = s2_mlb_records(misc, misc_n);
+        lib[nlib].at = end;
+        end += pad256(misc_n);
+        nmat += lib[nlib++].nrec;
     }
     /* the windows' reflection (ENV.MLB) goes after the libraries, a texture record and tiled frames */
     const uint8_t *env_mlb = 0;
@@ -441,7 +455,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
 
     /* section 0: the car materials; 1: the MLB, the cars' libraries and the reflection after it */
     if(16 * nmat > room(&b)) return (uint32_t)fail(&b, "car materials");
-    for(int k = 0, o = 0; k < ncars; o += (int)lib[k].nrec, k++)
+    for(int k = 0, o = 0; k < nlib; o += (int)lib[k].nrec, k++)
         lib_records(lib[k].mlb, lib[k].size, lib[k].nrec, lib[k].at, env_at, at(&b) + 16 * (uint32_t)o);
     if(scenery) empty(&b);
     else if(!section(&b, 16 * nmat, nmat, "car materials")) return 0;
@@ -449,12 +463,13 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     uint8_t *m = at(&b);
     if(!extract(&b, f->gfx, f->gfx_size, &e, m, room(&b))) return 0;
     memset(m + mlb_size, 0, pad256(mlb_size) - mlb_size);
-    for(int k = 0; k < ncars; k++) {
+    for(int k = 0; k < nlib; k++) {
         memcpy(m + lib[k].at, lib[k].mlb, lib[k].size);
         memset(m + lib[k].at + lib[k].size, 0, pad256(lib[k].size) - lib[k].size);
         lib_relocate(m + lib[k].at, lib[k].size, lib[k].nrec, lib[k].at);
     }
     if(env_n) s2_env_write(m + env_at, env_mlb, env_n, env_at);
+    if(nlib > ncars) info->misc_delta = (int32_t)(FIRST + 16 * (nmat - lib[ncars].nrec)) - (int32_t)mlb_off;
     if(!section(&b, end, end, "MLB")) return 0;
 
     if(!dat_find(f->gfx, f->gfx_size, name(&b, ".UNR", buf), &e)) return (uint32_t)fail(&b, buf);
@@ -488,7 +503,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
             if(o == 0 || size[k] == 0 || o > room(&b) || size[k] > room(&b) - o) return (uint32_t)fail(&b, "car models");
             memcpy(at(&b) + o, f->car[k].x3d, size[k]);
             x3d[k] = at(&b) + o;
-            if(!faces_onto(at(&b) + o, size[k], (int32_t)(FIRST + 16 * rec) - (int32_t)mlb_off))
+            if(!s2_faces_onto(at(&b) + o, size[k], (int32_t)(FIRST + 16 * rec) - (int32_t)mlb_off))
                 return (uint32_t)fail(&b, "car faces");
         }
         if(!section(&b, tb_car_models(x3d, size, ncars, at(&b), room(&b)), (uint32_t)ncars, "car models")) return 0;

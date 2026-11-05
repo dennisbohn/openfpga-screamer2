@@ -271,18 +271,21 @@ def main():
     teams = {t: datfile.read(os.path.join(root, "GFX", f"CARS{t}{look}1.DAT")) for t, _ in pick}
     car_mlb = [datfile.extract(teams[t], f"AUTO{c}.MLB") for t, c in pick]
     x3d = [datfile.extract(teams[t], f"AUTO{c}.3DX") for t, c in pick]
-    nrec = [mlb_records(m) for m in car_mlb]
+    # the track's MISC.MLB (the materials of its small objects: the scenery's moving things, docs/development.md "Animated scenery") is one more library after the cars'
+    misc = [] if room else [datfile.extract(g, "MISC.MLB")]
+    libs = car_mlb + misc
+    nrec = [mlb_records(m) for m in libs]
     cmat_size = 16 * sum(nrec)
     mlb_off = FIRST + pad256(cmat_size)
     assert mlb_off - FIRST <= 32768, "car materials too far below the MLB"
     lib_at, at = [], pad256(len(mlb))
-    for m in car_mlb:
+    for m in libs:
         lib_at.append(at)
         at += pad256(len(m))
     env_at = at                                                         # the windows' picture, after the libraries
     cmat, mlbsec = b"", mlb + bytes(pad256(len(mlb)) - len(mlb))
-    for k in range(CARS):
-        _, recs, lib = car_library(car_mlb[k], lib_at[k], env_at)
+    for k in range(len(libs)):
+        _, recs, lib = car_library(libs[k], lib_at[k], env_at)
         cmat += recs
         mlbsec += lib + bytes(pad256(len(lib)) - len(lib))
     if not room:
@@ -333,7 +336,7 @@ def main():
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     with open(out, "wb") as fh:
         fh.write(blob)
-    print(f"{out}: {len(blob)} bytes ({len(crcs)} blocks of 256 KB; limit 28): MLB {len(mlb)} + {CARS} car libraries "
+    print(f"{out}: {len(blob)} bytes ({len(crcs)} blocks of 256 KB; limit 28): MLB {len(mlb)} + {CARS} car libraries{' and MISC.MLB' if misc else ''} "
           f"({sum(nrec)} materials) + windows' picture {len(mlbsec) - env_at}, UNR {len(unr)}, {len(pl)} placements ({nground} drivable), {len(dirs)} road points, "
           f"{len(walls)} walls, {CARS} car models {[tuple(round(v) for v in struct.unpack_from('<4f', models, 24 * k)) for k in range(CARS)]}, "
           f"start {sx_},{sy_} yaw {sa:.3f}, far plane {far}, background colour {colour}")
