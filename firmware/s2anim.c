@@ -20,7 +20,7 @@
 
 struct key { float t, v, out, in; };
 struct chan { uint16_t first, n; };
-struct path { struct chan c[3]; uint8_t ok; };
+struct path { struct chan c[3]; float start, end; uint8_t ok; };   /* the channels, and the share of the run the path's keys span (head +0x28, +0x2c) */
 struct mesh { const uint8_t *file; int radius, key; char name[12]; };
 struct row {
     char name[12];
@@ -53,8 +53,9 @@ static float rdf(const uint8_t *p)
 
 static int is_space(uint8_t c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
 
-/* MAPn.PTH (0x30ec2, 0x11c0c): a count, then per path 100 bytes (its name at +8, "MV_<c>...": c is its number, '1' .. '9' are 0 .. 8, 'a' on 9 on) and three channels of
-   0x30 bytes (the number of keys at +0x1c) with their keys of 0x2c bytes (the time +8, the value +0xc, the slopes out and in +0x10, +0x14); 1 if all of it was read */
+/* MAPn.PTH (0x30ec2, 0x11c0c): a count, then per path 100 bytes (its name at +8, "MV_<c>...": c is its number, '1' .. '9' are 0 .. 8, 'a' on 9 on; at +0x28 and +0x2c the
+   times its keys span of the run, 0 and 1, the trains' and the second kind of birds' 0 and 0.5) and three channels of 0x30 bytes (the number of keys at +0x1c) with their keys of
+   0x2c bytes (the time +8, the value +0xc, the slopes out and in +0x10, +0x14); 1 if all of it was read */
 static int load_paths(const uint8_t *p, uint32_t size)
 {
     uint32_t at = 4, used = 0;
@@ -63,8 +64,8 @@ static int load_paths(const uint8_t *p, uint32_t size)
     int32_t count = rd32(p);
     for(int32_t i = 0; i < count && at + 100 <= size; i++) {
         int c = p[at + 11], number = c >= '0' && c <= '9' ? c - '1' : c >= 'a' && c <= 'z' ? c - 0x58 : c - 0x38;
+        struct path q = { { { 0, 0 }, { 0, 0 }, { 0, 0 } }, rdf(p + at + 0x28), rdf(p + at + 0x2C), 1 };
         at += 100;
-        struct path q = { { { 0, 0 }, { 0, 0 }, { 0, 0 } }, 1 };
         for(int k = 0; k < 3; k++) {
             if(at + 0x30 > size) return 0;
             int32_t n = rd32(p + at + 0x1C);
@@ -104,13 +105,15 @@ static float chan_at(const struct chan *c, float s, float *rate)
     return ((a3 * u + a2) * u + a1) * u + a->v;
 }
 
-/* 0x129d5: a path's place (x, y, height) at part (0 .. 1) and, if way is set, which way it is going: the rates of the three channels made a unit vector */
+/* 0x129d5: a path's place (x, y, height) at part (0 .. 1) and, if way is set, which way it is going: the rates of the three channels made a unit vector. The keys span
+   [start, end] of the part (a train's 0 to 0.5: it is at the end of its path from half the run on, the channels hold their last value) */
 static void path_at(const struct path *p, float part, float place[3], float way[3])
 {
     part = part < 0.0f ? 0.0f : part > 1.0f ? 1.0f : part;
+    const float u = (part - p->start) / (p->end - p->start);
     float l = 0.0f;
     for(int k = 0; k < 3; k++) {
-        place[k] = chan_at(&p->c[k], part, way ? &way[k] : 0);
+        place[k] = chan_at(&p->c[k], u, way ? &way[k] : 0);
         if(way) l += way[k] * way[k];
     }
     if(way && (l = sqrtf(l)) != 0.0f)

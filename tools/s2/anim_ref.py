@@ -22,8 +22,12 @@ ALIVE = 52000                                   # the reach of a row that must b
 HEARD = 80000                                   # how far a row's sound carries (0x13880)
 
 
+class Path(list):
+    """a path's three channels (x, y, height; each a list of (time, value, slope out, slope in)) and the span of the run its keys cover, start and end (the head's +0x28, +0x2c)"""
+
+
 def load_paths(pth):
-    """MAPn.PTH: {number: [channel x, y, height]}, a channel a list of (time, value, slope out, slope in); 100 bytes a path (the name at +8), then three channels of 0x30
+    """MAPn.PTH: {number: Path}; 100 bytes a path (the name at +8, the span at +0x28 and +0x2c: 0 and 1, the trains' 0 and 0.5), then three channels of 0x30
     bytes (the key count at +0x1c) with their keys of 0x2c bytes (time +8, value +0xc, slopes +0x10, +0x14)"""
     count, = struct.unpack_from("<i", pth, 0)
     out, p = {}, 4
@@ -31,6 +35,7 @@ def load_paths(pth):
         head = pth[p:p + 100]
         p += 100
         c = head[11]
+        span = struct.unpack_from("<2f", head, 0x28)
         number = c - ord("1") if ord("0") <= c <= ord("9") else c - 0x58 if ord("a") <= c <= ord("z") else c - 0x38
         chans = []
         for _ in range(3):
@@ -41,7 +46,8 @@ def load_paths(pth):
                 keys.append(struct.unpack_from("<4f", pth, p + 8))
                 p += 0x2C
             chans.append(keys)
-        out[number] = chans
+        out[number] = Path(chans)
+        out[number].start, out[number].end = span
     return out
 
 
@@ -72,11 +78,12 @@ def channel_at(keys, s):
 
 
 def path_at(path, part):
-    """0x129d5: the place (x, y, height) and the way (the rate of change, made a unit vector) at part (0 .. 1)"""
+    """0x129d5: the place (x, y, height) and the way (the rate of change, made a unit vector) at part (0 .. 1): the channels are read at (part - start) / (end - start)"""
     part = min(max(part, 0.0), 1.0)
+    u = (part - path.start) / (path.end - path.start)
     pl, way = [], []
     for keys in path:
-        v, r = channel_at(keys, part)
+        v, r = channel_at(keys, u)
         pl.append(v)
         way.append(r)
     ln = math.sqrt(sum(w * w for w in way))

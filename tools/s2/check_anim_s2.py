@@ -282,7 +282,7 @@ def main():
                 if rows[i]["sample"]:
                     tot["heard"] += 1
                     tot["heard_ok"] += any(bool(hg[i][2]) == heard for hg in hist[-2:])
-                if own and objs[i] and not rows[i]["flags"] & 4:
+                if own and objs[i] and not rows[i]["flags"] & 4 and g[i][1]:         # (the record of an object that is not shown, a row that has not started, keeps what it had)
                     pitch, heading = struct.unpack_from("<2i", objs[i], 0x14)
                     tot["angle"] += 1
                     tot["angle_ok"] += any(hg[i][1] and cyc(hg[i][6], heading) <= 1 and cyc(hg[i][7], pitch) <= 1 for hg in hist)
