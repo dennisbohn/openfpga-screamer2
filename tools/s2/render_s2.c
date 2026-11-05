@@ -183,7 +183,18 @@ static int check_looks(int tn)
     struct car_look lk;
     int bad = 0, lit, n;
 #define EXPECT(cond, ...) do { if (!(cond)) { printf("  FAIL: " __VA_ARGS__); printf("\n"); bad++; } } while (0)
-    if (!s2car_init(&car, 0, 0, tn, 0)) { printf("  FAIL: s2car_init (the game's files)\n"); return 1; }
+    /* the car of the image's model 0, with its own numbers: the cars section names it (livery word: team * 256 + car, from 1; 0 in an image that does not: team 1 car 1).
+       Its drive decides which flags its physics can set (0x16878: 0x90 / 0x94 the shares of the front and rear pair, over 0.8 front- or rear-drive, else four-wheel:
+       the pair that is driven blurs on 0x400, the other on 0x8000, four-wheel drive only 0x400 for the rear pair), and which hubs wear which picture is the car's own data */
+    int nrows;
+    const int livery = track_cars(&nrows)[0].livery;
+    const int team = livery >= 256 ? (livery >> 8) - 1 : 0, model_car = livery >= 256 ? (livery & 255) - 1 : 0;
+    if (!s2car_init(&car, team, model_car, tn, 0)) { printf("  FAIL: s2car_init (the game's files)\n"); return 1; }
+    float front_share, rear_share;
+    memcpy(&front_share, &car.rec[0x90 / 4], 4);
+    memcpy(&rear_share, &car.rec[0x94 / 4], 4);
+    const int four_wheel = !(front_share > 0.8f || rear_share > 0.8f);
+    printf("car look: team %d car %d, %s drive\n", team + 1, model_car + 1, four_wheel ? "four-wheel" : front_share > 0.8f ? "front" : "rear");
     for (int k = 0; k < 3; k++) s2car_step(&car, &none);
     EXPECT(car.look == 0, "standing: look %x, not 0", (unsigned)car.look);
     s2car_look(&car, &lk);
@@ -227,7 +238,7 @@ static int check_looks(int tn)
     }
     car.rec[0xb8 / 4] = 0;
     s2car_step(&car, &none);
-    for (int w = 0; w < 2; w++) {                               /* a pair of wheels' blur (poked: the physics' side is below) */
+    for (int w = 0; w < (four_wheel ? 1 : 2); w++) {            /* a pair of wheels' blur (poked: the physics' side is below); a four-wheel car's physics never sets 0x8000 */
         const uint32_t flag = w ? 0x8000 : 0x400;
         int shown = 0;
         for (int k = 1; k < 4; k += 2) {
@@ -247,10 +258,19 @@ static int check_looks(int tn)
         for (int b = 0; b < 2; b++) if ((car.look & (b ? 0x8000u : 0x400u)) && !first[b]) first[b] = (uint32_t)k + 1;
         seen[2] |= (int)(car.look & 0x200);
     }
-    printf("car look: full throttle: the rear (driven) wheels blur from step %u, the front ones from step %u\n", (unsigned)first[0], (unsigned)first[1]);
-    EXPECT(first[0] && first[1] && first[0] <= first[1], "the wheels' blur at full throttle: rear %u front %u", (unsigned)first[0], (unsigned)first[1]);
+    printf("car look: full throttle: the driven pair blurs (0x400) from step %u, the other (0x8000) from step %u\n", (unsigned)first[0], (unsigned)first[1]);
+    /* the driven pair must blur; the other pair only when the car gets fast enough for its undriven wheels (0.29 turns a step), a four-wheel car's physics never sets it */
+    EXPECT(first[0] && (!four_wheel || !first[1]) && (!first[1] || first[0] <= first[1]), "the wheels' blur at full throttle: 0x400 from step %u, 0x8000 from %u", (unsigned)first[0], (unsigned)first[1]);
     EXPECT(!seen[2], "the brake lights at full throttle");
 
+    /* the race's four cars are the image's four models (race_grid names them by their livery words; an image of fewer cars has no race to look at) */
+    const struct car_spec *rows = track_cars(&nrows);
+    if (nrows < RACE_CARS) {
+        printf("car look: (the image holds %d cars: no race)\n", nrows);
+        return bad;
+    }
+    for (int i = 0; i < RACE_CARS; i++)
+        if (rows[i].livery >= 256) race_grid[i] = (struct s2_pick){ (uint8_t)(rows[i].livery >> 8), (uint8_t)(rows[i].livery & 255) };
     if (race_init(tn, road_floor() - 3000.0f)) {                /* the race: the grid's cars whole, the computers' cars' brake lights */
         int braked = 0, grid = 0, flags = 0;
         for (int k = 0; k < 1100; k++) {
