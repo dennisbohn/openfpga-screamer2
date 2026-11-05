@@ -300,9 +300,9 @@ has no line: the first line is its last state. The load no longer checks the ima
 native check of the build has them, and the firmware's builder leaves them 0).
 
 Known gaps (accepted): the cars' windows show the original's environment picture (routine 160 reads the
-first material of `ENV.MLB`, `GFX/ENVPn01.DAT`; no hardware change, see "The windows" below) but the picture
-neither slides with the car's travel nor changes by the road's kind (the tunnels' ceiling frames of tracks 3, 4, 6, 7:
-the viewer's objects carry no reflection accumulators and phase 0), the palette of tracks 2 and 5 is the track's,
+first material of `ENV.MLB`, `GFX/ENVPn01.DAT` in the race, `GFX/ENVM<team>1.DAT` on the CAR page; no hardware change, see "The windows" below);
+in the race the picture slides with each car's travel and changes by the road's kind (the tunnels' ceiling frames of tracks 3, 4, 6, 7), but the viewer's own
+ride mode (`road_scene`) and the ghost car keep offsets 0 and phase 0, the palette of tracks 2 and 5 is the track's,
 not `ENV.COL`'s, no shadows, smoke, props or animated scenery (nor its sounds), no fade by depth, no night or fog, no mirror, the S1
 see-through table (64 rows) where Screamer 2 has 112, the sky and ground colour of `TRACK_DATA` only
 where the backdrop picture ends.
@@ -318,6 +318,15 @@ materials point to it (`track_build_s2()`, `make_track_s2.py`; image version sta
 192.3 KB), and 6 to 20 KB read from the ZIP at the load (`GFX/ENVPn01.DAT`, at
 `0x12D4_0000`). `tools/s2/check_env_s2.py` (run by `check_track_build_s2.sh`) compares every texel the reflection can
 address (u, v in -512 to 511) with the original's wrap-128 read.
+
+The windows in the race and on the CAR page: `firmware/s2env.c` holds what the race image's builder and the CAR page share (the tiling, the texture record, the windows'
+records, `s2_env_phase()`). In the race every car's object (`road_race_scene()`, `road.c`) carries its reflection state, so the offsets slide with the car's travel
+(`track.c`: the way since the last drawing, rotated into the view, times the rate, added to three accumulators; the first drawing of a race adds the car's whole place,
+as the original's does: `road_race_reset()`), and its picture is chosen by the kind of the ground under its fourth wheel (record +0x6b0): the game's routine 0x1f1ee
+stores phase 0x8000 for the kinds 7 and 34, 0x5556 for 13, 0xaaaa for 43 and 0 for every other, and the player's car sets the rate, 0.03 on 7, 13, 34, 43, 44 and 0.002
+elsewhere (the constant at 0xb0678, 0.008 until a race sets it); `tools/s2/check_refl_s2.sh` follows the program's own chain of compares for all 256 kinds and compares.
+The CAR page loads the team's `ENVM<team>1.DAT` (3 KB read, 33.5 KB unpacked, one frame tiled 64 KB a car, five cars: 0.33 MB of the toolkit's models room) and
+`tools/pages3d.sh` (`TEAM=`, `REFL_FIT=`) compares the page with the original's screenshots, `python tools/s2/dosbox_arcade.py --cars <team> [race]` takes them.
 
 Teams: the game loads one car per car of the race (`STARTL.EXE` 0x2f519: `GFX/CARS<team>0<look>.DAT`, its `AUTO<1 + model>`:
 `.MLB` with the paint and the sponsors' textures, `.3DX` with the meshes of body and wheels), so a race of four needs four
@@ -548,6 +557,7 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/s2/check_cars_s2.sh`, `tools/s2/check_cars_s2.c` | the cars' loader `firmware/s2teams.c` natively under the sanitizers on a stored and a deflated ZIP of the team containers: the cars equal the containers' own entries, the bytes read are counted, a repeated or partly changed grid reads nothing or only the changed cars |
 | `tools/s2/check_params.sh`, `tools/s2/check_params.py`, `tools/s2/check_params.c` | the car's numbers: `firmware/s2params.c` (CAR_PARAMS of `DATA/GAME.DAT`, TRACK_DATA with the road kinds of `DATA/MAPn.DAT`) natively against an independent reading in Python, every field of 20 cars and 7 tracks |
 | `tools/s2/check_sound.sh`, `tools/s2/check_sound.py`, `tools/s2/check_sound.c` | the race's sound rules `firmware/s2snd.c` natively in Docker: `DATA/SOUND.DAT`'s `GAME.DTR` (the 33 samples: where their bytes are in the container, length, rate, volume, loop, CRC-32 of the bytes) and `CD_TRACKS` read by the firmware's code and by an independent reading in Python, line by line; an engine's rate, volume and pan over a sweep of revs, distance, last distance and side (223,560 cases), the tyres' rule (13,650 cases) and the knocks' thresholds against the game's routine as OpenScreamer's notes have it in double precision (the constants checked in `STARTL.EXE`) |
+| `tools/s2/check_refl_s2.sh`, `check_refl_s2.py`, `check_refl_s2.c` | the picture the cars' windows reflect by the kind of the ground (`s2_env_phase()`, `firmware/s2env.h`) against the program's own chain of compares at `STARTL.EXE` 0x1f372, followed for all 256 kinds (the python reads the flat image `build/exe/startl_fix.bin`) |
 | `tools/s2/check_car.sh`, `tools/s2/check_car.c`, `tools/s2/car_scenarios/` | the car physics `firmware/s2car.c` natively in float32 on the track images (built with the five cars of team 1, `S2CARS=1:1,1:2,1:3,1:4,1:5`: the wheels of every car number as the traces had them) against the reference traces of OpenScreamer's routines (the folder `ref/` next to the repository, or `$REF_DIR`; scenarios in its `scn/`, traces in `traces*/`), the place cut as the game does and kept as a float; per quantity the largest and the mean difference; also the car alone from each track's grid place and the trigonometry and ground looks a step costs. `car_scenarios/` holds the scenarios heading towards the origin (`a_origin` ..., traces made with `tools/s2/ref_trace/ref_run.sh` into `ref/traces_benign/`) |
 | `tools/s2/check_vis_s2.sh`, `tools/s2/check_vis_s2.c` | the track's drawing key and walks natively in Docker (`docs/screamer2/draw_distance.md`): the key `-(sqrt(d^2 >> 3) >> 2)` against a double-precision reading, every mesh's class key (header entry 43) against the file bytes, and from cameras round the road of each track no piece within 6,000 units that the whole walk takes may be left out by the camera cell's list |
 | `tools/s2/report_carsort_s2.sh`, `tools/s2/report_carsort_s2.c` | a report (not a check) on the painter's order of a computer car against the static pieces: the race robot's cameras with a computer car taken from later steps, a per-pixel depth map of every polygon (patched temporary copies of `track.c` and `geom.c`) and the count of poses where the car is drawn through a nearer piece (`docs/screamer2/draw_distance.md`, "A car behind a wall") |
