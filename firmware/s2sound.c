@@ -44,7 +44,7 @@ static int cd_read;
 /* per engine: the sample playing (-1 none), the distance a frame before (< 0 none), what the voice has */
 static struct { int id; float last; uint32_t step, reg; } eng[RACE_CARS];
 static struct { int id; uint32_t reg; } tyre;
-static struct { int id; uint32_t reg; } scene[ANIMS];   /* the voice of each animated row: its ambient sample (-1 none) and what it has */
+static struct { int id; float last; uint32_t step, reg; } scene[ANIMS];   /* the voice of each animated row: its ambient sample (-1 none), the distance a frame before (< 0 none) and what it has */
 static int ground_before;                       /* the player's wheels on the ground a frame before */
 static uint32_t knock_age, knock_rank, knock_next;
 static uint32_t last_vf, frames;
@@ -109,7 +109,10 @@ void s2snd_race_start(int track)
         eng[i].last = -1.0f;
     }
     tyre.id = -1;
-    for (int i = 0; i < ANIMS; i++) scene[i].id = -1;
+    for (int i = 0; i < ANIMS; i++) {
+        scene[i].id = -1;
+        scene[i].last = -1.0f;                  /* (0xaf45c: the distances forgotten) */
+    }
     memset(amb, 0, sizeof amb);
     if (ready) s2snd_parse_ambient((const uint8_t *)(uintptr_t)SOUND_MEM, sound_size, SOUND_MEM - SDRAM_BASE, track, amb);
     ground_before = 4;
@@ -190,9 +193,9 @@ static void knock(int id, uint32_t rank)
 }
 
 /* the sounds of the animated scenery (0x2cee4, 0x2d543: the game's sound manager's 0xaf338): each row that is heard has its voice, the sample looping, heard from the camera
-   within 80,000 units, the volume the sample's x ((80,000 - distance) / 80,000)^2, panned by the side. The game asks for the rate with a pitch of 0, which makes it 0 there: the
-   samples are played at their own rate here (what the game's mixer does with 0 is not known), so no Doppler either. The voice starts on the first frame the row is heard and goes
-   when it is not. */
+   within 80,000 units, the volume the sample's x ((80,000 - distance) / 80,000)^2, panned by the side, the rate the sample's own with the Doppler shift as an engine's (measured
+   in the running original, tools/s2/dosbox_anim.py --voices: 10,857 to 11,025 Hz for an 11,025 Hz sample; the game's call has a pitch of 0, its rate comes out as the sample's
+   all the same). The voice starts on the first frame the row is heard and goes when it is not (the distance a frame before stays, as the game's does). */
 static void scenery(const struct track_cam *cam, float cs, float sn)
 {
     for (int i = 0; i < s2anim_rows() && i < ANIMS; i++) {
@@ -205,14 +208,18 @@ static void scenery(const struct track_cam *cam, float cs, float sn)
         const struct s2snd_sample *s = &amb[id - S2SND_AMBIENT_FIRST];
         float dx = (float)x - cam->x, dy = (float)y - cam->y, d = sqrtf(dx * dx + dy * dy);
         struct s2snd_heard h;
-        s2snd_heard(s, 1.0f, d, d, dx * cs + dy * sn, S2ANIM_RANGE, DOPPLER, &h);
-        uint32_t reg = s2snd_vol_reg(h.vol, h.pan);
+        if (scene[i].last < 0.0f) scene[i].last = d;
+        s2snd_heard(s, 1.0f, d, scene[i].last, dx * cs + dy * sn, S2ANIM_RANGE, DOPPLER, &h);
+        scene[i].last = d;
+        uint32_t step = s2snd_step(h.rate), reg = s2snd_vol_reg(h.vol, h.pan);
         if (scene[i].id != id) {
             scene[i].id = id;
-            play_sample(V_ANIM + i, s, s2snd_step(s->rate), reg);
-        } else if (reg != scene[i].reg) {
-            AU_VOL(V_ANIM + i) = reg;
+            play_sample(V_ANIM + i, s, step, reg);
+        } else {
+            if (step != scene[i].step) AU_STEP(V_ANIM + i) = step;
+            if (reg != scene[i].reg) AU_VOL(V_ANIM + i) = reg;
         }
+        scene[i].step = step;
         scene[i].reg = reg;
     }
 }
