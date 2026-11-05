@@ -66,6 +66,8 @@ void s2scene_begin(const uint8_t *mlb, int buffer, int fresh);
 void s2scene_mlb(const uint8_t *mlb);
 /* Blocks (track.h) seen from cam, in the order given (far first) */
 void s2scene_blocks(const struct track_cam *cam, const struct track_block *b, int n);
+/* The same for an object whose windows reflect (a car): refl is gu_piece.refl, the offsets track_object_reflection() works out (phase 0) */
+void s2scene_blocks_refl(const struct track_cam *cam, const struct track_block *b, int n, uint32_t refl);
 /* The pieces are with the unit; its work goes on while the CPU makes the page's text. */
 void s2scene_end(void);
 

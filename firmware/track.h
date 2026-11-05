@@ -182,6 +182,11 @@ struct track_object {
    (0x1813c: 0.002 in the open, 0.03 in a tunnel) */
 void track_reflection_rate(float k);
 
+/* The reflection's offsets of an object that is not drawn by the track (a menu page's car, track_block_piece's pieces carry none) as gu_piece.refl's [23:16] and [31:24]
+   for its blocks (the ones with flag 0x2000: the body): the same step as an object of the race takes, from its place (x, y, h as track_object's) at the camera cam, the
+   state s kept by the caller (zeroed when the object is made: the first call adds its whole place). */
+uint32_t track_object_reflection(const struct track_cam *cam, float x, float y, float h, struct track_refl *s);
+
 /* One block placed as b as a piece for the geometry unit, seen from cam with the race's lens:
    for a model drawn without a track (the menu's, menu.h) */
 void track_block_piece(const struct track_cam *cam, const struct track_block *b, struct gu_piece *g);

@@ -105,13 +105,19 @@ void s2scene_mlb(const uint8_t *mlb)
     GU_MLB = (uint32_t)((uintptr_t)mlb - SDRAM_BASE);
 }
 
-void s2scene_blocks(const struct track_cam *cam, const struct track_block *b, int n)
+void s2scene_blocks_refl(const struct track_cam *cam, const struct track_block *b, int n, uint32_t refl)
 {
     for (int i = 0; i < n; i++) {
         struct gu_piece g;
         track_block_piece(cam, &b[i], &g);
+        g.refl = refl;
         hw_piece(&g);
     }
+}
+
+void s2scene_blocks(const struct track_cam *cam, const struct track_block *b, int n)
+{
+    s2scene_blocks_refl(cam, b, n, 0);
 }
 
 void s2scene_end(void)
