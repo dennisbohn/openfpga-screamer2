@@ -14,7 +14,6 @@
 #include "../hw.h"
 #include "../s2scene.h"
 #include "../s2gfx.h"
-#include "../s2trackmap.h"
 #include "../s2menu.h"
 #include "../s2page.h"
 #include "../s2end.h"
@@ -89,6 +88,7 @@ static const int order[7] = { 1, 3, 4, 5, 6, 2, 7 };
 int s2arcade_tracks_open(void) { return 7; }
 int s2page_run(const struct s2_page *p, void *self) { (void)p; (void)self; return 0; }
 
+#include "../s2trackmap.c"                                      /* (included: the test reaches the maps' state) */
 #include "../s2trackpage.c"
 
 /* ------------------------------------------------------------------------------------------------ the match */
@@ -262,6 +262,41 @@ static int end_match(const char *label, const char *ram, int *n_equal, int *n_dr
     return 1;
 }
 
+/* The league's question LEAVING LEAGUE? (the page darkened, the question in its left half) against the screenshots: the page drawn without a map over two flat pictures, the pixels the
+   two have alike are what is drawn (text and darkened text), compared at the best of the four states (YES or NO chosen, lit or dim) */
+static int question_match(int *n_equal, int *n_drawn)
+{
+    static uint8_t bg[3][S2G_PIC_BYTES], r[3][S2G_PIC_BYTES];
+    memset(bg[0], 90, S2G_PIC_BYTES);                           /* (flat pictures of bright colours, which the darkening maps to three different ones) */
+    memset(bg[1], 140, S2G_PIC_BYTES);
+    memset(bg[2], 190, S2G_PIC_BYTES);
+    int best = -1, bn = 0;
+    const int maps_were = M.ok;
+    M.ok = 0;                                                   /* (no map: what is under the dark box is the flat picture) */
+    for (int yes = 0; yes < 2; yes++)
+        for (int lit = 0; lit < 2; lit++) {
+            for (int k = 0; k < 3; k++) {
+                struct blit_list *l = s2gfx_begin_on(0);
+                s2gfx_picture(l, bg[k]);
+                struct lg p = { .league = 0, .race = 1, .track = 3, .asking = 1, .yes = yes, .a1 = 0, .fresh = 1, .now = lit ? 0 : 17 };
+                lg_draw(&p, l, 0);
+                s2gfx_flush();
+                memcpy(r[k], (const void *)FB(0), S2G_PIC_BYTES);
+            }
+            int n = 0, same = 0;
+            for (int i = 0; i < S2G_PIC_BYTES; i++) {
+                if (r[0][i] != r[1][i] || r[0][i] != r[2][i]) continue;
+                n++;
+                same += r[0][i] == frame_idx[i];
+            }
+            if (best < 0 || n - same < bn - best) { best = same; bn = n; }
+        }
+    M.ok = maps_were;
+    *n_equal = best;
+    *n_drawn = bn;
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 4) { fprintf(stderr, "usage: %s <SCREAMER2.zip> <folder> <labels> [out prefix]\n", argv[0]); return 2; }
@@ -300,11 +335,27 @@ int main(int argc, char **argv)
         if (!lf || fscanf(lf, "%47s", labels[i]) != 1) labels[i][0] = 0;
     }
     if (lf) fclose(lf);
-    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0, sum2d_n = 0, sum2d_same = 0, end_eq = 0, end_n = 0;
+    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0, sum2d_n = 0, sum2d_same = 0, end_eq = 0, end_n = 0, q_eq = 0, q_n = 0;
     for (int f = 0; f < nn; f++) {
         if (only && !strstr(names[f], only) && !strstr(labels[f], only)) continue;
-        const int ta = !strncmp(labels[f], "ta_", 3), league = !strncmp(labels[f], "trackmap", 8);
-        if (!ta && !league) continue;
+        const int ta = !strncmp(labels[f], "ta_", 3), league = !strncmp(labels[f], "trackmap", 8), prompt = !strncmp(labels[f], "prompt", 6);
+        if (!ta && !league && !prompt) continue;
+        if (prompt) {                                                   /* the league's question */
+            char path[512];
+            snprintf(path, sizeof path, "%s/%s", argv[2], names[f]);
+            FILE *h = fopen(path, "rb");
+            if (!h || fread(frame_idx, 1, S2G_PIC_BYTES, h) != S2G_PIC_BYTES) { fprintf(stderr, "%s\n", path); return 1; }
+            fclose(h);
+            s2gfx_bkk("TKG_3L.BKK", tkg_buf, tkg_pal);
+            s2gfx_dark_table(tkg_pal, dark, 256);
+            int eq, dn;
+            question_match(&eq, &dn);
+            printf("%s (%s): the question LEAVING LEAGUE? (text, darkened text): %d of %d drawn pixels equal\n", names[f], labels[f], eq, dn);
+            q_eq += eq;
+            q_n += dn;
+            fflush(stdout);
+            continue;
+        }
         if (ta && strstr(labels[f], "ta_end")) {                      /* time attack's end screen: its own comparison */
             char path[512];
             snprintf(path, sizeof path, "%s/%s", argv[2], names[f]);
@@ -336,15 +387,20 @@ int main(int argc, char **argv)
         if (ta && same_palette(fp, pic_pal[0])) {
             pic = picture_buf[0];
             pp = pic_pal[0];
-        } else if (league) {
-            for (int n = 1; n <= 6 && !pic; n++) {
+        } else if (league) {                                            /* the track by its banner, each TKG picture with its own */
+            for (int n = 1; n <= 6; n++) {
                 char nm[16] = "TKG_1L.BKK";
                 nm[4] = (char)('0' + n);
-                if (s2gfx_bkk(nm, tkg_buf, tkg_pal) && same_palette(fp, tkg_pal)) {
-                    pic = tkg_buf;
-                    pp = tkg_pal;
-                    track = n;
-                }
+                if (!s2gfx_bkk(nm, tkg_buf, tkg_pal) || !same_palette(fp, tkg_pal)) continue;
+                const int d = banner_diff(tkg_buf, n);
+                if (d < bd) { bd = d; track = n; }
+            }
+            if (track) {
+                char nm[16] = "TKG_1L.BKK";
+                nm[4] = (char)('0' + track);
+                s2gfx_bkk(nm, tkg_buf, tkg_pal);
+                pic = tkg_buf;
+                pp = tkg_pal;
             }
         }
         if (!pic) { printf("%s (%s): palette is not the page's\n", names[f], labels[f]); continue; }
@@ -382,7 +438,7 @@ int main(int argc, char **argv)
                     n++;
                     same += fb[i] == frame_idx[i];
                 }
-            if (same > best2d) { best2d = same; best_n = n; best_arrows = arrows; }
+            if (best2d < 0 || n - same < best_n - best2d) { best2d = same; best_n = n; best_arrows = arrows; }      /* (the phase with the fewest differing pixels) */
         }
         sum2d_n += best_n;
         sum2d_same += best2d;
@@ -405,5 +461,6 @@ int main(int argc, char **argv)
            sum_cov ? 100.0 * sum_sil / sum_cov : 0.0, sum_cov ? 100.0 * sum_in / sum_cov : 0.0, sum_in ? 100.0 * sum_near / sum_in : 0.0);
     printf("2D parts of those frames: %d of %d pixels equal\n", sum2d_same, sum2d_n);
     if (end_n) printf("the end screens: %d of %d drawn pixels equal\n", end_eq, end_n);
+    if (q_n) printf("the league's question: %d of %d drawn pixels equal\n", q_eq, q_n);
     return 0;
 }
