@@ -25,15 +25,16 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   path with the original's level of detail at DETAIL HIGH (placed meshes 6,000 / 9,000 units, cars 2,000 /
   6,000; far plane from TRACK_DATA). A timing overlay (B) and `debug.txt` give the frame times to hold against the
   forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
-  gaps: the cars' windows show the original's environment picture but it does not slide, no shadows, smoke, props, fade, night, mirror, the original's menus (a plain start menu below, docs/screamer2/menus.md has the plan for the rest); the ride is silent (the race has sound, next bullet).
-- **Start menu:** after the files screen a list in the console's text style (`firmware/s2menu.c`): ARCADE (the original's arcade pages: title, TRACK with the
-  tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), CHAMPIONSHIP (the four leagues: LEAGUE SELECTION, WELCOME, the races with the LEAGUE REPORT
-  after each, what winning opens; docs/development.md "The championship"), TIME ATTACK (TRACK SELECTION with the turning 3D map, 3 LAPS or FREE RUN with its five splits, the race against the ghost
-  of the track's best run, re-simulated from recorded controls; docs/development.md "Time attack"), laps (1, 3, 5, 10), the computers' level (ROOKIE, NORMAL, PRO), START RACE
-  (the race at once; left / right the track 1 to 7) and WATCH (the ride). Everything is open from the start. d-pad up/down row, left/right value, L / R three
-  tracks on or back; Start in the race opens the pause menu (RESUME, RESTART, EXIT); the end screen of an arcade or championship race offers REPLAY (the race run again from the player's recorded
-  controls, from the trackside cameras with the original's band; docs/development.md "Replay"). The choices
-  are kept across power-ups. Docs: docs/development.md, "Start menu".
+  gaps: the cars' windows show the original's environment picture (sliding with the car), no shadows, smoke, props, fade, night, mirror, the original's menus (most are built, see below; docs/screamer2/menus.md has what is left); the ride is silent (the race has sound, next bullet).
+- **The menu:** after the files screen (and, on a new save, TEAM SELECTION and ENTER YOUR NAME) the original's options room: the team's room as a 3D scene, the camera gliding between five stations
+  with left / right (ARCADE, CHAMPIONSHIP, TIME ATTACK, MULTIPLAYER, GAME SETTINGS), B or Start take the choice, A or Select go back to TEAM SELECTION (`firmware/s2room.c`; docs/development.md "The options room").
+  The stations lead to ARCADE (the original's arcade pages: title, TRACK with the tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), CHAMPIONSHIP (the four leagues: LEAGUE SELECTION, WELCOME,
+  the races with the LEAGUE REPORT after each, what winning opens; docs/development.md "The championship"), TIME ATTACK (TRACK SELECTION with the turning 3D map, 3 LAPS or FREE RUN with its five splits, the race
+  against the ghost of the track's best run, re-simulated from recorded controls; docs/development.md "Time attack"), MULTIPLAYER (the MULTIPLAYER MENU as the original answers without a network) and GAME SETTINGS
+  (laps, level, gearbox, ...; VIEW HIGH SCORES). Everything is open from the start. X in the room opens the developer's list (`firmware/s2menu.c`, the old start menu: START RACE on any track at once with left / right,
+  WATCH (the ride), laps, level; Select goes back); Start in the race opens the pause menu (RESUME, RESTART, EXIT); the end screen of an arcade or championship race offers REPLAY (the race run again from the player's recorded
+  controls, from the trackside cameras with the original's band; docs/development.md "Replay"). The choices are kept across power-ups.
+  Docs: docs/development.md, "Start menu".
 - **Driving mode (a race):** the race of the start menu (or Start in the ride) puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
   L / R gears), from the physics' chase camera, with speed, gear, lap, position and times on the screen. The computer cars

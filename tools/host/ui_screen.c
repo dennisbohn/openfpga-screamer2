@@ -20,6 +20,8 @@
 #include "../s2save.h"
 #include "../s2menu.h"
 #include "../frame.h"
+#include "../files.h"
+#include "../trackmem.h"
 #include "../hw.h"
 #include "../blit.h"
 #include "../crc32.h"
@@ -32,6 +34,8 @@
 #include <string.h>
 
 static int failures;
+struct viewer_image loaded;             /* the viewer's record of its image (s2room_menu clears it) and its ZIP, for s2room.c's menu hook */
+struct zip *files_zip(void) { return s2gfx_zip(); }
 #define CHECK(cond, ...) do { if (!(cond)) { failures++; printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
 /* ------------------------------------------------------------------------------------------------ the hardware's stand-ins */
@@ -45,6 +49,7 @@ static struct { uint32_t at; const char *name; } shots[16];
 static int nshots;
 static uint32_t pal_trace[128][2];       /* for the fade tests: palette entries 17 and 241 as each frame left them */
 static uint32_t swaps;
+static void (*frame_probe)(void);       /* called at the start of every swap's stand-in: what the test looks at in the frame before (the options room's camera) */
 /* frames to compare with a reference when they are on show: the page's frame of tick t is on show in call t + 1 */
 struct expect { uint32_t at; char name[96]; int shot; int kind, league; };     /* kind 1: a frame of the championship's pages (league_screen.c; league: which picture, -1 the selection's) */
 static struct expect expects[40];
@@ -75,6 +80,7 @@ static void save(const char *name)
 
 uint32_t wait_swap_done(void)
 {
+    if (frame_probe) frame_probe();
     if (VID_SWAP) {                     /* the frame drawn since the last call goes on show */
         VID_SWAP = 0;
         front ^= 1;
@@ -1009,11 +1015,15 @@ static void draw_banner(int track, uint8_t *out)
 /* time attack's pages: trackpage_screen.c */
 #include "trackpage_screen.c"
 
+/* the options room: room_screen.c */
+#include "room_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
 {
     failures = 0;
+    s2menu_room = 0;                                                /* (the list is the menu in these tests: the options room's own tests set a stand-in) */
     *(volatile uint32_t *)0xF000000Cu = 0x1Fu;                      /* MEM_STATUS: all writes done, the SDRAM ready */
     IN_KEY = 0;
     dlog_init();
@@ -1035,6 +1045,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_league_flow(prefix);
     check_pages3d(prefix);
     check_trackpages(prefix);
+    check_room(ref, prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
     int stored_banners = s2gfx_banner(1) != 0x13;

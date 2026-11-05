@@ -78,6 +78,12 @@ void s2scene_object(const uint8_t *mesh, float x, float y, float z, int a0, int 
 /* The camera of the original's pages: (x, y up, z), looking along -z, pitched by pitch (radians, + up) */
 struct track_cam s2scene_camera(float x, float y, float z, float pitch);
 
+/* The engine's easing (STARTL.EXE 0x3364d, 0x1016b, the table at 0x1240c0): a row keeps this fraction of the distance a frame, 0.5 + 0.005 row; 0x5f .. 0x62 are the slow
+   glides of the options room's camera, 0x50 the badges' */
+float s2scene_easing(int row);
+/* An angle in radians eased towards target the short way round by the row's fraction (0x1016b), kept in 0 .. 2 pi */
+void s2scene_ease_angle(float *v, float target, int row);
+
 /* The distance of a point from a camera, squared, for ordering objects far to near */
 float s2scene_dist2(const struct track_cam *cam, float x, float y, float z);
 

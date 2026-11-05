@@ -31,27 +31,14 @@
 #include "s2cam.h"
 #include "s2trackpage.h"
 #include "s2arcade.h"
+#include "trackmem.h"
 #include "music.h"
 #include "s2hud.h"
 #include "prof.h"
 #include <string.h>
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
-   ZIP's entries read whole), the build's scratch up to the program */
-#define TEX_FILE    ((const volatile uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))   /* the image, up to 7 MB */
-#define TEX_MAX     0x700000u
-#define GFX_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2800000))                  /* GFX/MAPnH01.DAT */
-#define GFX_MAX     0x400000u
-#define CARS_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2C00000))                  /* the place for the cars' ZIP entries (s2teams.h) */
-#define CARS_MAX    0x100000u
-#define DATA_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D00000))                  /* DATA/MAPn.DAT */
-#define DATA_MAX    0x40000u
-#define ENV_MEM     ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D40000))                  /* GFX/ENVPn01.DAT (up to 20 KB) */
-#define ENV_MAX     0x20000u
-#define BLOB_MEM    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000))                  /* the grid's cars, unpacked */
-#define BLOB_ROOM   (RACE_CARS * S2_CAR_ROOM)                                         /* 0xE0000 */
-#define SCRATCH_MEM ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2D60000 + BLOB_ROOM))
-#define SCRATCH_MAX (PROG_BASE - (SDRAM_BASE + 0x2D60000u + BLOB_ROOM))
+   ZIP's entries read whole), the build's scratch up to the program: trackmem.h */
 
 /* the simulation's own slots (core/data.json does not have them; tools/sim.sh): a finished image offered
    instead of the build, the frames to run, the track */
@@ -182,7 +169,7 @@ static int sim_image(void)
    worked, else 0 and what stopped it in *what. The grid's cars are read and unpacked once (s2teams.h). The log
    gets one line: the bytes read and the milliseconds of each step. */
 static int load_cars = RACE_CARS;       /* the cars of the grid the image holds: four, time attack's two (the ghost) or one */
-static struct { int valid, track, cars; struct s2_pick pick[RACE_CARS]; } loaded;     /* what the image holds, so that time attack does not build it again */
+struct viewer_image loaded;      /* what the image holds, so that time attack does not build it again (trackmem.h) */
 
 static int load_track(struct zip *z, int n, const char **what)
 {

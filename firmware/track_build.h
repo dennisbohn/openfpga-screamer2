@@ -50,6 +50,10 @@ uint32_t track_build(const struct track_files *f, int n, uint8_t *out, uint32_t 
  * numbers are the physics' own), whose livery word names the car: team * 256 + car, as the files number them
  * (s2car.c finds a car's wheels by it). The scratch needs 0.6 MB for track 4, the largest; the image 3.5 to 5.4 MB
  * (14 to 21 blocks of 256 KB; 28 at most). env may be 0: the windows then keep the cars' own (placeholder) picture.
+ *
+ * With ncars 0 (data and env 0) the image is a menu's room (docs/screamer2/menus.md, row 8): f->gfx is GFX/MENU<t>1.DAT, whose entries MAP<t>.MLB, .UNR, .MMP,
+ * .COL and .BCK are a track's (n is the team), the scenery only: no car sections (so no car materials in front of the MLB), no road points or walls if the map has
+ * none (the start stays 0), the menus' far plane 43,808 and the colour 0 where a track has TRACK_DATA. tools/s2/make_track_s2.py (S2ROOM=<t>) is the reference.
  */
 #define S2_CARS     5                   /* models an image may hold: a race has four, the physics checks use a team's five */
 struct s2_car {                         /* AUTO<car>.MLB and .3DX of GFX/CARS<team>01.DAT, unpacked */

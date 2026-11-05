@@ -44,6 +44,9 @@ Usage: python tools/s2/make_track_s2.py <Screamer 2 folder> <track 1..7> <out.bi
   point 0 (a chosen frame for the simulation)
   S2CARS=team:car,... in the environment: the cars of the grid, 1 to 5 of them (a race has four), team 1..4 and
   car 1..5 as the files number them (CARS<team>, AUTO<car>), the player's first; default 1:1,2:2,3:3,4:4
+  S2ROOM=1 in the environment: a menu's room instead of a track (the options room, docs/screamer2/menus.md row 8): the "track" number is the team,
+  the entries MAP<team>.* are those of GFX/MENU<team>1.DAT, and the image is the scenery only: no cars (so no car materials in front of the MLB, no
+  models, no reflection picture), no road points or walls (the map has none), no TRACK_DATA (the menus' far plane 43,808, colour 0)
 """
 import os
 import struct
@@ -239,15 +242,19 @@ def main():
     root, n, out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     detail = sys.argv[4] if len(sys.argv) > 4 else "H"
     look = sys.argv[5] if len(sys.argv) > 5 else "0"
-    gfx = os.path.join(root, "GFX", f"MAP{n}{detail}{look}1.DAT")      # ADAPTER: the name
+    room = bool(os.environ.get("S2ROOM"))                               # ADAPTER: a menu's room (see the header)
+    gfx = os.path.join(root, "GFX", f"MENU{n}1.DAT" if room else f"MAP{n}{detail}{look}1.DAT")      # ADAPTER: the name
     g = datfile.read(gfx)
-    d = datfile.read(os.path.join(root, "DATA", f"MAP{n}.DAT"))
     track = f"MAP{n}"
     mlb = datfile.extract(g, track + ".MLB")
     unr = datfile.extract(g, track + ".UNR")
     col = datfile.extract(g, track + ".COL")
     mmp = datfile.extract(g, track + ".MMP")
-    tdata = s2_track_data(datfile.extract(d, track + "DAT.DTR"))      # ADAPTER: MAPnDAT.DTR
+    if room:
+        tdata = [-43808, 0, 0, 0, 0]
+    else:
+        d = datfile.read(os.path.join(root, "DATA", f"MAP{n}.DAT"))
+        tdata = s2_track_data(datfile.extract(d, track + "DAT.DTR"))      # ADAPTER: MAPnDAT.DTR
     far, colour = -tdata[0], tdata[4]
     pal = b"".join(struct.pack("<I", col[3 * i] * 4 << 16 | col[3 * i + 1] * 4 << 8 | col[3 * i + 2] * 4) for i in range(256))
     pl, run0 = placements(mmp)
@@ -255,8 +262,8 @@ def main():
     dirs, walls = cell_arrays(mmp)
 
     # ADAPTER: the grid's cars, each its team's, their libraries merged (see the header)
-    pick = [tuple(int(v) for v in c.split(":")) for c in os.environ.get("S2CARS", GRID).split(",")]
-    assert 1 <= len(pick) <= 5 and all(1 <= t <= 4 and 1 <= c <= 5 for t, c in pick), f"S2CARS {pick}"
+    pick = [] if room else [tuple(int(v) for v in c.split(":")) for c in os.environ.get("S2CARS", GRID).split(",")]
+    assert (room or 1 <= len(pick) <= 5) and all(1 <= t <= 4 and 1 <= c <= 5 for t, c in pick), f"S2CARS {pick}"
     CARS = len(pick)
     # one stand-in row per car model, its livery word the car: team * 256 + car (s2car.c finds the wheels by it)
     cars = b"".join(struct.pack("<12si4f2i7f", b"S2 STANDIN", t << 8 | c, 150.0, 9000.0, 1.0, 1.0, 1, 4, 0, 3.0, 2.0, 1.5, 1.2, 1.0, 0.8)
@@ -278,8 +285,9 @@ def main():
         _, recs, lib = car_library(car_mlb[k], lib_at[k], env_at)
         cmat += recs
         mlbsec += lib + bytes(pad256(len(lib)) - len(lib))
-    env = datfile.extract(datfile.read(os.path.join(root, "GFX", f"ENVP{n}{look}1.DAT")), "ENV.MLB")   # ADAPTER
-    mlbsec += env_picture(env, env_at)
+    if not room:
+        env = datfile.extract(datfile.read(os.path.join(root, "GFX", f"ENVP{n}{look}1.DAT")), "ENV.MLB")   # ADAPTER
+        mlbsec += env_picture(env, env_at)
     models, files, at = b"", b"", 24 * CARS
     for k in range(CARS):
         delta = FIRST + 16 * sum(nrec[:k]) - mlb_off
@@ -289,7 +297,7 @@ def main():
     models += files
 
     sr = os.environ.get("S2START_ROAD")                                 # a chosen start for the simulation
-    sa, sx_, sy_ = struct.unpack("<f2i", dirs[int(sr) if sr else 0])
+    sa, sx_, sy_ = (0.0, 0, 0) if not dirs else struct.unpack("<f2i", dirs[int(sr) if sr else 0])
     names = {e.name.upper() for e in datfile.entries(g)}
     if track + ".BCK" in names:
         bw, bh, back = pcx(datfile.extract(g, track + ".BCK"))
