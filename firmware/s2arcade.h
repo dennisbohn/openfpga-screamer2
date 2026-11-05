@@ -29,5 +29,10 @@ int s2arcade_page(int page, struct s2_menu_cfg *c);
    menu here), 0 if the first page could not be shown. */
 int s2arcade_run(struct s2_menu_cfg *c);
 
+/* 3 LAPS / FREE RUN of that page (state 1; the page calls it; defined with time attack's other pages in s2trackpage.c so that the test against the running original reaches it without the
+   cars): the chosen one lit in the phase `lit_phase` of the blink */
+struct blit_list;
+void s2tp_modes_draw(struct blit_list *l, int free_run, int lit_phase);
+
 /* The tracks the TRACK page offers: how many places of the original's order (s2save_track_at) are open, 3 to 7 */
 int s2arcade_tracks_open(void);

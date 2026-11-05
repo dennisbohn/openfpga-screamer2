@@ -300,6 +300,36 @@ static int question_match(int *n_equal, int *n_drawn)
     return 1;
 }
 
+/* The CAR page's 3 LAPS / FREE RUN (the second state of the page in time attack) against the screenshots: the two texts drawn alone over two flat pictures, the pixels the two
+   renderings have alike are what is drawn, compared at the best of the four states (3 LAPS or FREE RUN chosen, lit or dim in the blink). The cars, the list of set-ups and the plate
+   under them are not compared. */
+static void mode_match(int *n_equal, int *n_drawn, int *state)
+{
+    static uint8_t bg[2][S2G_PIC_BYTES], r[2][S2G_PIC_BYTES];
+    memset(bg[0], 0, S2G_PIC_BYTES);
+    memset(bg[1], 1, S2G_PIC_BYTES);
+    int best = -1, bn = 0;
+    for (int fr = 0; fr < 2; fr++)
+        for (int lit = 0; lit < 2; lit++) {
+            for (int k = 0; k < 2; k++) {
+                struct blit_list *l = s2gfx_begin_on(0);
+                s2gfx_picture(l, bg[k]);
+                s2tp_modes_draw(l, fr, lit);
+                s2gfx_flush();
+                memcpy(r[k], (const void *)FB(0), S2G_PIC_BYTES);
+            }
+            int n = 0, same = 0;
+            for (int i = 0; i < S2G_PIC_BYTES; i++) {
+                if (r[0][i] != r[1][i]) continue;
+                n++;
+                same += r[0][i] == frame_idx[i];
+            }
+            if (same > best) { best = same; bn = n; *state = fr * 2 + lit; }
+        }
+    *n_equal = best;
+    *n_drawn = bn;
+}
+
 static unsigned cost_n[8], cost_pieces[8], cost_faces[8], cost_max[8];
 
 int main(int argc, char **argv)
@@ -340,7 +370,7 @@ int main(int argc, char **argv)
         if (!lf || fscanf(lf, "%47s", labels[i]) != 1) labels[i][0] = 0;
     }
     if (lf) fclose(lf);
-    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0, sum2d_n = 0, sum2d_same = 0, end_eq = 0, end_n = 0, q_eq = 0, q_n = 0;
+    int frames = 0, sum_cov = 0, sum_sil = 0, sum_in = 0, sum_near = 0, sum2d_n = 0, sum2d_same = 0, end_eq = 0, end_n = 0, q_eq = 0, q_n = 0, m_eq = 0, m_n = 0;
     for (int f = 0; f < nn; f++) {
         if (only && !strstr(names[f], only) && !strstr(labels[f], only)) continue;
         const int ta = !strncmp(labels[f], "ta_", 3), league = !strncmp(labels[f], "trackmap", 8), prompt = !strncmp(labels[f], "prompt", 6);
@@ -358,6 +388,20 @@ int main(int argc, char **argv)
             printf("%s (%s): the question LEAVING LEAGUE? (text, darkened text): %d of %d drawn pixels equal\n", names[f], labels[f], eq, dn);
             q_eq += eq;
             q_n += dn;
+            fflush(stdout);
+            continue;
+        }
+        if (ta && strstr(labels[f], "ta_mode")) {                       /* the CAR page's 3 LAPS / FREE RUN */
+            char path[512];
+            snprintf(path, sizeof path, "%s/%s", argv[2], names[f]);
+            FILE *h = fopen(path, "rb");
+            if (!h || fread(frame_idx, 1, S2G_PIC_BYTES, h) != S2G_PIC_BYTES) { fprintf(stderr, "%s\n", path); return 1; }
+            fclose(h);
+            int eq, dn, st = 0;
+            mode_match(&eq, &dn, &st);
+            printf("%s (%s): 3 LAPS / FREE RUN (%s chosen, %s): %d of %d drawn pixels equal\n", names[f], labels[f], st >> 1 ? "FREE RUN" : "3 LAPS", st & 1 ? "lit" : "dim", eq, dn);
+            m_eq += eq;
+            m_n += dn;
             fflush(stdout);
             continue;
         }
@@ -475,6 +519,7 @@ int main(int argc, char **argv)
     for (int n = 1; n <= 7; n++)
         if (cost_n[n]) printf("the map of track %d: %u pieces, %.0f faces drawn a frame on average, %u at most (%u frames)\n", n, cost_pieces[n] / cost_n[n], (double)cost_faces[n] / cost_n[n], cost_max[n], cost_n[n]);
     if (end_n) printf("the end screens: %d of %d drawn pixels equal\n", end_eq, end_n);
+    if (m_n) printf("the car page's 3 LAPS / FREE RUN: %d of %d drawn pixels equal\n", m_eq, m_n);
     if (q_n) printf("the league's question: %d of %d drawn pixels equal\n", q_eq, q_n);
     return 0;
 }

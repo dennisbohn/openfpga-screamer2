@@ -269,11 +269,7 @@ static void car_draw(void *self, struct blit_list *l, uint32_t tick)
     s2gfx_sprite(l, p->state && !p->attack ? SPR_TRANS_TITLE : SPR_CAR_TITLE, 28, 15);
     s2gfx_sprite(l, SPR_BADGE + c->team - 1, 226, 1);
     if (p->attack && p->state) {                            /* 3 LAPS / FREE RUN (0x3de0b ..): in halves of the screen, the chosen one lit while bit 0x20 of the clock is clear */
-        const int lit_phase = !(((p->now - p->t0) * 2) & 0x20);
-        for (int k = 0; k < 2; k++) {
-            const int lit = lit_phase && c->free_run == k;
-            s2gfx_text_boxed(l, lit ? S2G_FONT_SMALL2 : S2G_FONT_SMALL, lit ? 3 : S2G_WHITE, 2, 160 * k, 160, 155, s2gfx_line("3 LAPS", k, k ? "FREE RUN" : "3 LAPS"));
-        }
+        s2tp_modes_draw(l, c->free_run, !(((p->now - p->t0) * 2) & 0x20));
     } else if (!p->state) {
         s2gfx_sprite(l, c->car == S2M_CARS ? SPR_PLATE_BONUS + c->team - 1 : SPR_PLATE + c->car - 1, 18, 155);
         s2gfx_sprite(l, SPR_MAXSPEED, 166, 170);

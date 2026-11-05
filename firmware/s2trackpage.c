@@ -117,6 +117,16 @@ static void draw_maps(struct blit_list *l, const struct item *it, int n, int a1,
 }
 
 /* the banner, the texts of the track (file number 1 .. 7) */
+/* the CAR page's second state in time attack (0x3de0b ..): 3 LAPS and FREE RUN in the two halves of the screen at y 155, the chosen one lit in the phase `lit_phase` (bit 0x20 of the
+   clock clear); drawn by s2arcade.c's car page, here so that the test against the running original reaches it without the page's cars */
+void s2tp_modes_draw(struct blit_list *l, int free_run, int lit_phase)
+{
+    for (int k = 0; k < 2; k++) {
+        const int lit = lit_phase && free_run == k;
+        s2gfx_text_boxed(l, lit ? S2G_FONT_SMALL2 : S2G_FONT_SMALL, lit ? 3 : S2G_WHITE, 2, 160 * k, 160, 155, s2gfx_line("3 LAPS", k, k ? "FREE RUN" : "3 LAPS"));
+    }
+}
+
 static void draw_track_texts(struct blit_list *l, int track)
 {
     s2gfx_sprite_boxed(l, SPR_BANNER + track - 1, 160, 160, 44);
