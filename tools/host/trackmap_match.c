@@ -9,6 +9,8 @@
  * vertices and nothing is cut: the pieces are the whole blocks, as the original draws them.
  *
  * Usage: trackmap_match <SCREAMER2.zip> <folder of .idx / .pal> <labels file> [<out prefix: pictures of the best match per frame (DUMP=<part of a name>)>]
+ * With SWEEP=<track, 0 for all>[:<step>] (and an out prefix) it compares nothing: it draws the map of the track(s) at every step-th angle (<prefix>_t<track>_a<angle>.rgb); with
+ * SHOT=<raw RGB file of 320 x 200 x 3> too, it looks for the angle at which the map of that track is closest to the picture (<prefix>_best.rgb). See tools/trackmap.sh.
  */
 #define _GNU_SOURCE
 #include "../hw.h"
@@ -351,6 +353,62 @@ int main(int argc, char **argv)
     if (!s2map_load(&zip)) { fprintf(stderr, "the maps\n"); return 1; }
     s2gfx_bkk("LEAG_0L.BKK", picture_buf[0], pic_pal[0]);
     if (getenv("TA_OPEN") && *getenv("TA_OPEN")) open_tracks = atoi(getenv("TA_OPEN"));
+    const char *sweep = getenv("SWEEP");                                /* SWEEP=<track>[:<step>]: the map of a track at every step-th angle of its turn (no screenshots), as <out prefix>_a<angle>.rgb */
+    if (sweep && *sweep && argc > 4) {
+        const int track = atoi(sweep), step = strchr(sweep, ':') && atoi(strchr(sweep, ':') + 1) > 0 ? atoi(strchr(sweep, ':') + 1) : 128;
+        const char *shot = getenv("SHOT");                              /* SHOT=<320 x 200 x 3 raw RGB file>: the angle at which the page's map is closest to it (pixels within 24 of the colour), written as <out prefix>_best.rgb */
+        if (shot && *shot) {
+            static uint8_t want[S2G_PIC_BYTES * 3];
+            FILE *sf = fopen(shot, "rb");
+            if (!sf || fread(want, 1, sizeof want, sf) != sizeof want) { fprintf(stderr, "%s\n", shot); return 1; }
+            fclose(sf);
+            int best = 0, best_n = -1;
+            for (int pass = 0; pass < 2; pass++)
+                for (int a = pass ? best - 8 : 0; a < (pass ? best + 9 : 2048); a += pass ? 1 : 8) {
+                    const int ang = (a + 2048) & 2047;
+                    render(picture_buf[0], track, ang);
+                    const volatile uint8_t *fb = FB(0);
+                    int n = 0;
+                    for (int y = Y0; y < Y1; y++)
+                        for (int x = X0; x < X1; x++) {
+                            const uint32_t c = pic_pal[0][fb[y * 320 + x]];
+                            const uint8_t *w = want + 3 * (y * 320 + x);
+                            n += abs((int)(c >> 16 & 255) - w[0]) + abs((int)(c >> 8 & 255) - w[1]) + abs((int)(c & 255) - w[2]) <= 24;
+                        }
+                    if (n > best_n) { best_n = n; best = ang; }
+                }
+            printf("track %d: best angle %d, %d of %d pixels within 24 of the screenshot\n", track, best, best_n, (X1 - X0) * (Y1 - Y0));
+            render(picture_buf[0], track, best);
+            char path[512];
+            snprintf(path, sizeof path, "%s_best.rgb", argv[4]);
+            FILE *o = fopen(path, "wb");
+            if (!o) return 1;
+            const volatile uint8_t *fb = FB(0);
+            for (int i = 0; i < S2G_PIC_BYTES; i++) {
+                const uint32_t c = pic_pal[0][fb[i]];
+                const uint8_t rgb[3] = { (uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c };
+                fwrite(rgb, 1, 3, o);
+            }
+            fclose(o);
+            return 0;
+        }
+        for (int tr = track ? track : 1; tr <= (track ? track : 7); tr++)         /* (track 0: all seven) */
+            for (int a = 0; a < 2048; a += step) {
+                render(picture_buf[0], tr, a);
+                char path[512];
+                snprintf(path, sizeof path, "%s_t%d_a%04d.rgb", argv[4], tr, a);
+                FILE *o = fopen(path, "wb");
+                if (!o) return 1;
+                const volatile uint8_t *fb = FB(0);
+                for (int i = 0; i < S2G_PIC_BYTES; i++) {
+                    const uint32_t c = pic_pal[0][fb[i]];
+                    const uint8_t rgb[3] = { (uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c };
+                    fwrite(rgb, 1, 3, o);
+                }
+                fclose(o);
+            }
+        return 0;
+    }
     const char *only = getenv("ONLY"), *dump_name = getenv("DUMP");
     if (only && !*only) only = 0;
     if (dump_name && !*dump_name) dump_name = 0;

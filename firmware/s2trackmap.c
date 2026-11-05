@@ -3,6 +3,7 @@
  */
 #include "s2trackmap.h"
 #include "s2scene.h"
+#include "track.h"
 #include "geom.h"
 #include "dlog.h"
 #include "hw.h"
@@ -28,86 +29,69 @@ static void place_of(const uint8_t *mesh, const uint8_t *blk, float t[3])
     for (int i = 0; i < 3; i++) t[i] = so > 0 ? (float)rd32(mesh + so + 0x10 + 4 * i) : 0.0f;
 }
 
-/* the middle of vertices (indices list, or all of them when list is 0) */
-static void middle(const uint8_t *verts, const int *list, int n, float c[3])
+/* the middle of the n vertices at verts */
+static void middle(const uint8_t *verts, int n, float c[3])
 {
     double s[3] = { 0, 0, 0 };
     for (int i = 0; i < n; i++) {
-        const uint8_t *v = verts + 6 * (list ? list[i] : i);
+        const uint8_t *v = verts + 6 * i;
         for (int k = 0; k < 3; k++) s[k] += rd16(v + 2 * k);
     }
     for (int k = 0; k < 3; k++) c[k] = n ? (float)(s[k] / n) : 0.0f;
 }
 
-int s2map_cut(const uint8_t *mesh, int k, int max_vert, uint8_t *dst, uint32_t room, uint32_t *used, struct s2map_piece out[], int cap)
+/* The pieces of one face row of a block with more than max_vert vertices: the row's faces in its order, taken in turn while the vertices they use stay within max_vert; each run
+   is a block of its own (header, the faces, their vertices and texture coordinates compacted, all 16 rows the run's one list). Drawn one after the other they paint the faces in
+   the order of the block's row. Returns how many pieces (0: the block has no such row, nothing is drawn; -1: they do not fit), their blocks in out[]; *at is the next free byte of dst. */
+static int cut_row(const uint8_t *mesh, const uint8_t *blk, int row, int max_vert, uint8_t *dst, uint32_t room, uint32_t *at, const uint8_t *out[S2MAP_CHUNKS])
 {
-    const uint8_t *blk = mesh + rd32(mesh + 0x18 + 4 * k);
     const int nv = rd32(blk + 0x10);
     const uint8_t *verts = mesh + rd32(blk + 0x1C), *uvs = mesh + rd32(blk + 0x24);
-    if (nv < 1 || nv > VERT_MAX || cap < 1) return 0;
-    struct s2map_piece whole = { mesh, blk, { 0 }, { 0 } };
-    place_of(mesh, blk, whole.t);
-    if (nv <= max_vert) {
-        middle(verts, 0, nv, whole.c);
-        out[0] = whole;
-        return 1;
-    }
-    if (rd32(blk + 0x18) & 0x2000) return 0;                    /* (a block with normals of its own, the reflecting kind: not cut; no map has one) */
-
-    /* the faces, in the order they are stored: the first row lists them all */
+    const int32_t ro = rd32(blk + 0x28 + 4 * row);
+    if (ro <= 0) return 0;
     static uint16_t fo[FACE_MAX];
     static uint8_t fgroup[FACE_MAX];
     static int16_t vnew[VERT_MAX];
+    static int list[VERT_MAX];
     int nf = 0;
-    const int32_t r0 = rd32(blk + 0x28);
-    if (r0 <= 0) return 0;
-    for (const uint8_t *e = blk + r0; ru16(e) != 0xFFFF; e += 2) {
-        if (nf >= FACE_MAX) return 0;
+    for (const uint8_t *e = blk + ro; ru16(e) != 0xFFFF; e += 2) {
+        if (nf >= FACE_MAX) return -1;
         fo[nf++] = ru16(e);
     }
-    for (int i = 1; i < nf; i++) {                              /* (insertion sort by offset) */
-        const uint16_t x = fo[i];
-        int j = i;
-        for (; j > 0 && fo[j - 1] > x; j--) fo[j] = fo[j - 1];
-        fo[j] = x;
-    }
-    /* the groups: faces in turn while the vertices they use stay within max_vert */
+    if (nf == 0) return 0;
+
+    /* the runs: faces in the row's order while the vertices they use stay within max_vert */
     int groups = 1, count = 0;
     memset(vnew, -1, sizeof vnew);
     for (int i = 0; i < nf; i++) {
         const uint8_t *fc = blk + fo[i];
         const int nc = rd16(fc + 6);
-        if (nc < 3 || nc > 4) { fgroup[i] = (uint8_t)(groups - 1); continue; }
+        if (nc < 3 || nc > 4) {
+            fgroup[i] = (uint8_t)(groups - 1);
+            continue;
+        }
         int fresh = 0, seen[4];
         for (int j = 0; j < nc; j++) {
             seen[j] = ru16(fc + 8 + 2 * j) / 6;
-            if (seen[j] >= nv) return 0;
+            if (seen[j] >= nv) return -1;
             int again = 0;
             for (int q = 0; q < j; q++) again |= seen[q] == seen[j];
             fresh += vnew[seen[j]] < 0 && !again;
         }
         if (count + fresh > max_vert) {
-            if (groups >= cap) return 0;
+            if (groups >= S2MAP_CHUNKS) return -1;
             groups++;
             count = 0;
             memset(vnew, -1, sizeof vnew);
-            fresh = 0;
-            for (int j = 0; j < nc; j++) {
-                int again = 0;
-                for (int q = 0; q < j; q++) again |= seen[q] == seen[j];
-                fresh += !again;
-            }
         }
         for (int j = 0; j < nc; j++)
             if (vnew[seen[j]] < 0) vnew[seen[j]] = (int16_t)count++;
         fgroup[i] = (uint8_t)(groups - 1);
     }
 
-    /* each group a block of its own */
-    uint32_t at = (uint32_t)(used ? *used : 0);
+    /* each run a block of its own */
     for (int g = 0; g < groups; g++) {
         int faces = 0, nvg = 0;
-        static int list[VERT_MAX];
         memset(vnew, -1, sizeof vnew);
         for (int i = 0; i < nf; i++) {
             if (fgroup[i] != g) continue;
@@ -123,10 +107,10 @@ int s2map_cut(const uint8_t *mesh, int k, int max_vert, uint8_t *dst, uint32_t r
                 }
             }
         }
-        const uint32_t rows_at = HEAD, faces_at = rows_at + (uint32_t)ROWS * 2u * (uint32_t)(faces + 1);
+        const uint32_t list_at = HEAD, faces_at = (list_at + 2u * (uint32_t)(faces + 1) + 3u) & ~3u;
         const uint32_t verts_at = (faces_at + FACE_SIZE * (uint32_t)faces + 3u) & ~3u, uvs_at = verts_at + 6u * (uint32_t)nvg, end = (uvs_at + 6u * (uint32_t)nvg + 3u) & ~3u;
-        if (faces_at + FACE_SIZE * (uint32_t)faces > 0xFFFF || at + end > room) return 0;
-        uint8_t *b = dst + at;
+        if (faces_at + FACE_SIZE * (uint32_t)faces > 0xFFFF || *at + end > room) return -1;
+        uint8_t *b = dst + *at;
         memset(b, 0, end);
         memcpy(b, blk, HEAD);
         wr32(b + 0x0C, 0);                                      /* (the place is the caller's) */
@@ -135,55 +119,50 @@ int s2map_cut(const uint8_t *mesh, int k, int max_vert, uint8_t *dst, uint32_t r
         wr32(b + 0x1C, (int32_t)verts_at);
         wr32(b + 0x20, -1);
         wr32(b + 0x24, (int32_t)uvs_at);
+        for (int q = 0; q < ROWS; q++) wr32(b + 0x28 + 4 * q, (int32_t)list_at);        /* (whichever row the eye picks, this is the run) */
         for (int i = 0; i < nvg; i++) {
             memcpy(b + verts_at + 6 * i, verts + 6 * list[i], 6);
             memcpy(b + uvs_at + 6 * i, uvs + 6 * list[i], 6);
         }
-        /* the faces in the order of the file, with the corners renumbered; where each went (by the old offset) for the rows */
-        static uint16_t newfo[FACE_MAX];
         int nth = 0;
         for (int i = 0; i < nf; i++) {
-            newfo[i] = 0;
             if (fgroup[i] != g) continue;
             uint8_t *dfc = b + faces_at + FACE_SIZE * (uint32_t)nth;
             memcpy(dfc, blk + fo[i], FACE_SIZE);
             const int nc = rd16(dfc + 6);
             if (nc >= 3 && nc <= 4)
                 for (int j = 0; j < nc; j++) wr16(dfc + 8 + 2 * j, (uint32_t)vnew[ru16(blk + fo[i] + 8 + 2 * j) / 6] * 6u);
-            newfo[i] = (uint16_t)(faces_at + FACE_SIZE * (uint32_t)nth);
+            wr16(b + list_at + 2 * nth, faces_at + FACE_SIZE * (uint32_t)nth);
             nth++;
         }
-        /* the rows: the original's order, the faces of this group only */
-        uint32_t ra = rows_at;
-        for (int r = 0; r < ROWS; r++) {
-            const int32_t ro = rd32(blk + 0x28 + 4 * r);
-            if (ro <= 0) {
-                wr32(b + 0x28 + 4 * r, 0);
-                continue;
-            }
-            wr32(b + 0x28 + 4 * r, (int32_t)ra);
-            for (const uint8_t *e = blk + ro; ru16(e) != 0xFFFF; e += 2) {
-                int lo = 0, hi = nf - 1;                        /* (binary search of the old offset) */
-                while (lo < hi) {
-                    const int mid = (lo + hi) / 2;
-                    if (fo[mid] < ru16(e)) lo = mid + 1;
-                    else hi = mid;
-                }
-                if (fo[lo] == ru16(e) && fgroup[lo] == g) {
-                    wr16(b + ra, newfo[lo]);
-                    ra += 2;
-                }
-            }
-            wr16(b + ra, 0xFFFF);
-            ra += 2;
-        }
-        if (ra > faces_at) return 0;
-        out[g] = (struct s2map_piece){ b, b, { whole.t[0], whole.t[1], whole.t[2] }, { 0 } };
-        middle(b + verts_at, 0, nvg, out[g].c);
-        at += end;
+        wr16(b + list_at + 2 * nth, 0xFFFF);
+        out[g] = b;
+        *at += end;
+    }
+    return groups;
+}
+
+int s2map_cut(const uint8_t *mesh, int k, int max_vert, uint8_t *dst, uint32_t room, uint32_t *used, struct s2map_block *out)
+{
+    const uint8_t *blk = mesh + rd32(mesh + 0x18 + 4 * k);
+    const int nv = rd32(blk + 0x10);
+    if (nv < 1 || nv > VERT_MAX) return 0;
+    memset(out, 0, sizeof *out);
+    out->file = mesh;
+    out->blk = blk;
+    place_of(mesh, blk, out->t);
+    middle(mesh + rd32(blk + 0x1C), nv, out->c);
+    if (nv <= max_vert) return 1;
+    if (rd32(blk + 0x18) & 0x2000) return 0;                    /* (a block with normals of its own, the reflecting kind: not cut; no map has one) */
+    out->cut = 1;
+    uint32_t at = used ? *used : 0;
+    for (int r = 0; r < S2MAP_ROWS; r++) {
+        const int n = cut_row(mesh, blk, r, max_vert, dst, room, &at, out->chunk[r]);
+        if (n < 0) return 0;
+        out->nchunks[r] = (uint8_t)n;
     }
     if (used) *used = at;
-    return groups;
+    return 1;
 }
 
 /* ------------------------------------------------------------------------------------------------ the maps */
@@ -234,15 +213,14 @@ int s2map_load(struct zip *z)
     for (int i = 0; i < S2MAP_TRACKS; i++) {
         const int blocks = rd32(mesh[i] + 0x14);
         struct s2map *m = &M.map[i];
-        if (blocks < 1 || blocks > 4) return 0;
+        if (blocks < 1 || blocks > S2MAP_BLOCKS) return 0;
         for (int k = 0; k < blocks; k++) {
-            const int got = s2map_cut(mesh[i], k, GU_MAX_VERT, to, room, &used, m->p + m->n, S2MAP_PIECES - m->n);
-            if (!got) {
+            if (!s2map_cut(mesh[i], k, GU_MAX_VERT, to, room, &used, &m->b[m->n])) {
                 dlog_str("map: a block could not be cut\n");
                 return 0;
             }
-            cut += got > 1;
-            m->n += got;
+            cut += m->b[m->n].cut;
+            m->n++;
         }
         used = (used + 255u) & ~255u;
     }
@@ -251,7 +229,9 @@ int s2map_load(struct zip *z)
     dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
     dlog_str(" ms, ");
     dlog_dec(cut);
-    dlog_str(" blocks cut\n");
+    dlog_str(" blocks cut, ");
+    dlog_dec((int32_t)(used >> 10));
+    dlog_str(" KB of pieces\n");
     return 1;
 }
 
@@ -272,20 +252,31 @@ int s2map_blocks(int track, const struct track_cam *cam, float x, float y, float
     const float ch = cosf(s2scene_rad(a1)), sh = sinf(s2scene_rad(a1));
     const float r[9] = { ch, 0.0f, -sh, sh, 0.0f, ch, 0.0f, 1.0f, 0.0f };      /* the matrix of s2scene_object() for no turn about x */
     int n = 0;
-    for (int i = 0; i < m->n && n < S2MAP_PIECES; i++) {
-        const struct s2map_piece *p = &m->p[i];
+    for (int i = 0; i < m->n; i++) {
+        const struct s2map_block *p = &m->b[i];
         const float *t = p->t;
         const float o[3] = { x + r[0] * t[0] + r[1] * t[1] + r[2] * t[2], z + r[3] * t[0] + r[4] * t[1] + r[5] * t[2], y + r[6] * t[0] + r[7] * t[1] + r[8] * t[2] };
         const float cx = t[0] + p->c[0], cy = t[1] + p->c[1], cz = t[2] + p->c[2];
         const float d = s2scene_dist2(cam, x + r[0] * cx + r[1] * cy + r[2] * cz, y + r[6] * cx + r[7] * cy + r[8] * cz, z + r[3] * cx + r[4] * cy + r[5] * cz);
-        struct track_block b = { p->file, p->blk, { r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8] }, { o[0], o[1], o[2] }, 0 };
-        int j = n++;
-        for (; j > 0 && key[j - 1] < d; j--) {                  /* far first */
-            out[j] = out[j - 1];
-            key[j] = key[j - 1];
+        const struct track_block b = { p->file, p->blk, { r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8] }, { o[0], o[1], o[2] }, 0 };
+        int row = 0, count = 1;
+        if (p->cut) {                                           /* the pieces of the face row the eye picks for the block, in the row's order */
+            struct gu_piece g;
+            track_block_piece(cam, &b, &g);
+            row = g.row & (S2MAP_ROWS - 1);                     /* (a row of an eye below the block's plane, 8 .. 15, is not cut: the maps are seen from above) */
+            count = p->nchunks[row];
         }
-        out[j] = b;
-        key[j] = d;
+        for (int q = 0; q < count && n < S2MAP_PIECES; q++) {
+            struct track_block c = b;
+            if (p->cut) c.file = c.blk = p->chunk[row][q];
+            int j = n++;
+            for (; j > 0 && key[j - 1] < d; j--) {              /* far first; the pieces of a block (one key) stay in their order */
+                out[j] = out[j - 1];
+                key[j] = key[j - 1];
+            }
+            out[j] = c;
+            key[j] = d;
+        }
     }
     return n;
 }

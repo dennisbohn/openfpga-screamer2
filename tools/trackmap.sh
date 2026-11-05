@@ -7,6 +7,10 @@
 # Windows: Docker as tools/menu_screens.sh.
 # Usage: [ONLY=<part of a name or label>] [DUMP=<part of a name or label>] tools/trackmap.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2"
 #        DUMP: the pictures (mine, ref, diff) of those frames in build/check/trackmap
+#        SWEEP=<track 1 .. 7, or 0 for all>[:<step, default 128>]: no screenshot is compared, the map(s) at every step-th angle of the turn are drawn by both builds:
+#          p_ta_t<track>_a<angle>.png (the firmware's, the cut blocks) and w_ta_t<track>_a<angle>.png (the whole blocks); the two must be equal pixel for pixel
+#        SHOT=/b/<path of a raw 320 x 200 x 3 RGB file under build/> (with SWEEP=<track>): the angle at which the map is closest to that picture (a Pocket screenshot), drawn as
+#          p_ta_best.png / w_ta_best.png
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
 game=${1:-${GAME_DIR:-C:/GOG Games/Screamer 2}}
@@ -66,7 +70,7 @@ else
     game_mount=$game
 fi
 LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c blit.c geom.c setup.c raster.c track.c car.c s2end.c s2load.c s2save.c champ.c s2league.c"
-MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -e TA_RAM=/b/check/trackmap/ram_taend.txt -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
+MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -e SWEEP="$SWEEP" -e SHOT="$SHOT" -e TA_RAM=/b/check/trackmap/ram_taend.txt -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
     cd /b/host/trackmap && gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_match host/trackmap_match.c $LIST -lm &&
     gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -DGU_MAX_VERT=1024 -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_whole host/trackmap_match.c $LIST -lm &&
     cd /b/check/trackmap &&
@@ -75,6 +79,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -e TA_RAM=/b/
         [ -d idx_\$k ] && [ -f labels_\$k.txt ] && ls idx_\$k/*.idx > /dev/null 2>&1 || continue
         echo '== the cut blocks (the firmware): '\$k; /b/host/trackmap_match /game/SCREAMER2.zip /b/check/trackmap/idx_\$k /b/check/trackmap/labels_\$k.txt /b/check/trackmap/p_\$k
         echo '== the whole blocks (a unit without the limit): '\$k; /b/host/trackmap_whole /game/SCREAMER2.zip /b/check/trackmap/idx_\$k /b/check/trackmap/labels_\$k.txt /b/check/trackmap/w_\$k
+        [ -n \"\$SWEEP\$SHOT\" ] && break
     done" | tee "$out/match.log"
 for f in "$out"/*.rgb; do
     [ -f "$f" ] || continue

@@ -26,10 +26,10 @@ static void check_trackpages(const char *prefix)
     s2save_reset();
     s2save_set(S2S_PROFILE, 1);
     CHECK(s2map_load(s2gfx_zip()), "GFX/MAPS1.DAT: the seven maps and their materials are read");
-    static const int pieces[S2MAP_TRACKS] = { 3, 1, 2, 7, 3, 4, 3 };           /* AMAP1 .. 7: the blocks, those over 512 vertices (AMAP1's 2nd, AMAP4's first three, AMAP5's 1st, AMAP6's 2nd) in two */
+    static const int pieces[S2MAP_TRACKS] = { 2, 1, 2, 4, 2, 3, 3 };           /* AMAP1 .. 7: the blocks (those over 512 vertices, AMAP1's 2nd, AMAP4's first three, AMAP5's 1st, AMAP6's 2nd, are cut for drawing) */
     for (int t = 1; t <= S2MAP_TRACKS; t++) {
         const struct s2map *m = s2map_get(t);
-        CHECK(m && m->n == pieces[t - 1], "map %d has %d pieces (expected %d)", t, m ? m->n : -1, pieces[t - 1]);
+        CHECK(m && m->n == pieces[t - 1], "map %d has %d blocks (expected %d)", t, m ? m->n : -1, pieces[t - 1]);
     }
     CHECK(s2map_get(0) == 0 && s2map_get(8) == 0, "no map for another track");
 
@@ -129,5 +129,5 @@ static void check_trackpages(const char *prefix)
     CHECK(pal != 0 && text == 0, "the free run's LOADING screen has none (%d pixels differ from the picture)", text);
     s2save_unlock_all = S2SAVE_UNLOCK_ALL;
     s2save_reset();
-    printf("ui: time attack's pages: seven maps in 23 pieces, TRACK SELECTION and the league's TRACK page, the CAR page's choice and the loading screens by scripted buttons\n");
+    printf("ui: time attack's pages: seven maps in 17 blocks, TRACK SELECTION and the league's TRACK page, the CAR page's choice and the loading screens by scripted buttons\n");
 }
