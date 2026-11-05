@@ -1119,7 +1119,10 @@ static void outputs(car_t *c, int squeal)
         track_ground_s2(cut(RF(0x4d8)), cut(RF(0x4e0)), &held, &h, n, &k);
         c->off_track = !held;
     }
-    if(c->ai) return;                                   /* no camera follows a computer's car */
+    if(c->ai && !c->cam_on) {                           /* no camera follows a computer's car (unless the replay's does: it then begins where it goes) */
+        c->cam_started = 0;
+        return;
+    }
     chase_camera(c);
     c->cam[3] = c->camst[2];
     c->cam[4] = c->camst[1];
