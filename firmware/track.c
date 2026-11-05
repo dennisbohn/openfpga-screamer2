@@ -344,7 +344,7 @@ int track_init(void)
     start = (const struct start *)(f + 0x5C);
     piece_kinds = rd32(f + 0x74) ? f + rd32(f + 0x74) : NULL;
     unr_count = rd32(unr + 4);
-    if(unr_count > MAX_OBJ || npieces > MAX_PIECES) return 0;               /* (an image may have no cars: a menu's room) */
+    if(unr_count > MAX_OBJ || npieces > MAX_PIECES || ncars < 0 || nmodels < 0) return 0;     /* (a menu's room has no cars: only a damaged count is negative) */
     int32_t far = rd32(f + 0x70);
     far_z = far > 0 ? (float)far : 50000.0f;
     reach2 = (far_z + REACH_PLUS) * (far_z + REACH_PLUS);
@@ -1378,4 +1378,13 @@ void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, 
     const float c[3] = { cx, cy, ch }, f[3] = { fx, fy, fh }, r[3] = { rx, ry, 0.0f };
     const float u[3] = { ry * fh, -rx * fh, rx * fy - ry * fx };     /* up = right x forward */
     draw(fb, clip, 0, c, f, r, u, 0, 0, st);
+}
+
+/* the animation clock set to a (0 .. 1 of its turn) by something that runs it at its own pace: the options room's textures play at 0.2 a turn a second (STARTL.EXE 0x39000), the
+   race's at 0.3. (At the end of the file: nothing of the drawing moves in the image for it.) */
+void track_clock_set(float a)
+{
+    anim = a;
+    clock16 = (uint32_t)(anim * 65535.0f);
+    piece_phase = clock16 & 0x3FFF;
 }
