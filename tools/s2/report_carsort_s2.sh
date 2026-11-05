@@ -46,7 +46,7 @@ sed -i 's/^#include "geom.h"/#include "geom.h"\nvoid dbg_poly(const struct su_vi
 sed -i 's/^#include "crc32.h"/#include "crc32.h"\nextern int dbg_tag;/; s/^\( *\)const int vi = vis\[n\] \& 0xFFFF;/\1const int vi = vis[n] \& 0xFFFF; dbg_tag = vi;/' "$src/track.c"
 grep -q "dbg_poly(v, c, nc)" "$src/geom.c" && grep -q "dbg_tag = vi" "$src/track.c" || { echo "the patches did not apply (geom.c / track.c changed?)"; exit 1; }
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -w "$root/build"); game_mount=$(cygpath -w "$game"); else mount=$root/build; game_mount=$game; fi
-car=$(cd "$root/firmware" && ls s2car*.c | grep -v '^s2car_stub.c$' | tr '\n' ' '); car="$car s2params.c race.c"
+car=$(cd "$root/firmware" && ls s2car*.c | grep -v '^s2car_stub.c$' | tr '\n' ' '); car="$car s2params.c race.c s2ghost.c"
 LIST="road.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c $car"
 runs=""
 for n in $tracks; do runs="$runs echo \"track $n:\"; ./report_carsort_s2 ../s2/vis$n.bin $klo $khi $kst;"; done
