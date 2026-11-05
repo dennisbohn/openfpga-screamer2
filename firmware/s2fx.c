@@ -160,19 +160,19 @@ int s2fx_objects(const struct track_cam *cam, struct s2car_state *const *cars, i
                     }
                     carried(q, &a, t, p);
                 }
-                struct track_block *t = &puff_block[i][k][j];
+                struct track_block *b = &puff_block[i][k][j];
                 for(int m = 0; m < 3; m++) {        /* facing the screen: the camera's right, up and forward are the block's x, y and z */
-                    t->m[3 * m] = r[m];
-                    t->m[3 * m + 1] = u[m];
-                    t->m[3 * m + 2] = f[m];
+                    b->m[3 * m] = r[m];
+                    b->m[3 * m + 1] = u[m];
+                    b->m[3 * m + 2] = f[m];
                 }
-                t->o[0] = p[0];
-                t->o[1] = p[2];
-                t->o[2] = p[1];
-                t->file = mesh;
-                t->blk = mesh + *(const int32_t *)(mesh + 0x18);
-                t->phase = (uint32_t)(q->age * 65536.0f) >> 2;
-                objs[count++] = (struct track_object){ p[0], p[2], p[1], PUFF_RADIUS, 1, t, 0, j, 0, 0, 0 };
+                b->o[0] = p[0];
+                b->o[1] = p[2];
+                b->o[2] = p[1];
+                b->file = mesh;
+                b->blk = mesh + *(const int32_t *)(mesh + 0x18);
+                b->phase = (uint32_t)(q->age * 65536.0f) >> 2;
+                objs[count++] = (struct track_object){ p[0], p[2], p[1], PUFF_RADIUS, 1, b, 0, j, 0, 0, 0 };
             }
         }
     }

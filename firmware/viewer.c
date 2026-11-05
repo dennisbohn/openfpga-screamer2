@@ -680,6 +680,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         /* the scene moves with real time: a video frame is 1/50 s whatever the frame took */
         struct track_cam cam;
         static struct track_object objs[ROAD_CARS + S2FX_MAX];     /* the cars, and in a race the shadows and the puffs (s2fx.h) */
+        _Static_assert(S2FX_CARS >= RACE_CARS, "s2fx.c keeps state for every car of the race");
         int nobj;
         uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
         uint32_t hud_steps = 1;                             /* the 20 ms steps this frame took, for the race screen's timers */

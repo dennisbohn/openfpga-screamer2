@@ -83,6 +83,7 @@ void hw_piece(const struct gu_piece *g)
     pieces_drawn++;
     faces_drawn += st.faces;
 }
+void smg_load(const uint8_t *table) { rs_smg = table; }
 void tl_mark(uint32_t t) { (void)t; }
 void tl_begin(uint32_t t) { (void)t; }
 void s2sound_menu(int id) { (void)id; }
