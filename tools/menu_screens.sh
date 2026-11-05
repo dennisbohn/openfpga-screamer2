@@ -47,7 +47,7 @@ fi
 set +e
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
     cd /b/host/menu && gcc -O2 -w -c -ffunction-sections -fdata-sections geom.c setup.c raster.c track.c car.c &&
-    gcc -O1 -g -ffunction-sections -fdata-sections -Wl,--gc-sections -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c host/ui_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c s2gfx.c s2page.c s2load.c s2pause.c s2arcade.c s2pages.c s2end.c s2league.c s2leaguepages.c s2snd.c s2params.c blit.c s2scene.c s2pages3d.c s2showroom.c s2trackmap.c s2trackpage.c s2room.c track_build.c s2env.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c geom.o setup.o raster.o track.o car.o -lm &&
+    gcc -O1 -g -ffunction-sections -fdata-sections -Wl,--gc-sections -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c host/ui_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c s2gfx.c s2page.c s2load.c s2pause.c s2arcade.c s2pages.c s2end.c s2league.c s2leaguepages.c s2snd.c s2params.c blit.c s2scene.c s2pages3d.c s2showroom.c s2trackmap.c s2trackpage.c s2room.c track_build.c smg.c s2env.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c geom.o setup.o raster.o track.o car.o -lm &&
     cd /b/check/menu && /b/host/menu_screen /game/SCREAMER2.zip /b/check/menu/menu /b/check/menu/ref /b/check/menu/ref/graf_deflated.zip"
 status=$?
 for f in "$out"/*.rgb; do

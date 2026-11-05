@@ -37,7 +37,7 @@ else
     mount=$root
     game_mount=$game
 fi
-src="firmware/track_build.c firmware/s2env.c firmware/dat.c firmware/tb_mmp.c firmware/tb_spl.c firmware/tb_gfx.c \
+src="firmware/track_build.c firmware/smg.c firmware/s2env.c firmware/dat.c firmware/tb_mmp.c firmware/tb_spl.c firmware/tb_gfx.c \
      firmware/tb_hud.c firmware/crc32.c tools/check_track_build.c"
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -v "$mount:/work" -v "$game_mount:/game:ro" -w /work --entrypoint sh "$image" -c "
     gcc -O2 -g -Wall -Wextra -Wdouble-promotion -fsanitize=address,undefined -fno-sanitize-recover \

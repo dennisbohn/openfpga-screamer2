@@ -11,6 +11,7 @@
 #include "tb_gfx.h"
 #include "tb_hud.h"
 #include "s2env.h"
+#include "smg.h"
 #include "crc32.h"
 #include <string.h>
 
@@ -324,9 +325,9 @@ static int faces_onto(uint8_t *x, uint32_t size, int32_t delta)
     return 1;
 }
 
-/* TRACK_DATA of MAPnDAT.DTR: the first five numbers ("d-50000": far plane, background rgb, background
-   palette entry) of the lines after it, comment lines (*) and empty ones left out; 1, or 0 if there are fewer */
-static int s2_track_data(const uint8_t *s, uint32_t size, int32_t v[5])
+/* TRACK_DATA of MAPnDAT.DTR: the first eleven numbers ("d-50000": far plane, background rgb, background palette entry, asmoke rgb, a2smoke rgb) of the lines
+   after it, comment lines (*) and empty ones left out; 1, or 0 if there are fewer */
+static int s2_track_data(const uint8_t *s, uint32_t size, int32_t v[11])
 {
     static const char key[] = "TRACK_DATA";
     uint32_t p = 0, nv = 0;
@@ -334,7 +335,7 @@ static int s2_track_data(const uint8_t *s, uint32_t size, int32_t v[5])
         if(!memcmp(s + p, key, sizeof key - 1)) break;
     if(p + sizeof key - 1 > size) return 0;
     while(p < size && s[p] != '\n' && s[p] != '\r') p++;                /* the rest of its line is dropped */
-    while(p < size && nv < 5) {
+    while(p < size && nv < 11) {
         while(p < size && (s[p] == '\n' || s[p] == '\r' || s[p] == ' ' || s[p] == '\t')) p++;
         if(p >= size) break;
         if(s[p] == '*') {
@@ -354,9 +355,9 @@ static int s2_track_data(const uint8_t *s, uint32_t size, int32_t v[5])
             while(p < size && s[p] != ' ' && s[p] != '\t' && s[p] != '\n' && s[p] != '\r') p++;
             if(is_d && digits && cnt < 8) line[cnt++] = neg ? -x : x;
         }
-        for(uint32_t i = 0; i < cnt && nv < 5; i++) v[nv++] = line[i];
+        for(uint32_t i = 0; i < cnt && nv < 11; i++) v[nv++] = line[i];
     }
-    return nv == 5;
+    return nv == 11;
 }
 
 /* an empty section (no camera path, no markers): at the next boundary, no bytes */
@@ -405,7 +406,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     uint32_t len, count = 0, dtr_n = 0, col_n = 0, mmp_n = 0, bck_n = 0;
     const uint8_t *dtr, *col, *mmp, *bck;
     /* a menu's room (no cars) has no track data: the menus' lens (STARTL.EXE 0x7f504, far plane 43,808) and colour 0 */
-    int32_t td[5] = { -43808, 0, 0, 0, 0 };
+    int32_t td[11] = { -43808, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1 };      /* (no asmoke and a2smoke: only the shadow's rows, smg.h) */
     const int ncars = f->ncars;
     const int scenery = ncars == 0;         /* only the scenery: a room (the sections of cars, road points and walls stay empty) */
     if(!scenery) {
@@ -414,7 +415,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     }
 
     /* the cars' libraries: where they lie in the MLB section, how many materials they have */
-    struct { const uint8_t *mlb; uint32_t size, nrec, at; } lib[S2_CARS];
+    struct { const uint8_t *mlb; uint32_t size, nrec, at; } lib[S2_CARS + 1];
     if(ncars < 0 || ncars > S2_CARS || (ncars && !f->car)) return (uint32_t)fail(&b, "cars");
     if(!dat_find(f->gfx, f->gfx_size, name(&b, ".MLB", buf), &e)) return (uint32_t)fail(&b, buf);
     uint32_t mlb_size = e.size, nmat = 0, end = pad256(mlb_size);
@@ -426,6 +427,17 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
         lib[k].at = end;
         end += pad256(lib[k].size);
         nmat += lib[k].nrec;
+    }
+    /* a race's MISC.MLB is one more library (its materials: the shadow, the two smokes, the rotor ...; records in front of the MLB like a car's) */
+    int nlib = ncars;
+    uint32_t misc_n = 0, misc_first = nmat;
+    if(!scenery) {
+        if(!(lib[nlib].mlb = unpack(&b, f->gfx, f->gfx_size, "MISC.MLB", &misc_n))) return 0;
+        lib[nlib].size = misc_n;
+        lib[nlib].nrec = s2_mlb_records(lib[nlib].mlb, misc_n);
+        lib[nlib].at = end;
+        end += pad256(misc_n);
+        nmat += lib[nlib++].nrec;
     }
     /* the windows' reflection (ENV.MLB) goes after the libraries, a texture record and tiled frames */
     const uint8_t *env_mlb = 0;
@@ -441,7 +453,7 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
 
     /* section 0: the car materials; 1: the MLB, the cars' libraries and the reflection after it */
     if(16 * nmat > room(&b)) return (uint32_t)fail(&b, "car materials");
-    for(int k = 0, o = 0; k < ncars; o += (int)lib[k].nrec, k++)
+    for(int k = 0, o = 0; k < nlib; o += (int)lib[k].nrec, k++)
         lib_records(lib[k].mlb, lib[k].size, lib[k].nrec, lib[k].at, env_at, at(&b) + 16 * (uint32_t)o);
     if(scenery) empty(&b);
     else if(!section(&b, 16 * nmat, nmat, "car materials")) return 0;
@@ -449,18 +461,49 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     uint8_t *m = at(&b);
     if(!extract(&b, f->gfx, f->gfx_size, &e, m, room(&b))) return 0;
     memset(m + mlb_size, 0, pad256(mlb_size) - mlb_size);
-    for(int k = 0; k < ncars; k++) {
+    for(int k = 0; k < nlib; k++) {
         memcpy(m + lib[k].at, lib[k].mlb, lib[k].size);
         memset(m + lib[k].at + lib[k].size, 0, pad256(lib[k].size) - lib[k].size);
         lib_relocate(m + lib[k].at, lib[k].size, lib[k].nrec, lib[k].at);
     }
     if(env_n) s2_env_write(m + env_at, env_mlb, env_n, env_at);
+
+    /* the see-through step (smg.h): the textures of routine 208 and 224 of all the libraries copied with their texels turned into the hardware's rows, then the effects' block:
+       the shadow's and the two smokes' meshes (faces moved onto MISC's records), the table of 64 rows and its directory, the section's last 256 bytes: "S2FX", 1, the
+       table's offset, the three meshes' offsets (0 for none), the rows used, the texels found */
+    if(!(col = unpack(&b, f->gfx, f->gfx_size, name(&b, ".COL", buf), &col_n))) return 0;
+    struct smg sm;
+    const uint32_t avail = room(&b);
+    end = smg_copies(&sm, smg_ramps(td + 5, !scenery), out + FIRST, nmat, m, s2_mlb_records(m, mlb_size), end, avail);
+    if(!end) return (uint32_t)fail(&b, "see-through");
+    uint32_t mesh_at[3] = { 0, 0, 0 };
+    if(!scenery) {
+        static const char *const mesh[3] = { "ASHADOW.3DX", "ASMOKE.3DX", "A2SMOKE.3DX" };
+        for(int k = 0; k < 3; k++) {
+            if(!dat_find(f->gfx, f->gfx_size, mesh[k], &e)) return (uint32_t)fail(&b, mesh[k]);
+            if(end > avail || !extract(&b, f->gfx, f->gfx_size, &e, m + end, avail - end)) return 0;
+            if(!faces_onto(m + end, e.size, (int32_t)(FIRST + 16 * misc_first) - (int32_t)mlb_off)) return (uint32_t)fail(&b, "effect faces");
+            memset(m + end + e.size, 0, pad256(e.size) - e.size);
+            mesh_at[k] = end;
+            end += pad256(e.size);
+        }
+    }
+    if(end > avail || SMG_TABLE + 256 > avail - end) return (uint32_t)fail(&b, "see-through");
+    smg_table(&sm, col, td + 5, td + 8, m + end);
+    uint8_t *fx = m + end + SMG_TABLE;
+    memset(fx, 0, 256);
+    memcpy(fx, "S2FX", 4);
+    wr32(fx + 4, 1);
+    wr32(fx + 8, end);
+    for(int k = 0; k < 3; k++) wr32(fx + 12 + 4 * k, mesh_at[k]);
+    wr32(fx + 24, (uint32_t)sm.rows);
+    wr32(fx + 28, (uint32_t)sm.found);
+    end += SMG_TABLE + 256;
     if(!section(&b, end, end, "MLB")) return 0;
 
     if(!dat_find(f->gfx, f->gfx_size, name(&b, ".UNR", buf), &e)) return (uint32_t)fail(&b, buf);
     if(!extract(&b, f->gfx, f->gfx_size, &e, at(&b), room(&b)) || !section(&b, e.size, e.size, buf)) return 0;
-    if(!(col = unpack(&b, f->gfx, f->gfx_size, name(&b, ".COL", buf), &col_n)) ||
-       !section(&b, tb_palette(col, col_n, at(&b), room(&b)), 0, "palette")) return 0;
+    if(!section(&b, tb_palette(col, col_n, at(&b), room(&b)), 0, "palette")) return 0;
     if(!(mmp = unpack(&b, f->gfx, f->gfx_size, name(&b, ".MMP", buf), &mmp_n))) return 0;
     len = tb_mmp_placements(mmp, mmp_n, at(&b), room(&b), &count);
     if(len) {                                   /* the cells' visibility table follows the placements in their section */
