@@ -241,7 +241,7 @@ def session(steps):
     p = subprocess.Popen([game + "/DOSBOX/dosbox.exe", "-conf", game + "/dosbox_screamer2.conf", "-conf", conf, "-noconsole"], cwd=work)
     atexit.register(p.kill)                     # (our own DOSBox goes with the script, also when a step fails)
     time.sleep(2)
-    pid = dosbox_pid() or p.pid
+    pid = p.pid                                 # (our own DOSBox, not the first one tasklist lists: the player's own game may be running too, and the keys would go to it)
     label, shots, times, mem = "", [], [], None
     for st in steps.split():
         if st[0] == "w":
