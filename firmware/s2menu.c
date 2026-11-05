@@ -11,6 +11,7 @@
 #include "s2save.h"
 #include "s2pages.h"
 #include "s2arcade.h"
+#include "s2pages3d.h"
 #include <string.h>
 
 const uint8_t s2_menu_laps[S2M_LAPS] = { 1, 3, 5, 10 };
@@ -154,6 +155,7 @@ int s2menu_key(struct s2_menu_cfg *c, int *cursor, uint32_t press)
         if (*cursor == S2M_ROW_ARCADE) return S2M_ARCADE;
         if (*cursor == S2M_ROW_SETTINGS) return S2M_SETTINGS;
         if (*cursor == S2M_ROW_SCORES) return S2M_SCORES;
+        if (*cursor == S2M_ROW_TEAM) return S2M_TEAM;
         return *cursor == S2M_ROW_WATCH ? S2M_WATCH : S2M_RACE;
     }
     return S2M_NONE;
@@ -203,6 +205,8 @@ void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor)
     con_text(fb, 12, 8, "the ride round the track", GREY, cursor == S2M_ROW_WATCH ? BAR : BG);
     row(fb, 9, cursor == S2M_ROW_SETTINGS, "GAME SETTINGS", CYAN, 0, 0);
     row(fb, 10, cursor == S2M_ROW_SCORES, "HI SCORES", CYAN, 0, 0);
+    row(fb, 11, cursor == S2M_ROW_TEAM, "TEAM SELECTION", CYAN, 0, 0);
+    con_text(fb, VALUE_COL - 7, 11, "team and name", GREY, cursor == S2M_ROW_TEAM ? BAR : BG);
 
     struct s2_pick g[4];
     s2menu_grid(c, g);
@@ -243,9 +247,16 @@ void s2menu_log(const struct s2_menu_cfg *c, int go)
 #define REPEAT_FIRST    25              /* a held d-pad button repeats after 0.5 s, every 6th frame */
 #define REPEAT_EVERY    6
 
+int s2menu_row = S2M_ROW_ARCADE;                           /* (the row stays for the next visit) */
+
 int s2menu_run(struct s2_menu_cfg *c)
 {
-    static int cursor = S2M_ROW_ARCADE;                     /* (the row stays for the next visit) */
+    int cursor = s2menu_row;
+    static int started;
+    if (!started) {                                         /* the first start with a new save: TEAM SELECTION and ENTER YOUR NAME, as the original's every start */
+        started = 1;
+        if (!s2save_get(S2S_PROFILE) && s2_page_team(c) == S2P3D_DONE) s2menu_store(c);
+    }
     uint32_t keys_before = in_keys(), held = 0;             /* (the button that left the files screen is still down) */
     const uint32_t dirs = KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT;
     for (;;) {
@@ -265,6 +276,14 @@ int s2menu_run(struct s2_menu_cfg *c)
             }
             r = S2M_RACE;
         }
+        if (r == S2M_TEAM) {                                /* the team and the name again: the choices go in and come back as the page left them */
+            s2menu_store(c);
+            s2_page_team(c);
+            s2menu_load(c);
+            keys_before = in_keys();
+            held = 0;
+            continue;
+        }
         if (r == S2M_SETTINGS || r == S2M_SCORES) {         /* a page of GAME SETTINGS / HI SCORES (s2pages.h): the choices go in, and come back as it left them */
             s2menu_store(c);
             if (r == S2M_SETTINGS) s2_page_settings();
@@ -274,6 +293,7 @@ int s2menu_run(struct s2_menu_cfg *c)
             held = 0;
             continue;
         }
+        s2menu_row = cursor;
         if (r) {
             s2menu_store(c);
             return r;

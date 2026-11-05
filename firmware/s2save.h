@@ -43,6 +43,7 @@ enum {
     S2S_TRACK, S2S_TEAM, S2S_CAR,           /* the start menu's last choices: track 1 .. 7, team 1 .. 4, car 1 .. 5 as the files number them */
     S2S_LEAGUE_OPEN,                        /* 0 .. 3: the highest league open (league 1 is open at the start) */
     S2S_TRACKS_OPEN,                        /* 0 .. 4: tracks opened beyond the first three (the seventh needs 4) */
+    S2S_PROFILE,                            /* 0, 1: the player has been through TEAM SELECTION and ENTER YOUR NAME (a new save has not; it is a byte of the main part's reserved bytes: no new version) */
     S2S_KEYS
 };
 

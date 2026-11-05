@@ -89,6 +89,10 @@ uint32_t wait_swap_done(void)
         for (int i = 0; i < ncaps; i++)
             if (caps[i].at == calls) memcpy(cap[caps[i].slot], (const void *)FB(front), S2G_PIC_BYTES);
     }
+    if (calls > 30000) {                /* (a page that never ends would run for ever: stop the test) */
+        printf("FAIL: a page did not end after 30000 frames\n");
+        exit(3);
+    }
     uint32_t keys = 0;
     char c = script && script[script_at] ? script[script_at++] : '.';
     switch (c) {
@@ -468,8 +472,11 @@ static void check_frame(const struct expect *e)
     } else {
         const volatile uint8_t *fb = FB(front);
         int differ = 0, first = -1;
+        /* the CAR page has 3D cars the model does not draw: only the pixels where the model draws something (sprites, digits) are compared; where it shows
+           the picture the page may show a car (the sprites are drawn over the cars, and their see-through pixels let the cars show) */
+        const int masked = !strncmp(e->name, "car_", 4) || !strncmp(e->name, "trans_", 6);
         for (int i = 0; i < S2G_PIC_BYTES; i++)
-            if (fb[i] != idx[i] && differ++ == 0) first = i;
+            if ((!masked || idx[i] != s2gfx_pic(0)[i]) && fb[i] != idx[i] && differ++ == 0) first = i;
         CHECK(!differ, "%s: %d pixels differ from the model, first at x %d y %d (%02x, expected %02x)", e->name, differ, first % 320, first / 320,
               first >= 0 ? fb[first] : 0, first >= 0 ? idx[first] : 0);
         int bad = 0;
@@ -547,21 +554,21 @@ static void check_arcade_chain(const char *prefix)
     static char s[400];
     s2save_reset();
     struct s2_menu_cfg c = { .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1, .manual = 0 }, rd;
-    /* forward: title ENTER, TRACK: R shoulder (the fourth place, FINLAND) and ENTER, CAR: DOWN (team 2) RIGHT (car 2) ENTER, TRANSMISSION: RIGHT
-       (manual) ENTER */
+    /* forward: title ENTER, TRACK: R shoulder (the fourth place, FINLAND) and ENTER, CAR: DOWN (does nothing: the team was chosen on its own page) RIGHT (car 2)
+       ENTER (the second state of the page), TRANSMISSION: RIGHT (manual) ENTER */
     memset(s, '.', sizeof s - 1);
     s[5] = 'B'; s[35] = '>'; s[45] = 'S'; s[75] = 'D'; s[80] = 'R'; s[85] = 'B'; s[90] = 'R'; s[95] = 'B';
     begin_run(s, prefix);
     int r = s2arcade_run(&c);
     CHECK(r == S2ARC_NEXT, "the chain ends with %d (the race)", r);
-    CHECK(c.track == 5 && c.team == 2 && c.car == 2 && c.manual == 1, "the chain left track %d team %d car %d gear %d", c.track, c.team, c.car, c.manual);
+    CHECK(c.track == 5 && c.team == 1 && c.car == 2 && c.manual == 1, "the chain left track %d team %d car %d gear %d", c.track, c.team, c.car, c.manual);
     CHECK(calls == 120, "the chain took %u frames, expected 120", calls);
-    static const int want[] = { 1, 0, 2, 4, 4, 0, 3 };
-    CHECK(nclicks == 7 && !memcmp(clicks, want, sizeof want), "the chain's sounds: %d, first %d", nclicks, nclicks ? clicks[0] : -1);
+    static const int want[] = { 1, 0, 2, 4, 0, 3 };
+    CHECK(nclicks == 6 && !memcmp(clicks, want, sizeof want), "the chain's sounds: %d, first %d", nclicks, nclicks ? clicks[0] : -1);
     /* kept: the choices go into the save and come back */
     s2menu_store(&c);
     s2menu_load(&rd);
-    CHECK(rd.track == 5 && rd.team == 2 && rd.car == 2 && rd.manual == 1 && rd.laps == 1 && rd.skill == 1, "the chain's choices are kept: %d %d %d %d", rd.track, rd.team, rd.car, rd.manual);
+    CHECK(rd.track == 5 && rd.team == 1 && rd.car == 2 && rd.manual == 1 && rd.laps == 1 && rd.skill == 1, "the chain's choices are kept: %d %d %d %d", rd.track, rd.team, rd.car, rd.manual);
     CHECK(s2save_get(S2S_TRACK) == 5 && s2save_get(S2S_TRANS) == 1, "the save holds the track and the gearbox");
 
     /* the way back: TRACK ENTER, CAR ESC (back to TRACK), TRACK ESC (out of the chain, to the start menu, which is the original's options room) */
@@ -937,7 +944,25 @@ static void check_menu_hook(const char *prefix)
 {
     char script[400];
     struct s2_menu_cfg c;
+    /* a new save shows TEAM SELECTION and ENTER YOUR NAME before the menu, once (ENTER, ENTER); then D D D to START RACE and A */
     s2save_reset();
+    s2menu_load(&c);
+    CHECK(s2save_get(S2S_PROFILE) == 0, "a new save has no profile");
+    put_keys(script, sizeof script, "5:B 40:B 80:D 82:D 84:D 90:A");
+    begin_run(script, prefix);
+    int r0 = s2menu_run(&c);
+    CHECK(r0 == S2M_RACE && s2save_get(S2S_PROFILE) == 1 && c.team == 1 && !strcmp(s2save_name(), "MIL"), "first start: the menu ended with %d, profile %d", r0, s2save_get(S2S_PROFILE));
+    /* the TEAM SELECTION row (U from ARCADE wraps to it): B runs the page, A (ESC) and B (YES) leave it with nothing changed, back in the menu: U x 4 to START RACE, A */
+    put_keys(script, sizeof script, "3:U 6:B 20:A 30:B 80:U 82:U 84:U 86:U 90:A");
+    begin_run(script, prefix);
+    s2menu_row = S2M_ROW_ARCADE;
+    s2save_set(S2S_TEAM, 3);
+    s2menu_load(&c);
+    r0 = s2menu_run(&c);
+    CHECK(r0 == S2M_RACE && c.team == 3 && s2save_get(S2S_TEAM) == 3, "the TEAM row and YES: the menu ended with %d, team %d", r0, c.team);
+    s2save_reset();
+    s2save_set(S2S_PROFILE, 1);                                     /* (from here on a save that has been through the team pages) */
+    s2menu_row = S2M_ROW_ARCADE;
     s2menu_load(&c);
     /* five D from ARCADE to GAME SETTINGS, A; in the page D D B (laps 3 -> 5), A out (a cut); D to HI SCORES, A; A out; U U U to START RACE, A */
     put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:A 16:D 18:D 20:B 22:A 30:D 32:A 40:A 46:U 48:U 50:U 52:A");
@@ -960,6 +985,9 @@ static void draw_banner(int track, uint8_t *out)
     memcpy(out, (const void *)FB(0), S2G_PIC_BYTES);
 }
 
+/* the pages with 3D objects (TEAM SELECTION, ENTER YOUR NAME, the CAR page): pages3d_screen.c, with the stand-ins of the geometry unit */
+#include "pages3d_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -981,6 +1009,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_arcade_cases(ref, prefix);
     check_arcade_chain(prefix);
     check_arcade_reach(prefix);
+    check_pages3d(prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
     int stored_banners = s2gfx_banner(1) != 0x13;

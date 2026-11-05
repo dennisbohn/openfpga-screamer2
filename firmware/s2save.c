@@ -33,7 +33,8 @@ struct main_part {
     uint8_t set[8];                         /* the GAME SETTINGS rows */
     uint16_t vol[3];                        /* FX, CD, FM */
     uint8_t view, track, team, car, league_open, tracks_open;
-    uint8_t reserved[8];                    /* 0; a later field takes one of them (its 0 must be a valid value or clamp to one) */
+    uint8_t profile;                        /* 1 once TEAM SELECTION and ENTER YOUR NAME have been through (0 on a new save: the first start shows them) */
+    uint8_t reserved[7];                    /* 0; a later field takes one of them (its 0 must be a valid value or clamp to one) */
     struct team_rec team_rec[4];
 };
 
@@ -74,6 +75,7 @@ static const struct key {
     [S2S_CAR] = { offsetof(struct main_part, car), 1, 1, 5, 1 },
     [S2S_LEAGUE_OPEN] = { offsetof(struct main_part, league_open), 1, 0, 3, 0 },
     [S2S_TRACKS_OPEN] = { offsetof(struct main_part, tracks_open), 1, 0, 4, 0 },
+    [S2S_PROFILE] = { offsetof(struct main_part, profile), 1, 0, 1, 0 },
 };
 
 static int raw(const struct main_part *m, int k)

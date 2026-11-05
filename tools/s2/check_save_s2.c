@@ -111,9 +111,9 @@ static uint32_t rnd(void)
 }
 
 /* the keys' defaults and ranges as the layout table in the doc has them, written out again here */
-static const int key_def[S2S_KEYS] = { 0, 2, 1, 1, 0, 0, 0, 0,  2,  0x6000, 0x6000, 0x6000,  1, 1, 1,  0, 0 };
-static const int key_lo[S2S_KEYS] = { 0, 0, 0, 0, 0, 0, 0, 0,  1,  0, 0, 0,  1, 1, 1,  0, 0 };
-static const int key_hi[S2S_KEYS] = { 1, 2, 3, 2, 1, 1, 1, 1,  7,  0x7FFF, 0x7FFF, 0x7FFF,  7, 4, 5,  3, 4 };
+static const int key_def[S2S_KEYS] = { 0, 2, 1, 1, 0, 0, 0, 0,  2,  0x6000, 0x6000, 0x6000,  1, 1, 1,  0, 0,  0 };
+static const int key_lo[S2S_KEYS] = { 0, 0, 0, 0, 0, 0, 0, 0,  1,  0, 0, 0,  1, 1, 1,  0, 0,  0 };
+static const int key_hi[S2S_KEYS] = { 1, 2, 3, 2, 1, 1, 1, 1,  7,  0x7FFF, 0x7FFF, 0x7FFF,  7, 4, 5,  3, 4,  1 };
 
 /* "power on" with this file: the window is scribbled first, the way the SDRAM holds whatever it held, then s2save_load() */
 static void power_on(const uint8_t *img, uint32_t n)
@@ -226,7 +226,8 @@ static void test_defaults(void)
     CHECK(rd16(win + 28) == 0x6000 && rd16(win + 30) == 0x6000 && rd16(win + 32) == 0x6000, "volumes at +28");
     static const uint8_t picks[6] = { 2, 1, 1, 1, 0, 0 };       /* view, track, team, car, league open, tracks open at +34 */
     CHECK(!memcmp(win + 34, picks, 6), "view and picks at +34");
-    for (int i = 40; i < 48; i++) CHECK(win[i] == 0, "reserved at +%d", i);
+    CHECK(win[40] == 0, "the profile byte at +40 is 0 on a new save");
+    for (int i = 41; i < 48; i++) CHECK(win[i] == 0, "reserved at +%d", i);
     for (int t = 0; t < 4; t++) {                               /* the teams from +48, 100 bytes each: car5, 4 x 4 x 6 set-up numbers, 3 pad */
         const uint8_t *p = win + 48 + 100 * t;
         CHECK(p[0] == 0 && p[97] == 0 && p[98] == 0 && p[99] == 0, "team %d record", t);
