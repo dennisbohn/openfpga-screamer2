@@ -41,7 +41,20 @@ void s2_env_write(uint8_t *dst, const uint8_t *env_mlb, uint32_t n, uint32_t at)
    case stores the phase into the car's +0xc80, which 0x1737b copies into the object's +0x3c, and for the player's car the rate into the constant at 0xb0678): the
    phase (the frame of an ENV.MLB of n frames is n x phase >> 16; geom.h) and, in *rate if it is not 0, how fast the reflection slides across the glass as the car
    moves, 0.03 where the picture changes (kinds 7, 13, 34, 43) and on 44, else 0.002. Kinds 7 and 34 phase 0x8000, 13 0x5556, 43 0xaaaa, all the others 0. */
-uint32_t s2_env_phase(int kind, float *rate);
+static inline uint32_t s2_env_phase(int kind, float *rate)   /* (inline: the physics' build needs no other file of this module) */
+{
+    uint32_t phase = 0;
+    float k = 0.002f;
+    switch(kind) {
+    case 7: case 34: phase = 0x8000; k = 0.03f; break;
+    case 13: phase = 0x5556; k = 0.03f; break;
+    case 43: phase = 0xaaaa; k = 0.03f; break;
+    case 44: k = 0.03f; break;
+    default: break;
+    }
+    if(rate) *rate = k;
+    return phase;
+}
 
 /* A car's .MLB (size bytes, in place) with its windows' materials pointing to the texture record at offset env_at of the file */
 void s2_env_windows(uint8_t *mlb, uint32_t size, uint32_t env_at);

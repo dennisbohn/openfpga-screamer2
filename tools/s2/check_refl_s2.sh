@@ -14,7 +14,7 @@ GAME_DIR="$game" sh "$root/tools/dis.sh" -f 0x1f372 0x1f376 > /dev/null         
 "$py" -I "$root/tools/s2/check_refl_s2.py" "$root/build/exe/startl_fix.bin" | tr -d '\r' > "$out/refl_exe.txt"
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -w "$root"); else mount=$root; fi
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/work" -w /work --entrypoint sh verilator/verilator:v5.050 -c "
-    gcc -O2 -Wall -Wextra -o build/s2/check_refl_s2 tools/s2/check_refl_s2.c firmware/s2env.c && build/s2/check_refl_s2 > build/s2/refl_fw.txt"
+    gcc -O2 -Wall -Wextra -o build/s2/check_refl_s2 tools/s2/check_refl_s2.c && build/s2/check_refl_s2 > build/s2/refl_fw.txt"
 if cmp -s "$out/refl_exe.txt" "$out/refl_fw.txt"; then
     echo "PASS: s2_env_phase() gives the phase and rate of STARTL.EXE's chain for all 256 kinds ($(awk '$2 != "0"' "$out/refl_exe.txt" | wc -l) kinds with a picture of their own: $(awk '$2 != "0" { printf "%s ", $1 }' "$out/refl_exe.txt"))"
 else
