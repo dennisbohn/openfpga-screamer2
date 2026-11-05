@@ -428,7 +428,8 @@ static void end_screen(int n, volatile uint8_t *fb, const uint32_t *pal, uint32_
 {
     struct race_hud h;
     race_get_hud(&h);
-    struct s2_end_in in = { n, race_laps, h.place, h.time, h.best_lap, race_grid[0].team, race_grid[0].car };
+    struct s2_end_in in = { .track = n, .laps = race_laps, .place = h.place, .time = h.time, .best_lap = h.best_lap, .team = race_grid[0].team,
+                            .car = race_grid[0].car };
     if (league_mode) {                                  /* the championship's end lists the cars that have done their laps (s2end.h) */
         struct race_result r[RACE_CARS];
         race_get_results(r);
