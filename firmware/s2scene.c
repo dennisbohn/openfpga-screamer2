@@ -146,9 +146,11 @@ struct track_cam s2scene_camera(float x, float y, float z, float pitch)
 #define PI      3.1415927f
 #define TWO_PI  6.2831853f
 
+/* the game's table (0x1240c0) is made on the x87: 0.5 + row x 0.005 with the sum in extended precision, stored as a float; in float arithmetic (0.5f + row * 0.005f) the product is rounded
+   first and 15 of the 100 rows come out one bit lower (19, 33, 44, 58 .. 60, 68 .. 70, 84 .. 86, 93 .. 95: the room's glides use 0x55 and 0x5f, whose cut sums the other bit moves) */
 float s2scene_easing(int row)
 {
-    return 0.5f + (float)row * 0.005f;
+    return (float)((double)0.5f + (double)row * (double)0.005f);
 }
 
 void s2scene_ease_angle(float *v, float target, int row)

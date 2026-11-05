@@ -143,6 +143,17 @@ static int rd32s(const uint8_t *p)
     return (int)((uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24);
 }
 
+int s2room_stations(const uint8_t *file, uint32_t size)
+{
+    if (size < 4) return 0;
+    const int n = rd32s(file);
+    if (n < S2ROOM_STATIONS || n > 15 || size < 4 + 24 * (uint32_t)n) return 0;     /* (a record of the game's table holds at most 15 stations: 0x16c bytes) */
+    for (int a = 0; a < 2; a++)
+        for (int k = 0; k < S2ROOM_STATIONS; k++)
+            for (int i = 0; i < 3; i++) mcm[a][k][i] = rd32s(file + 4 + 4 * (3 * (a * n + k) + i));
+    return 1;
+}
+
 int s2room_load(struct zip *z, const struct s2room_mem *m, int team)
 {
     if (team < 1 || team > 4) return 0;
@@ -173,16 +184,12 @@ int s2room_load(struct zip *z, const struct s2room_mem *m, int team)
     char mcm_name[16] = "P_1.MCM";
     mcm_name[2] = (char)('0' + team);
     struct dat_entry d;
-    static uint32_t buf[64];                                    /* the file: records of n, n places, n points of three numbers each (252 bytes: the first is the room's) */
+    static uint32_t buf[64];                                    /* the file: 252 bytes */
     if (!dat_find(m->container, e->size, mcm_name, &d) || d.size > sizeof buf || dat_extract(m->container, e->size, &d, (uint8_t *)buf, sizeof buf) != d.size ||
-        d.size < 4 + S2ROOM_STATIONS * 24 || rd32s((const uint8_t *)buf) < S2ROOM_STATIONS) {
+        !s2room_stations((const uint8_t *)buf, d.size)) {
         dlog_str("room: P_t.MCM is not usable\n");
         return 0;
     }
-    const uint8_t *p = (const uint8_t *)buf + 4;
-    for (int a = 0; a < 2; a++)
-        for (int k = 0; k < S2ROOM_STATIONS; k++)
-            for (int i = 0; i < 3; i++) mcm[a][k][i] = rd32s(p + 4 * (3 * (a * rd32s((const uint8_t *)buf) + k) + i));
     cached_team = team;
     dlog_str("room: T");
     dlog_dec(team);
@@ -206,6 +213,12 @@ static struct room {
     const char *title, *name[S2ROOM_STATIONS];
     uint8_t dark[256];
 } R;
+
+const struct s2room_cam *s2room_camera(int *at)
+{
+    if (at) *at = station;
+    return &R.cam;
+}
 
 static void room_frame(void *self, uint32_t tick)
 {

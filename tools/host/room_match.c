@@ -89,6 +89,7 @@ void music_frame(void) {}
 int s2page_run(const struct s2_page *p, void *self) { (void)p; (void)self; return 0; }
 
 #include "../s2room.c"                                          /* (included: the test reaches the page's drawing) */
+#include "../s2pages.c"                                         /* (and the pages of the other stations: the MULTIPLAYER MENU and GAME SETTINGS, drawn by the test) */
 
 static const struct s2room_mem mem = { (uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2800000), 0x400000, (uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000), 0x700000, 0, 0 };
 
@@ -202,6 +203,42 @@ static void dump(const char *prefix, const char *name, const char *what, int dif
 
 struct cand { int32_t pos[3]; int a0, a1, anim, station; };
 
+/* The pages the stations lead to that are 2D: the MULTIPLAYER MENU (the cursor at any of the three items, the item out or not) and GAME SETTINGS (the first row lit or not), drawn by
+   the firmware's page functions over their pictures, each compared whole with the screenshot at the best of their states. */
+static void page_match(const char *name, const char *label)
+{
+    static uint32_t pal[256];
+    const int multi = strstr(label, "p3_") != 0;
+    if (!strstr(label, "p3_") && !strstr(label, "p4_")) {
+        printf("%s (%s): a page of another station (not compared here)\n", name, label);
+        return;
+    }
+    if (!s2gfx_bkk(multi ? "BKG_6L.BKK" : "BKG_7L.BKK", s2gfx_pic(0), pal) || !same_palette(shot_pal, pal)) {
+        printf("%s (%s): palette is not the page's\n", name, label);
+        return;
+    }
+    if (!multi) {                                               /* the private CHOICE.DAT of the run: the game's own settings, ARCADE ENEMIES SKILL ROOKIE */
+        s2save_reset();
+        s2save_set(S2S_SKILL, 0);
+    }
+    int best = 1 << 30, bs = 0;
+    for (int state = 0; state < (multi ? 6 : 2); state++) {
+        struct blit_list *l = s2gfx_begin_on(0);
+        s2gfx_picture(l, s2gfx_pic(0));
+        if (multi) {
+            struct multi m = { state % 3, (uint32_t)(state / 3) * 0x20, 0, 0 };
+            multi_draw(&m, l, 0);
+        } else {
+            struct settings m = { 0, (uint32_t)state * 0x20 };
+            set_draw(&m, l, 0);
+        }
+        s2gfx_flush();
+        const int d = diff();
+        if (d < best) { best = d; bs = state; }
+    }
+    printf("%s (%s): %s page, state %d: %d of 64000 pixels differ\n", name, label, multi ? "MULTIPLAYER MENU" : "GAME SETTINGS", bs, best);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 4) { fprintf(stderr, "usage: %s <SCREAMER2.zip> <shots file> <folder of .idx> [out prefix]\n", argv[0]); return 2; }
@@ -261,6 +298,10 @@ int main(int argc, char **argv)
         h = fopen(path, "rb");
         if (!h || fread(shot_pal, 4, 256, h) != 256) memset(shot_pal, 0, sizeof shot_pal);
         if (h) fclose(h);
+        if (strstr(labels[f], "_page")) {
+            page_match(names[f], labels[f]);
+            continue;
+        }
         if (!same_palette(shot_pal, track_palette())) { printf("%s (%s): palette is not the room's\n", names[f], labels[f]); continue; }
         /* the state that matches best (the arrows at the better of the two blink phases) */
         int best = 1 << 30, bk = 0, barrows = 1;

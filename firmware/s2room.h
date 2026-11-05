@@ -55,8 +55,13 @@ struct s2room_cam {
     int a0, a1;
     int row;                                    /* the easing row of the place: 0x5f at first, 0x55 after the first move */
 };
-/* P_<t>.MCM's five stations (as s2room_load read them): the camera's place and the point it looks at */
+/* P_<t>.MCM (252 bytes: records of a number n, n places and n points of three whole numbers each; the first record is the room's, n = 5; the second, which the CARS pages of
+   time attack and the league use, and the empty third are not read) into the five stations; 1, or 0 if the file is too short or has fewer than five */
+int s2room_stations(const uint8_t *file, uint32_t size);
+/* a station's camera place (aim 0) or the point it looks at (aim 1), the engine's x, y up, z */
 const int32_t *s2room_station(int k, int aim);
+/* the page's camera and station as of its last frame (what the tests look at) */
+const struct s2room_cam *s2room_camera(int *station);
 /* the start of a visit at station k: the place five times as far along the line from the aim point, the angles looking at it */
 void s2room_cam_start(struct s2room_cam *c, int station);
 /* one frame at the station: the place eased towards it (towards the aim point once the picture is fading out: fade is its level, 0.04 a frame from the frame after ENTER, 0
