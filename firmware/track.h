@@ -143,6 +143,14 @@ extern void (*track_hw_piece)(const struct gu_piece *p);
 /* The track's material file (for the geometry unit's register) */
 const uint8_t *track_mlb(void);
 
+/* The image's effects (smg.h): the see-through table its routine-224 materials are drawn through (64 rows of 256, for smg_load()), the meshes of the shadow and of the
+   two smokes (blocks to hand to the geometry unit; 0 for a room, which has none) and the rows of the table in use. 0 if the image has no such block. */
+struct track_fx {
+    const uint8_t *table, *shadow, *smoke, *smoke2;
+    int rows;
+};
+int track_fx(struct track_fx *fx);
+
 /* The projection for clip (for the setup unit's registers) */
 void track_view(const struct rs_clip *clip, struct su_view *v);
 
