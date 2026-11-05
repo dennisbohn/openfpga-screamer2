@@ -33,7 +33,8 @@ void s2_record_text(char *p, const struct s2_record *r);
 /* The screen for track 1 .. 7 and a race of `laps` laps, shown at once; the palette of its picture (stays valid), or 0 if the picture,
    the sprites or the fonts are not there (the caller then shows its own text). */
 const uint32_t *s2load_show(int track, int laps);
-/* The same with the records of a kind of game's lists (the championship's race: S2S_KIND_LEAGUE) */
+/* The same with the records of a kind of game's lists (the championship's race: S2S_KIND_LEAGUE; time attack's: S2S_KIND_ATTACK, three laps; S2S_KINDS, the free
+   run's: no lines of records at all) */
 const uint32_t *s2load_show_kind(int kind, int track, int laps);
 /* The track is ready: the screen fades out (0.4 s). Needs the palette s2load_show() returned. */
 void s2load_fade(void);

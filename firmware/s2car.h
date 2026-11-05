@@ -86,6 +86,10 @@ int s2car_init(struct s2car_state *s, int team, int car, int track, const struct
    held on the grid (s2car_state.hold = 1) until the caller clears it. */
 int s2car_init_grid(struct s2car_state *s, int team, int car, int track, int grid, int ai);
 
+/* The same abreast, as time attack and the free run put the cars (0x30328 .. 0x303fa: no row behind): side 0 and side 1 are 1000 units to either side
+   of the line's first node (the sides in turn as the grid's places 0 and 1 are, in the same row); the original gives car i of n the side n - 1 - i. */
+int s2car_init_row(struct s2car_state *s, int team, int car, int track, int side, int ai);
+
 /* The car put on the line itself at (x, z), heading along the road there, standing, held (hold = 1): a car that left the
    road is put back (the caller keeps what it knows of the car, the record is made new). 1 if it worked. */
 int s2car_init_at(struct s2car_state *s, int team, int car, int track, float x, float z, int ai);
