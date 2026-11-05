@@ -461,14 +461,18 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     struct dat_entry e;
     uint32_t len, count = 0, dtr_n = 0, col_n = 0, mmp_n = 0, bck_n = 0;
     const uint8_t *dtr, *col, *mmp, *bck;
-    int32_t td[5];
-    if(!(dtr = unpack(&b, f->data, f->data_size, name(&b, "DAT.DTR", buf), &dtr_n))) return 0;
-    if(!s2_track_data(dtr, dtr_n, td) || td[0] >= 0) return (uint32_t)fail(&b, "TRACK_DATA");
+    /* a menu's room (no cars) has no track data: the menus' lens (STARTL.EXE 0x7f504, far plane 43,808) and colour 0 */
+    int32_t td[5] = { -43808, 0, 0, 0, 0 };
+    const int ncars = f->ncars;
+    const int scenery = ncars == 0;         /* only the scenery: a room (the sections of cars, road points and walls stay empty) */
+    if(!scenery) {
+        if(!(dtr = unpack(&b, f->data, f->data_size, name(&b, "DAT.DTR", buf), &dtr_n))) return 0;
+        if(!s2_track_data(dtr, dtr_n, td) || td[0] >= 0) return (uint32_t)fail(&b, "TRACK_DATA");
+    }
 
     /* the cars' libraries: where they lie in the MLB section, how many materials they have */
     struct { const uint8_t *mlb; uint32_t size, nrec, at; } lib[S2_CARS];
-    const int ncars = f->ncars;
-    if(ncars < 1 || ncars > S2_CARS || !f->car) return (uint32_t)fail(&b, "cars");
+    if(ncars < 0 || ncars > S2_CARS || (ncars && !f->car)) return (uint32_t)fail(&b, "cars");
     if(!dat_find(f->gfx, f->gfx_size, name(&b, ".MLB", buf), &e)) return (uint32_t)fail(&b, buf);
     uint32_t mlb_size = e.size, nmat = 0, end = pad256(mlb_size);
     for(int k = 0; k < ncars; k++) {
@@ -490,13 +494,14 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
         end += S2_ENV_HEAD + S2_ENV_FRAME * env_n;
     }
     uint32_t mlb_off = FIRST + pad256(16 * nmat);
-    if(!nmat || mlb_off - FIRST > 32768) return (uint32_t)fail(&b, "car materials");
+    if((!nmat && !scenery) || mlb_off - FIRST > 32768) return (uint32_t)fail(&b, "car materials");
 
     /* section 0: the car materials; 1: the MLB, the cars' libraries and the reflection after it */
     if(16 * nmat > room(&b)) return (uint32_t)fail(&b, "car materials");
     for(int k = 0, o = 0; k < ncars; o += (int)lib[k].nrec, k++)
         lib_records(lib[k].mlb, lib[k].size, lib[k].nrec, lib[k].at, env_at, at(&b) + 16 * (uint32_t)o);
-    if(!section(&b, 16 * nmat, nmat, "car materials")) return 0;
+    if(scenery) empty(&b);
+    else if(!section(&b, 16 * nmat, nmat, "car materials")) return 0;
     if(end > room(&b)) return (uint32_t)fail(&b, "MLB");
     uint8_t *m = at(&b);
     if(!extract(&b, f->gfx, f->gfx_size, &e, m, room(&b))) return 0;
@@ -526,10 +531,12 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     empty(&b);                                  /* the markers */
     if(room(&b) < 68 * (uint32_t)ncars) return (uint32_t)fail(&b, "cars");
     for(int k = 0; k < ncars; k++) stand_in_car(at(&b) + 68 * k, &f->car[k]);
-    if(!section(&b, 68 * (uint32_t)ncars, (uint32_t)ncars, "cars")) return 0;
+    if(scenery) empty(&b);
+    else if(!section(&b, 68 * (uint32_t)ncars, (uint32_t)ncars, "cars")) return 0;
 
     /* the car models: each .3DX to its place, its faces onto the car materials */
-    {
+    if(scenery) empty(&b);
+    else {
         uint32_t size[S2_CARS], rec = 0;
         const uint8_t *x3d[S2_CARS];
         for(int k = 0; k < ncars; k++) size[k] = f->car[k].x3d_size;
@@ -545,12 +552,18 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
     }
 
     const uint8_t *dirs = at(&b);
+    count = 0;
     len = tb_mmp_dirs(mmp, mmp_n, at(&b), room(&b), &count);
-    if(!section(&b, len, count, "road points")) return 0;
-    memcpy(out + 0x5C, dirs + 4, 8);            /* the start: road point 0, its x, y and its heading */
-    memcpy(out + 0x64, dirs, 4);
+    if(scenery && !len) empty(&b);              /* (a room has no road: the start stays 0) */
+    else {
+        if(!section(&b, len, count, "road points")) return 0;
+        memcpy(out + 0x5C, dirs + 4, 8);        /* the start: road point 0, its x, y and its heading */
+        memcpy(out + 0x64, dirs, 4);
+    }
+    count = 0;
     len = tb_mmp_walls(mmp, mmp_n, at(&b), room(&b), &count);
-    if(!section(&b, len, count, "walls")) return 0;
+    if(scenery && !len) empty(&b);
+    else if(!section(&b, len, count, "walls")) return 0;
     if(room(&b) < 856) return (uint32_t)fail(&b, "race screen");
     memset(at(&b), 0, 856);                     /* no race screen: 0 images, 0 fonts, the pictures' boxes and texts */
     if(!section(&b, 856, 856, "race screen")) return 0;

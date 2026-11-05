@@ -5,9 +5,10 @@
 # s2_car_unpack()) must be byte-identical with the one tools/s2/make_track_s2.py builds from the same files
 # (the reference), for each of the seven tracks, with three grids: the race's default (team 1 car 1, team 2 car 2,
 # team 3 car 3, team 4 car 4), one out of order (bonus cars, a car twice) and the five cars of team 1 (the images of
-# the physics check, check_car.sh). The S1 pattern is tools/check_track_build.sh. Then tools/s2/check_cars_s2.sh:
+# the physics check, check_car.sh), and for the four teams' rooms of the options room (GFX/MENU<t>1.DAT: no cars, no track data; S2ROOM=1 of the
+# reference). The S1 pattern is tools/check_track_build.sh. Then tools/s2/check_cars_s2.sh:
 # the cars loader (firmware/s2teams.c) on the ZIP, stored and deflated.
-# Usage: tools/s2/check_track_build_s2.sh [game folder] [tracks, default "1 2 3 4 5 6 7"]
+# Usage: tools/s2/check_track_build_s2.sh [game folder] [tracks, default "1 2 3 4 5 6 7"]   (the four rooms are checked with the default tracks only)
 #   game folder   the original game (its GFX and DATA folders, as unzipped), default $GAME_DIR or
 #                 "C:/GOG Games/Screamer 2"
 # Everything it writes stays in build/s2/ (game data, never committed): the references as ref<n>.bin (default
@@ -37,6 +38,12 @@ for n in $tracks; do
     done
 done
 
+rooms=""
+[ "$tracks" != "1 2 3 4 5 6 7" ] || rooms="1 2 3 4"
+for t in $rooms; do
+    S2ROOM=1 "$py" -I "$root/tools/s2/make_track_s2.py" "$game" "$t" "$out/room$t.bin" > /dev/null
+done
+
 # Git Bash on Windows: hand Docker Windows paths and stop MSYS rewriting /work.
 if command -v cygpath >/dev/null 2>&1; then
     mount=$(cygpath -w "$root")
@@ -55,6 +62,9 @@ for n in $tracks; do
         runs="$runs echo \"track $n, grid $g:\"; build/s2/check_track_build_s2 /game build/s2/$ref $n $g || exit 1;"
         k=$((k + 1))
     done
+done
+for t in $rooms; do
+    runs="$runs echo \"room of team $t:\"; build/s2/check_track_build_s2 /game build/s2/room$t.bin $t room || exit 1;"
 done
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -v "$mount:/work" -v "$game_mount:/game:ro" -w /work --entrypoint sh "$image" -c "
     gcc -O2 -g -Wall -Wextra -Wdouble-promotion -fsanitize=address,undefined -fno-sanitize-recover \

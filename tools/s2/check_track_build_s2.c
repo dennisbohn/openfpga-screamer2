@@ -8,6 +8,8 @@
  * build must fit it.
  *
  * Usage: check_track_build_s2 <game folder> <reference image> <n> [grid, "1:1,2:2,3:3,4:4": team:car per slot]
+ *        check_track_build_s2 <game folder> <reference image> <n> room
+ * The second is a menu's room of team n (GFX/MENU<n>1.DAT; the options room, docs/screamer2/menus.md row 8): no cars, no track data, no reflection.
  */
 #include "../../firmware/track_build.h"
 #include "../../firmware/s2teams.h"
@@ -45,21 +47,25 @@ static uint8_t *slurp(const char *dir, const char *name, uint32_t *size)
 
 int main(int argc, char **argv)
 {
-    if(argc < 4 || argc > 5) { fprintf(stderr, "usage: %s <game folder> <reference image> <n> [grid]\n", argv[0]); return 2; }
+    if(argc < 4 || argc > 5) { fprintf(stderr, "usage: %s <game folder> <reference image> <n> [grid | room]\n", argv[0]); return 2; }
     int track = atoi(argv[3]);
+    const int room = argc == 5 && !strcmp(argv[4], "room");
     char gfx[32], data[32], env[32];
-    snprintf(gfx, sizeof gfx, "GFX/MAP%dH01.DAT", track);
+    snprintf(gfx, sizeof gfx, room ? "GFX/MENU%d1.DAT" : "GFX/MAP%dH01.DAT", track);
     snprintf(data, sizeof data, "DATA/MAP%d.DAT", track);
     snprintf(env, sizeof env, "GFX/ENVP%d01.DAT", track);
     struct s2_files f;
+    memset(&f, 0, sizeof f);
     f.gfx = slurp(argv[1], gfx, &f.gfx_size);
-    f.data = slurp(argv[1], data, &f.data_size);
-    f.env = slurp(argv[1], env, &f.env_size);
+    if(!room) {
+        f.data = slurp(argv[1], data, &f.data_size);
+        f.env = slurp(argv[1], env, &f.env_size);
+    }
 
     /* the grid's cars: each team's container whole, the car's two entries unpacked into a blob of its own */
     static uint32_t blobs[S2_CARS * S2_CAR_ROOM / 4];
     struct s2_car cars[S2_CARS];
-    const char *g = argc == 5 ? argv[4] : "1:1,2:2,3:3,4:4";
+    const char *g = room ? "" : argc == 5 ? argv[4] : "1:1,2:2,3:3,4:4";
     f.ncars = 0;
     while(*g && f.ncars < S2_CARS) {
         int team = 0, car = 0, used = 0;
@@ -83,7 +89,7 @@ int main(int argc, char **argv)
         g += used;
         if(*g == ',') g++;
     }
-    f.car = cars;
+    f.car = room ? 0 : cars;
     uint32_t ref_size;
     uint8_t *ref = slurp(".", argv[2], &ref_size);
 

@@ -344,7 +344,7 @@ int track_init(void)
     start = (const struct start *)(f + 0x5C);
     piece_kinds = rd32(f + 0x74) ? f + rd32(f + 0x74) : NULL;
     unr_count = rd32(unr + 4);
-    if(unr_count > MAX_OBJ || npieces > MAX_PIECES || ncars < 1 || nmodels < 1) return 0;
+    if(unr_count > MAX_OBJ || npieces > MAX_PIECES) return 0;               /* (an image may have no cars: a menu's room) */
     int32_t far = rd32(f + 0x70);
     far_z = far > 0 ? (float)far : 50000.0f;
     reach2 = (far_z + REACH_PLUS) * (far_z + REACH_PLUS);
