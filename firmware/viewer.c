@@ -28,6 +28,7 @@
 #include "s2league.h"
 #include "s2leaguepages.h"
 #include "s2ghost.h"
+#include "s2cam.h"
 #include "s2trackpage.h"
 #include "s2arcade.h"
 #include "music.h"
@@ -92,6 +93,10 @@ static struct blit_list back;
 static int ui_ready;                    /* the 2D toolkit (s2gfx.h) is up: the loading screen and the pause menu */
 static int league_mode;                 /* the visit is a race of the championship (league_run): no RESTART, no track switch, the end screen is the league's */
 static int league_started;              /* ... and the race did start (its cars' places are there to read) */
+static int cam_mode;                    /* the camera is s2cam.c's (the trackside cameras after the finish and in the replay, or another car's chase camera), not the player's own */
+static int cut_done;                    /* ... and the cut to the trackside cameras at the player's finish has been made in this race */
+static struct race_result lg_res[RACE_CARS];    /* the championship's places as the end screen's ENTER took them (a replay does not take them again), or as the race was left */
+static int lg_res_valid;
 static int attack_mode;                 /* the visit is time attack (1) or the free run (2): attack_run(); no track switch, the end screen is time attack's, a quicker run is kept as the ghost */
 #define VISIT_AGAIN 100                 /* visit() ends with the race again asked for on time attack's end screen: the ghost may have changed, attack_race() decides what to load */
 static uint32_t sim_frames;             /* in the simulation: the frames to draw before it ends */
@@ -333,6 +338,7 @@ static int manual;
 static int race_start(int n, float floor_z)
 {
     uint32_t t0 = rdcycle();
+    race_car(0)->manual = manual;                       /* (before the cars are set up: the first gear depends on it; the other kinds of race clear it and it is set again) */
     int ok = race_init(n, floor_z);
     race_car(0)->manual = manual;
     static int logged;                                  /* the log has 4 KB: the first start of the run tells how long it took */
@@ -344,7 +350,45 @@ static int race_start(int n, float floor_z)
     }
     if (ok) s2snd_race_start(n);                        /* (after the timing: the music's first fill takes 170 ms) */
     if (ok) s2hud_begin(n);
+    if (ok) {                                           /* the camera: the player's chase camera, or in a replay the trackside cameras (0x2e1f3: a replay begins in view 1) */
+        cam_mode = race_replaying();
+        cut_done = 0;
+        if (!cam_mode) lg_res_valid = 0;
+        s2cam_begin(n, cam_mode ? S2CAM_TRACKSIDE : S2CAM_BACK);
+        for (int i = 0; i < RACE_CARS; i++) race_car(i)->cam_on = 0;
+        s2hud_view(s2cam_get_view(), 0);
+    }
     return ok;
+}
+
+/* the camera follows car `i` (0 .. race_cars() - 1) in the view it has: its chase camera is worked out, the dial is its */
+static void follow(int i)
+{
+    s2cam_follow(i, race_cars());
+    for (int k = 0; k < race_cars(); k++) race_car(k)->cam_on = k == s2cam_get_follow();
+    s2hud_view(s2cam_get_view(), s2cam_get_follow());
+}
+
+/* the same race again from the recording of the one just run (race.h): the trackside cameras, the replay's band's darkening ready */
+static int replay_start(int n, float floor_z, const uint32_t *pal)
+{
+    race_replay = 1;
+    const int ok = race_start(n, floor_z);
+    if (ok && race_replaying()) {
+        s2hud_band_prepare(pal);
+        follow(0);
+    }
+    return ok;
+}
+
+/* the replay's band, "TEAM - VIEW" of the car followed and the view (0x4658c: GAME.TXT 40 .. 44 EXTERNAL INCAR BACK NEAR INSIDE, the team's name STRINGS.TXT 5 .. 8) */
+static const char *band_text(void)
+{
+    static char text[40];
+    const int view = s2cam_get_view(), car = s2cam_get_follow();
+    const char *v = s2gfx_line("EXTERNAL", view == 1 ? 0 : view == 2 ? 1 : view == 3 ? 2 : view == 4 ? 3 : 4, view == 1 ? "EXTERNAL" : "BACK");
+    fmt_str(fmt_str(fmt_str(text, s2menu_team_name(race_grid[car].team)), " - "), v);
+    return text;
 }
 
 /* the controls of the driving mode from the buttons, as Screamer 1 reads them (car_keys: B the gas, Y the brake,
@@ -442,10 +486,11 @@ static void end_screen(int n, volatile uint8_t *fb, const uint32_t *pal, uint32_
     struct race_hud h;
     race_get_hud(&h);
     struct s2_end_in in = { .track = n, .laps = race_laps, .place = h.place, .time = h.time, .best_lap = h.best_lap, .team = race_grid[0].team,
-                            .car = race_grid[0].car, .attack = attack_mode == 1 };
-    if (league_mode) {                                  /* the championship's end lists the cars that have done their laps (s2end.h) */
+                            .car = race_grid[0].car, .attack = attack_mode == 1, .replay = race_replay_ok() && !attack_mode, .replaying = race_replaying() };
+    if (league_mode) {                                  /* the championship's end lists the cars that have done their laps (s2end.h); a replay's lists them as the race left them (0x48628) */
         struct race_result r[RACE_CARS];
-        race_get_results(r);
+        if (race_replaying() && lg_res_valid) memcpy(r, lg_res, sizeof r);
+        else race_get_results(r);
         in.league = 1;
         for (int i = 0; i < RACE_CARS; i++) {
             struct s2_end_car *c = &in.cars[i];
@@ -534,7 +579,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         last_vf = vf;
         /* the buttons: another track (this visit ends), the cars, the mode, the overlay */
         if (*drive) {
-            if (sel && (press & (KEY_LEFT | KEY_RIGHT)) && !league_mode && !attack_mode) {
+            if (sel && (press & (KEY_LEFT | KEY_RIGHT)) && !league_mode && !attack_mode && !race_replaying()) {
                 leave(n, mode, &st_all);
                 return other_track(n, press);
             }
@@ -551,7 +596,17 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             if (end_choice == S2END_CONTINUE) {         /* the championship's end screen: the race is over, on to the report */
                 leave(n, mode, &st_all);
                 end_choice = 0;
+                if (!lg_res_valid && !race_replaying()) race_get_results(lg_res), lg_res_valid = 1;
                 return 0;
+            }
+            if (end_choice == S2END_REPLAY) {           /* the race again from the recording of this one (the places of the championship's are the ones taken now, 0x47e75) */
+                end_choice = 0;
+                if (league_mode && !race_replaying() && !lg_res_valid) race_get_results(lg_res), lg_res_valid = 1;
+                if (!replay_start(n, floor_z, pal)) {
+                    leave(n, mode, &st_all);
+                    return 0;
+                }
+                fin_frames = 0;
             }
             if (end_choice == S2END_AGAIN) {
                 end_choice = 0;
@@ -573,7 +628,16 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                     fin_frames = 0;
                 }
             }
-            if (press & KEY_START) {
+            if (race_replaying()) {                     /* the replay: there is no pause (ESC ends it, 0x2d7c0), and no controls to give; the views and the car followed are the keys (s2cam.h) */
+                struct race_hud hk;
+                race_get_hud(&hk);
+                if (press & (KEY_START | KEY_A | KEY_SELECT)) race_replay_stop();
+                if (!hk.finished) {                     /* (the keys of the views and of the car followed are taken while the player's car is racing, 0x132b4, 0x2d7c0) */
+                    if (press & KEY_L) { s2cam_view(S2CAM_TRACKSIDE); follow(s2cam_get_follow()); }
+                    if (press & KEY_R) { s2cam_view(S2CAM_BACK); follow(s2cam_get_follow()); }
+                    if (press & KEY_UP) follow((s2cam_get_follow() + 1) % race_cars());
+                }
+            } else if (press & KEY_START) {
                 if (sel) {                              /* Select + Start: the race again from the grid (the championship's race is run once) */
                     if (!league_mode) {
                         race_start(n, floor_z);
@@ -595,7 +659,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 }
             }
             if (press & KEY_X) *overlay = !*overlay;
-            if (press & KEY_UP) race_car(0)->manual = manual = !manual;
+            if (press & KEY_UP && !race_replaying()) race_car(0)->manual = manual = !manual;
         } else {
             if (press & (KEY_LEFT | KEY_RIGHT)) {
                 leave(n, mode, &st_all);
@@ -637,15 +701,28 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 in.gear_up = k == 0 && (press & KEY_R);         /* a gear on the one step the button went down */
                 in.gear_down = k == 0 && (press & KEY_L);
                 race_step_player(&in);
-                if (!RACE_OVERLAP) race_step_others(1);
+                /* the race is the same race whatever the frames took (a replay of it is exact): every step is the player's and then the computers', so that
+                   a late frame's extra steps run in that order and only the last step's computers overlap the scene */
+                if (!RACE_OVERLAP || k + 1 < steps) race_step_others(1);
             }
-            race_pending = RACE_OVERLAP ? steps : 0;
+            race_pending = RACE_OVERLAP ? 1 : 0;
             hud_steps = steps;
             if (race_pending && RACE_OVERLAP > 1) race_others_begin(race_pending);
             struct s2car_state *rc[RACE_CARS];
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
             PF_VAR(pf);
             nobj = road_race_scene(rc, race_cars(), &cam, objs);
+            if (!cut_done && attack_mode != 2) {        /* the player has done his laps: the camera cuts to the trackside cameras, following his car (0x201ee; the free run has no end) */
+                struct race_hud hc;
+                race_get_hud(&hc);
+                if (hc.finished) {
+                    cut_done = 1;
+                    cam_mode = 1;
+                    s2cam_view(S2CAM_TRACKSIDE);
+                    follow(0);
+                }
+            }
+            if (cam_mode) s2cam_frame((const struct s2car_state *const *)rc, race_cars(), (float)hud_steps * STEP_S, &cam);
             PF_ADD(PF_SCENE, pf); PF_SET(pf);
             s2snd_frame(&cam);                          /* the race's sound (s2sound.h) */
             PF_ADD(PF_SOUND, pf);
@@ -734,6 +811,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             fmt_str(p, manual ? " MAN" : " AUTO");
             if (!hud) con_text(fb, CON_COLS - (int)__builtin_strlen(l), 0, l, col_text, col_bg);
             int finished = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES, hud);
+            if (!finished && race_replaying() && hud) s2hud_band(fb, (int)draw_buf, band_text());       /* the replay's band while the player's car runs (0x4658c) */
             if (finished && ui_ready) end_screen(n, fb, pal, fin_frames, vf, press);
             fin_frames = finished ? fin_frames + 1 : 0;
 #ifdef S2_SIM_END
@@ -868,6 +946,7 @@ static int league_race(struct zip *z, int n, int *cars, int *overlay)
     league_started = 0;
     while ((next = visit(n, cars, overlay, &drive)) < 0)
         ;                                               /* (the overlay or the gearbox changed: the same visit again) */
+    if (!lg_res_valid) race_get_results(lg_res), lg_res_valid = 1;      /* a race left through the pause menu: its places as they stand */
     league_mode = 0;
     return league_started;
 }
@@ -897,7 +976,7 @@ static void league_run(struct zip *z, int *cars, int *overlay)
             struct race_result res[RACE_CARS];
             struct s2l_result lr;
             int place[S2L_CARS];
-            race_get_results(res);
+            memcpy(res, lg_res, sizeof res);            /* (as the end screen's ENTER took them, or as the race was left) */
             for (int i = 0; i < S2L_CARS; i++) place[i] = res[i].place;
             s2l_places(place, res[0].finished, &lr);
             s2l_add_points(&L, &lr);

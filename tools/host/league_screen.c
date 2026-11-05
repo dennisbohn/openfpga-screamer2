@@ -169,6 +169,8 @@ static void check_league_end(const char *ref, const char *prefix)
         in.time = (float)ptime;
         in.best_lap = (float)best;
         in.league = 1;
+        in.replay = name[0] == 'R' || name[0] == 'P';               /* (the model's names: R the race can be run again, P it is the replay's own screen) */
+        in.replaying = name[0] == 'P';
         char *q = rest;
         for (int i = 0; i < 4; i++) {
             int team, car, place, done, used = 0;
@@ -203,6 +205,7 @@ static void check_league_end(const char *ref, const char *prefix)
         for (int j = 0; j <= last; j++) {
             memcpy((void *)FB(0), base, S2G_PIC_BYTES);
             uint32_t press = j == 50 ? KEY_B : 0;
+            if (!strcmp(name, "R2") && j == 300) press = KEY_RIGHT;
             int got = s2end_frame(FB(0), 0, pal, &in, (uint32_t)j, 1000 + (uint32_t)j, press);
             if (j == 50) early = got;
             for (int k = 0; k < nkeep; k++)
@@ -221,9 +224,9 @@ static void check_league_end(const char *ref, const char *prefix)
         }
         CHECK(early == S2END_NONE, "run %s: ENTER in the first four seconds took effect (%d)", name, early);
         int result = s2end_frame(FB(0), 0, pal, &in, (uint32_t)last + 1, 1000 + (uint32_t)last + 1, KEY_START);
-        CHECK(result == S2END_CONTINUE, "run %s: ENTER gave %d, expected CONTINUE", name, result);
-        result = s2end_frame(FB(0), 0, pal, &in, (uint32_t)last + 2, 1000 + (uint32_t)last + 2, KEY_LEFT | KEY_RIGHT | KEY_A | KEY_SELECT);
-        CHECK(result == S2END_NONE, "run %s: left, right, A and Select do nothing (%d)", name, result);
+        CHECK(result == (in.replay && strcmp(name, "R2") ? S2END_REPLAY : S2END_CONTINUE), "run %s: ENTER gave %d", name, result);
+        result = s2end_frame(FB(0), 0, pal, &in, (uint32_t)last + 2, 1000 + (uint32_t)last + 2, in.replay ? KEY_A | KEY_SELECT : KEY_LEFT | KEY_RIGHT | KEY_A | KEY_SELECT);
+        CHECK(result == S2END_NONE, "run %s: %s do nothing (%d)", name, in.replay ? "A and Select" : "left, right, A and Select", result);
         /* the time goes into the championship's lists, not the arcade's: the total of the race's length, the best lap (none if the run has none) */
         int list = s2_laps_list(in.laps);
         const struct s2save_row *t = s2save_row(S2S_KIND_LEAGUE, in.track, list, 0), *l = s2save_row(S2S_KIND_LEAGUE, in.track, S2S_LAP, 0);

@@ -46,6 +46,18 @@ extern int race_kind;
 struct s2gh_head;
 extern const struct s2gh_head *race_ghost;      /* RACE_ATTACK: the kept run to race against (s2gh_ghost()), 0 for none */
 
+/* The replay (the arcade's and the championship's end screen offers it, STARTL.EXE 0x4746a / 0x47e75, 0x2b2a8): the race of RACE_NORMAL is recorded while it is run (the
+   player's controls, one byte a step: s2ghost.h) and run again from the recording, everything else worked out afresh from the same start, which the race being a
+   function of its controls (a step is 20 ms and each is the player's and then the computers') makes the same race. race_replay is set before race_init() (the viewer's
+   REPLAY): race_init() then sets up the race as it was (the player's gearbox) without beginning a recording, takes the player's controls from the recording
+   and clears the flag; the viewer does not need to hand them in (race_step_player ignores its argument in a replay). race_replay_ok(): the race just run was a
+   RACE_NORMAL one, whole in the recording (not over S2GH_MAX steps) and the player has done his laps, so that it can be run again. race_replay_stop(): the player ended the
+   replay (ESC): the race's frames stop, the player's car is done (the end screen follows). */
+extern int race_replay;
+int race_replay_ok(void);
+int race_replaying(void);
+void race_replay_stop(void);
+
 /* RACE_ATTACK: the side (0 / 1) the player's car took on the first row (the other is the ghost's: the player takes the one the kept run did not start on) */
 int race_slot(void);
 

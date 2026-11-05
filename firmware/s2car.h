@@ -62,6 +62,7 @@ struct s2car_state {
                                            lock to the side held (type 1). Either may change from step to step. */
     int ai;                             /* 1: a computer's car (the game's car without a controls record, +0xb4 = 0): its own
                                            grip, wall rule, set-up and pace handicap; set it with s2car_init_grid() */
+    int cam_on;                         /* 1: a computer's car (ai) keeps its chase camera worked out in cam[] as the player's does: the replay's cameras follow it */
     int hold;                           /* 1: the car waits on the grid, the gearbox in neutral (the game's race flag
                                            0x11f0a8 & 0x20 not yet set); the caller clears it when the race is let go */
     /* ---- private ---- */

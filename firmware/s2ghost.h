@@ -51,10 +51,14 @@ const struct s2gh_head *s2gh_ghost(int track, int damages);
 /* The controls of a block, one byte a step */
 const uint8_t *s2gh_data(const struct s2gh_head *h);
 
-/* The recording of a race: begun when the race is (race_init), a byte for each of the player's steps; a race longer than S2GH_MAX steps is not kept. */
+/* The recording of a race: begun when the race is (race_init), a byte for each of the player's steps; a race longer than S2GH_MAX steps is not kept. It is time
+   attack's ghost when the run is kept (s2gh_keep) and the arcade's and the championship's replay for as long as no other race has begun. */
 void s2gh_rec_begin(int track, int team, int car, int slot, int damages);
 void s2gh_rec_step(const struct s2car_input *in, int manual);
 uint32_t s2gh_rec_steps(void);
+/* ... and read back: the arcade's and the championship's replay (race.c, menus row 10) runs the race again from the recording of the race just run. */
+const uint8_t *s2gh_rec_data(void);
+int s2gh_rec_full(void);                    /* the race ran over S2GH_MAX steps: only the first are there, the recording is not a race */
 
 /* The player's car has done its laps in `time` seconds (best_lap the quickest of them, laps the race's): the recording is the track's kept run if the track
    has none that is whole or the time is quicker than the kept one's (an equal time is not). 1 if it was kept (written into ATTACK.DAT's window), else 0. */

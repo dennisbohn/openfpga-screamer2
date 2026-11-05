@@ -89,8 +89,10 @@ the machine code's rule.
 - The marker 1ST and the bend's arrows are placed by the viewer's camera (the original's projection is the same lens: 128 behind the camera, focal 128).
 - The speed in miles is computed in single precision (the original's x87 division by 1.6 in double): a number can differ by one at a boundary.
 - Only the arcade race with one player: no time attack (`mode & 4`: the ghost; no POSITION), free run (`mode & 8`: five split times instead of THIS LAP / TOTAL), split screen (`mode & 0x40`).
-- Views other than the chase camera are not drawn (the viewer has none): view 1 shows none of it, view 6 the dashboard (`0x46755`: the needles of the two instruments from
-  `CRUSC.DTR`'s section `COCKn` L, the gear lamp of `GAMEL.SPR` 70 to 109, over `COCKn_L.PKC` copied by `0x518f8`), and the replay's band (`0x4658c`).
+- Views other than the chase camera and the trackside cameras are not drawn (the viewer has no view from the car): view 6 shows the dashboard (`0x46755`: the needles of the two instruments from
+  `CRUSC.DTR`'s section `COCKn` L, the gear lamp of `GAMEL.SPR` 70 to 109, over `COCKn_L.PKC` copied by `0x518f8`). Since menus row 10 view 1 (the replay's, and the end of every race: `s2hud_view()`) shows no
+  dial, none of the texts and no WRONG WAY (`0x46fea`, `0x45d17`, `0x463fc`; the start lights, the leader's mark and the band stay), and the dial is that of the car the camera follows; the replay's band
+  (`0x4658c`: the bottom 20 rows darkened, "TEAM - VIEW" at (10, 180) in font 0, colour 1, spacing 2) is `s2hud_band()`; `tools/hud_screens.sh` has 11 frames of them.
 
 ## 4. Checked
 
