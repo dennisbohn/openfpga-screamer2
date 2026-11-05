@@ -24,7 +24,7 @@ src="$root/build/host/menu"
 rm -rf "$src"
 mkdir -p "$src/host"
 cp "$root"/firmware/*.c "$root"/firmware/*.h "$src/"
-cp "$root/tools/host/menu_screen.c" "$root/tools/host/ui_screen.c" "$root/tools/host/pages3d_screen.c" "$src/host/"
+cp "$root/tools/host/menu_screen.c" "$root/tools/host/ui_screen.c" "$root/tools/host/pages3d_screen.c" "$root/tools/host/league_screen.c" "$src/host/"
 "$py" -I - "$src/hw.h" <<'PY'
 import sys
 p = sys.argv[1]

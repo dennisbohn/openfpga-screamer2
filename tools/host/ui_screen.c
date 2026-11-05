@@ -46,12 +46,13 @@ static int nshots;
 static uint32_t pal_trace[128][2];       /* for the fade tests: palette entries 17 and 241 as each frame left them */
 static uint32_t swaps;
 /* frames to compare with a reference when they are on show: the page's frame of tick t is on show in call t + 1 */
-struct expect { uint32_t at; char name[96]; int shot; };
+struct expect { uint32_t at; char name[96]; int shot; int kind, league; };     /* kind 1: a frame of the championship's pages (league_screen.c; league: which picture, -1 the selection's) */
 static struct expect expects[40];
 static int nexpects, expect_hits;
 static const char *expect_ref;
 static uint8_t *slurp(const char *path, uint32_t *n);
 static void check_frame(const struct expect *e);
+static void check_league_frame(const struct expect *e);
 static void save(const char *name);
 static struct { uint32_t at; int slot; } caps[12];      /* frames kept in memory: the picture on show in a call, for the comparisons */
 static int ncaps;
@@ -460,6 +461,10 @@ static void check_runner(void)
 /* the frame that is on show against the reference of tools/ui_arcade_ref.py: every pixel and the whole palette */
 static void check_frame(const struct expect *e)
 {
+    if (e->kind) {
+        check_league_frame(e);
+        return;
+    }
     char path[512];
     uint32_t n, np;
     snprintf(path, sizeof path, "%s/arc_%s.idx", expect_ref, e->name);
@@ -988,6 +993,9 @@ static void draw_banner(int track, uint8_t *out)
 /* the pages with 3D objects (TEAM SELECTION, ENTER YOUR NAME, the CAR page): pages3d_screen.c, with the stand-ins of the geometry unit */
 #include "pages3d_screen.c"
 
+/* the championship's pages and end screen: league_screen.c */
+#include "league_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -1009,6 +1017,9 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_arcade_cases(ref, prefix);
     check_arcade_chain(prefix);
     check_arcade_reach(prefix);
+    check_league_pages(ref, prefix);
+    check_league_end(ref, prefix);
+    check_league_flow(prefix);
     check_pages3d(prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */

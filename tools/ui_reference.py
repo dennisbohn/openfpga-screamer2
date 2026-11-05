@@ -15,6 +15,7 @@ Writes into <out dir> (never committed):
                        (320 x 200 palette indices); .dk the passes of darkening each pixel is to get (0 .. 3: the tests apply the firmware's
                        own table, which they check on its own against a search in double precision); end_<k>.pal the race's palette
   arcade.txt, arc_*    the arcade pages' scripted runs and the frames they must draw (tools/ui_arcade_ref.py)
+  league.txt, lg_*, leagueend.txt, lend_*   the championship's pages and end screens (tools/ui_league_ref.py)
 The readers here (LZW, the S2 .SPR / .FNT layout, the text routine) are written from the file formats and the original's routines, not
 from the firmware.
 """
@@ -458,8 +459,12 @@ def main():
         z.write(os.path.join(game, "DATA", "LOCAL.DAT"), "DATA/LOCAL.DAT")
         z.write(os.path.join(game, "GFX", "GAME1.DAT"), "GFX/GAME1.DAT")
     import ui_arcade_ref
-    n_runs, n_frames = ui_arcade_ref.build(game, graf, spr, fnt, out, {"bkk": bkk, "container": container, "datfile": datfile, "Canvas": Canvas})
-    print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames, {n_runs} arcade page runs with {n_frames} frames -> {out}")
+    helpers = {"bkk": bkk, "container": container, "datfile": datfile, "Canvas": Canvas, "sprites": sprites}
+    n_runs, n_frames = ui_arcade_ref.build(game, graf, spr, fnt, out, helpers)
+    import ui_league_ref
+    l_runs, l_frames, l_ends = ui_league_ref.build(game, graf, spr, fnt, out, helpers)
+    print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames, {n_runs} arcade page runs with {n_frames} frames, {l_runs} championship page runs with {l_frames} frames "
+          f"and {l_ends} end screens -> {out}")
 
 
 if __name__ == "__main__":
