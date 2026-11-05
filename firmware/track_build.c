@@ -417,7 +417,7 @@ static int s2_track_data(const uint8_t *s, uint32_t size, int32_t v[5])
 }
 
 /* an empty section (no camera path, no markers): at the next boundary, no bytes */
-static void empty(struct build *b)
+static __attribute__((noinline)) void empty(struct build *b)
 {
     b->offs[b->sections] = b->pos;
     b->counts[b->sections++] = 0;
