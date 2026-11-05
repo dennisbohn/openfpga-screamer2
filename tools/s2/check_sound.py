@@ -49,6 +49,20 @@ def main():
             print("sample %02x addr=%d len=%d rate=%d vol=%d loop=%d crc=%08x" % (i, off, size, rate, vol, loop, crc))
         else:
             print("sample %02x addr=0 len=0 rate=0 vol=0 loop=0 crc=00000000" % i)
+    # the scenery's samples: AMBIENT<n - 1>.DTR of each track, numbered from 0x40 (the five most: AMBIENT1 has 0x40 .. 0x44)
+    for track in range(1, 8):
+        text = datfile.extract(sound, "AMBIENT%d.DTR" % (track - 1)).decode("latin-1").replace(chr(13), "")
+        toks = re.sub(r"(?m)^\s*\*.*$", "", text.split("SOUND_DATA", 1)[1].split("END_LIST", 1)[0]).split()
+        amb = {}
+        while toks:
+            name, f = toks[0], toks[1:9]
+            toks = toks[9:]
+            ident, looplen, loopcnt, vol, rate = (num(t) for t in f[:5])
+            e = ents[name[1:].upper()]
+            amb[ident - 0x40] = (e.offset, e.size, rate if rate > 0 else 11025, vol & 0x7FFF, 1 if loopcnt != 0 else 0, zlib.crc32(sound[e.offset:e.offset + e.size]) & 0xFFFFFFFF)
+        for i in range(5):
+            off, size, rate, vol, loop, crc = amb.get(i, (0, 0, 0, 0, 0, 0))
+            print("ambient %d %d addr=%d len=%d rate=%d vol=%d loop=%d crc=%08x" % (track, i, off, size, rate, vol, loop, crc))
     misc = datfile.extract(datfile.read(os.path.join(game, "DATA", "GAME.DAT")), "MISC.DTR").decode("latin-1").replace("\r", "")
     sec = misc.split("CD_TRACKS", 1)[1].split("END_LIST", 1)[0]
     cd = [num(t) for t in re.sub(r"(?m)^\s*\*.*$", "", sec).split()]

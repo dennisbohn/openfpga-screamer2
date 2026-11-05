@@ -48,8 +48,8 @@ static int32_t field(const char *t, uint32_t n, int *ok)
     return (int32_t)(neg ? 0u - v : v);
 }
 
-/* the sample table `table` (GAME.DTR, MENU.DTR) of the container into out[count] */
-static int parse_table(const uint8_t *dat, uint32_t size, uint32_t base, const char *table, struct s2snd_sample *out, int count)
+/* the sample table `table` (GAME.DTR, MENU.DTR, AMBIENT<n>.DTR) of the container into out[count]: the sample numbered first + k is out[k] */
+static int parse_table(const uint8_t *dat, uint32_t size, uint32_t base, const char *table, struct s2snd_sample *out, int count, int32_t first)
 {
     static uint8_t text[8192];
     struct dat_entry e;
@@ -74,9 +74,9 @@ static int parse_table(const uint8_t *dat, uint32_t size, uint32_t base, const c
             uint32_t m = word(&p, end, &t);
             f[k] = m ? field(t, m, &ok) : (ok = 0);
         }
-        if(!ok || f[0] < 0 || f[0] >= count) continue;
+        if(!ok || f[0] < first || f[0] - first >= count) continue;
         /* id, loop length, loop count, volume; rate, bits, channels, format */
-        struct s2snd_sample *s = &out[f[0]];
+        struct s2snd_sample *s = &out[f[0] - first];
         if(f[5] != 8 || f[6] != 0 || f[7] != 0) continue;           /* 8-bit mono unsigned only */
         if(!dat_find(dat, size, name, &e) || e.method != 0 || e.size == 0 || e.offset > size || e.size > size - e.offset) continue;
         s->addr = base + e.offset;
@@ -91,12 +91,19 @@ static int parse_table(const uint8_t *dat, uint32_t size, uint32_t base, const c
 
 int s2snd_parse(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out)
 {
-    return parse_table(dat, size, base, "GAME.DTR", out, S2SND_SAMPLES);
+    return parse_table(dat, size, base, "GAME.DTR", out, S2SND_SAMPLES, 0);
 }
 
 int s2snd_parse_menu(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out)
 {
-    return parse_table(dat, size, base, "MENU.DTR", out, S2SND_MENU_SAMPLES);
+    return parse_table(dat, size, base, "MENU.DTR", out, S2SND_MENU_SAMPLES, 0);
+}
+
+int s2snd_parse_ambient(const uint8_t *dat, uint32_t size, uint32_t base, int track, struct s2snd_sample *out)
+{
+    char table[16] = "AMBIENT0.DTR";
+    table[7] = (char)('0' + track - 1);
+    return parse_table(dat, size, base, table, out, S2SND_AMBIENT, S2SND_AMBIENT_FIRST);
 }
 
 int s2snd_cd_tracks(const uint8_t *game_dat, uint32_t size, int out[7])

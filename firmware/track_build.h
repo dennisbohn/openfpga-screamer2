@@ -24,6 +24,9 @@ struct track_build_info {
     char fail[20];
     uint32_t cycles, unpack_cycles;
     uint32_t scratch;                   /* the scratch the build used, bytes */
+    int32_t misc_delta;                 /* Screamer 2: the offset to add to a material offset of the track's MISC.MLB (the small objects' materials: an animation's
+                                           mesh, GFX/MAP<n>H01.DAT's <name>.3DX) to make it one the image's geometry unit takes (the records of MISC.MLB lie after the
+                                           cars' in front of the MLB: negative); 0 for an image without it (a room) */
 };
 
 /* Track n (1..9, MAPn) into out (cap bytes, any alignment): returns the image's size, 0 if a
@@ -72,3 +75,9 @@ struct s2_files {
 };
 uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t cap,
                         uint8_t *scratch, uint32_t scratch_cap, struct track_build_info *info);
+
+/* A .3DX mesh (size bytes, in place) with every face's material offset (face +4, an offset in the mesh's own material file) moved by delta: onto the records a library was
+   given in front of the image's MLB (negative). Every block of the header's table at the three levels of detail, every face of its 16 rows; moved only while it is not yet
+   negative, so a face in several rows is moved once. 1, or 0 if the file is malformed or an offset would leave the 16 bits. The cars' meshes (track_build_s2) and the scenery's
+   (s2anim.c: delta is info->misc_delta) are moved so. */
+int s2_faces_onto(uint8_t *x, uint32_t size, int32_t delta);

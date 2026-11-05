@@ -3,6 +3,7 @@
  */
 #include "s2sound.h"
 #include "s2snd.h"
+#include "s2anim.h"
 #include "s2car.h"
 #include "s2params.h"
 #include "race.h"
@@ -21,7 +22,9 @@
 #define V_KNOCK     6                           /* voices 6 .. 9: knocks */
 #define KNOCKS      4
 #define V_MENU      10                          /* the menu's clicks (s2sound_menu) */
-#define ALL_VOICES  0x3FFu
+#define V_ANIM      11                          /* voices 11 .. 31: the sounds of the track's animated scenery, one for each row (s2anim.h) */
+#define ANIMS       (AU_VOICES - V_ANIM)
+#define ALL_VOICES  0xFFFFFFFFu
 #define DOPPLER     (50.0f / 30.0f)             /* the game's shift is per frame of its own (30 a second); ours are 50 */
 #define KNOCK_GAP   3                           /* frames between two knocks, unless the second is harder (the game's frames are 1/17 to 1/30 s apart) */
 #define FADE_FRAMES 150                         /* the music fades out over 3 s once the player has finished */
@@ -31,7 +34,8 @@ union word { int32_t i; uint32_t u; float f; };
 #define RF(c, o)    (((const union word *)(c)->rec)[(o) >> 2].f)
 #define RI(c, o)    (((const union word *)(c)->rec)[(o) >> 2].i)
 
-static struct s2snd_sample smp[S2SND_SAMPLES], menu_smp[S2SND_MENU_SAMPLES];
+static struct s2snd_sample smp[S2SND_SAMPLES], menu_smp[S2SND_MENU_SAMPLES], amb[S2SND_AMBIENT];
+static uint32_t sound_size;                     /* SOUND.DAT's size */
 static int inited, ready;                       /* init done; SOUND.DAT there with samples */
 static int active;                              /* a race is on (s2snd_race_start .. s2snd_stop) */
 static int cd[7] = { 9, 8, 6, 7, 4, 3, 5 };     /* CD_TRACKS of the game's MISC.DTR (read at the first race) */
@@ -40,6 +44,7 @@ static int cd_read;
 /* per engine: the sample playing (-1 none), the distance a frame before (< 0 none), what the voice has */
 static struct { int id; float last; uint32_t step, reg; } eng[RACE_CARS];
 static struct { int id; uint32_t reg; } tyre;
+static struct { int id; float last; uint32_t step, reg; } scene[ANIMS];   /* the voice of each animated row: its ambient sample (-1 none), the distance a frame before (< 0 none) and what it has */
 static int ground_before;                       /* the player's wheels on the ground a frame before */
 static uint32_t knock_age, knock_rank, knock_next;
 static uint32_t last_vf, frames;
@@ -77,6 +82,7 @@ void s2snd_init(struct zip *z)
         dlog_str("sound: SOUND.DAT could not be read, no effects\n");
     } else {
         dcache_invalidate();
+        sound_size = e->size;
         int n = s2snd_parse((const uint8_t *)(uintptr_t)SOUND_MEM, e->size, SOUND_MEM - SDRAM_BASE, smp);
         ready = n > 0;
         int m = s2snd_parse_menu((const uint8_t *)(uintptr_t)SOUND_MEM, e->size, SOUND_MEM - SDRAM_BASE, menu_smp);
@@ -103,6 +109,12 @@ void s2snd_race_start(int track)
         eng[i].last = -1.0f;
     }
     tyre.id = -1;
+    for (int i = 0; i < ANIMS; i++) {
+        scene[i].id = -1;
+        scene[i].last = -1.0f;                  /* (0xaf45c: the distances forgotten) */
+    }
+    memset(amb, 0, sizeof amb);
+    if (ready) s2snd_parse_ambient((const uint8_t *)(uintptr_t)SOUND_MEM, sound_size, SOUND_MEM - SDRAM_BASE, track, amb);
     ground_before = 4;
     knock_age = 100;
     knock_rank = knock_next = 0;
@@ -180,6 +192,38 @@ static void knock(int id, uint32_t rank)
     play(V_KNOCK + (int)(knock_next++ % KNOCKS), id, s2snd_step(smp[id].rate), s2snd_vol_reg(smp[id].vol, 0x8000));
 }
 
+/* the sounds of the animated scenery (0x2cee4, 0x2d543: the game's sound manager's 0xaf338): each row that is heard has its voice, the sample looping, heard from the camera
+   within 80,000 units, the volume the sample's x ((80,000 - distance) / 80,000)^2, panned by the side, the rate the sample's own with the Doppler shift as an engine's (measured
+   in the running original, tools/s2/dosbox_anim.py --voices: 10,857 to 11,025 Hz for an 11,025 Hz sample; the game's call has a pitch of 0, its rate comes out as the sample's
+   all the same). The voice starts on the first frame the row is heard and goes when it is not (the distance a frame before stays, as the game's does). */
+static void scenery(const struct track_cam *cam, float cs, float sn)
+{
+    for (int i = 0; i < s2anim_rows() && i < ANIMS; i++) {
+        int x, y, id;
+        if (!s2anim_heard(i, &x, &y, &id) || id < S2SND_AMBIENT_FIRST || id - S2SND_AMBIENT_FIRST >= S2SND_AMBIENT || !amb[id - S2SND_AMBIENT_FIRST].len) {
+            if (scene[i].id >= 0) AU_STOP = 1u << (V_ANIM + i);
+            scene[i].id = -1;
+            continue;
+        }
+        const struct s2snd_sample *s = &amb[id - S2SND_AMBIENT_FIRST];
+        float dx = (float)x - cam->x, dy = (float)y - cam->y, d = sqrtf(dx * dx + dy * dy);
+        struct s2snd_heard h;
+        if (scene[i].last < 0.0f) scene[i].last = d;
+        s2snd_heard(s, 1.0f, d, scene[i].last, dx * cs + dy * sn, S2ANIM_RANGE, DOPPLER, &h);
+        scene[i].last = d;
+        uint32_t step = s2snd_step(h.rate), reg = s2snd_vol_reg(h.vol, h.pan);
+        if (scene[i].id != id) {
+            scene[i].id = id;
+            play_sample(V_ANIM + i, s, step, reg);
+        } else {
+            if (step != scene[i].step) AU_STEP(V_ANIM + i) = step;
+            if (reg != scene[i].reg) AU_VOL(V_ANIM + i) = reg;
+        }
+        scene[i].step = step;
+        scene[i].reg = reg;
+    }
+}
+
 void s2snd_frame(const struct track_cam *cam)
 {
     if (!active) return;
@@ -192,6 +236,7 @@ void s2snd_frame(const struct track_cam *cam)
         float cs = cosf(cam->yaw), sn = sinf(cam->yaw);     /* the listener's left, in x and y (the camera's heading - pi: 0xaf338) */
         for (int i = 0; i < race_cars() && i < RACE_CARS; i++) engine(i, cam, cs, sn);
         tyres(p);
+        scenery(cam, cs, sn);
         knock_age += dvf;
         float hard = p->hit_hard, hit = race_knock_take();
         p->hit_hard = 0.0f;
@@ -247,11 +292,15 @@ void s2sound_effects(int32_t f)
         for (int i = 0; i < RACE_CARS; i++)
             if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = eng[i].reg;
         if (tyre.id >= 0) AU_VOL(V_TYRE) = tyre.reg;
+        for (int i = 0; i < ANIMS; i++)
+            if (scene[i].id >= 0) AU_VOL(V_ANIM + i) = scene[i].reg;
         return;
     }
     for (int i = 0; i < RACE_CARS; i++)
         if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = (eng[i].reg & 255) * k >> 15 | ((eng[i].reg >> 8 & 255) * k >> 15) << 8;
     if (tyre.id >= 0) AU_VOL(V_TYRE) = (tyre.reg & 255) * k >> 15 | ((tyre.reg >> 8 & 255) * k >> 15) << 8;
+    for (int i = 0; i < ANIMS; i++)
+        if (scene[i].id >= 0) AU_VOL(V_ANIM + i) = (scene[i].reg & 255) * k >> 15 | ((scene[i].reg >> 8 & 255) * k >> 15) << 8;
     AU_STOP = 0xFu << V_KNOCK;                              /* (a knock is over in a moment; it would sound again at the resume) */
 }
 

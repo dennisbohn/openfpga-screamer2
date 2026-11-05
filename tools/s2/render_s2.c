@@ -15,6 +15,11 @@
  *           d<k>            the lone car (firmware/s2car.h: the physics, or the stand-in) after k steps of 20 ms from the
  *                           start on a script of its own (gas to step 130, left from 25 to 100,
  *                           right to 120, then the brake), the physics' chase camera over its car
+ *           a<clock>,<px>,<py>,<lap>,<x>,<y>,<h>,<yaw>,<pitch>,<roll>,<show>
+ *                           the animated scenery (firmware/s2anim.h; the game's folder $S2_GAME) at the race clock, the player at px, py in lap `lap`, seen from the free
+ *                           camera x, y, h, yaw, pitch, roll (the original's camera record's +0x48 .. +0x5c); show 0: the rows' objects left out. Also <prefix><k>.idx,
+ *                           the picture as palette indices (320 x 200 bytes)
+ *           @<file>         the cameras listed in a text file, one to a line (a command line has its limits)
  * Writes <prefix><k>.rgb (320 x 200 x 3) per camera and prints what the renderer reports. Every run also checks the car models' wheels
  * (check_models) and the cars' look: brake lights, wheels' blur, damage marks (check_looks); the exit code is 3 if one fails.
  */
@@ -31,6 +36,9 @@
 #include "s2car.h"
 #include "race.h"
 #include "car.h"
+#include "s2anim.h"
+#include "dat.h"
+#include "s2env.h"
 
 #define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as the viewer */
 
@@ -44,6 +52,61 @@ static void map(void)
         perror("map");
         exit(1);
     }
+}
+
+/* NOROTOR=1: the blocks of the scenery whose first face has a see-through material (routine 208, 224: a helicopter's rotor, which needs the see-through table) are left
+   out, to compare what is opaque with the original's picture */
+static int (*scenery_make)(int id, const struct track_cam *cam, struct track_object *ob);
+static int scenery_without_rotors(int id, const struct track_cam *cam, struct track_object *ob)
+{
+    scenery_make(id, cam, ob);
+    struct track_block *b = (struct track_block *)ob->b;
+    int n = 0;
+    for (int k = 0; k < ob->n; k++) {
+        const uint8_t *blk = b[k].blk;
+        int32_t routine = 0;
+        for (int r = 0; r < 16 && !routine; r++) {          /* the first face of the first row that has any */
+            int32_t row = *(const int32_t *)(blk + 0x28 + 4 * r);
+            if (row > 0 && *(const uint16_t *)(blk + row) != 0xFFFF)
+                routine = *(const int32_t *)(track_mlb() + *(const int16_t *)(blk + *(const uint16_t *)(blk + row) + 4));
+        }
+        if (routine != 208 && routine != 224) b[n++] = b[k];
+    }
+    return ob->n = n;
+}
+
+/* a file of the game's folder ($S2_GAME) whole */
+static uint8_t *game_file(const char *name, uint32_t *size)
+{
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", getenv("S2_GAME") ? getenv("S2_GAME") : "C:/GOG Games/Screamer 2", name);
+    FILE *f = fopen(path, "rb");
+    if (!f) { perror(path); exit(1); }
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *p = malloc((size_t)n + 4);
+    if (!p || fread(p, 1, (size_t)n, f) != (size_t)n) { perror(path); exit(1); }
+    fclose(f);
+    *size = (uint32_t)n;
+    return p;
+}
+
+/* what the builder reports as track_build_info.misc_delta, found in the image: MISC.MLB's records are the last of the car materials in front of the MLB, so the place
+   where they all agree with the container's (the routine and the two extents of each) */
+static int32_t misc_delta(const uint8_t *gfx, uint32_t gfx_size)
+{
+    static uint8_t misc[0x40000];
+    struct dat_entry e;
+    if (!dat_find(gfx, gfx_size, "MISC.MLB", &e) || dat_extract(gfx, gfx_size, &e, misc, sizeof misc) != e.size) return 0;
+    const uint8_t *img = TEX_FILE;
+    uint32_t mlb_off = (uint32_t)(track_mlb() - img), nmisc = s2_mlb_records(misc, e.size), total = (mlb_off - 0x100) / 16;
+    for (uint32_t i = total - nmisc + 1; i-- > 0;) {
+        uint32_t k = 0;
+        while (k < nmisc && !memcmp(img + 0x100 + 16 * (i + k), misc + 16 * k, 4) && !memcmp(img + 0x100 + 16 * (i + k) + 8, misc + 16 * k + 8, 8)) k++;
+        if (k == nmisc) return (int32_t)(0x100 + 16 * i - mlb_off);
+    }
+    return 0;
 }
 
 static void write_rgb(const char *path, const uint32_t *pal)
@@ -305,8 +368,36 @@ static int look_ok(const struct car_look *lk)
     return fabsf(lk->pitch) < 1.2f && fabsf(lk->roll) < 1.2f && fabsf(lk->body_pitch) < 0.5f && fabsf(lk->body_roll) < 0.5f && fabsf(steer) < 1.0f;
 }
 
+/* the cameras of an @file in place of it */
+static char **expand(int *argc, char **argv)
+{
+    char **out = malloc(sizeof(char *) * (size_t)(*argc + 1));
+    int n = 0;
+    for (int a = 0; a < *argc; a++) {
+        if (a < 3 || argv[a][0] != '@') {
+            out = realloc(out, sizeof(char *) * (size_t)(n + 2));
+            out[n++] = argv[a];
+            continue;
+        }
+        FILE *f = fopen(argv[a] + 1, "r");
+        char line[512];
+        if (!f) { perror(argv[a] + 1); exit(1); }
+        while (fgets(line, sizeof line, f)) {
+            line[strcspn(line, "\r\n")] = 0;
+            if (!line[0]) continue;
+            out = realloc(out, sizeof(char *) * (size_t)(n + 2));
+            out[n++] = strdup(line);
+        }
+        fclose(f);
+    }
+    out[n] = 0;
+    *argc = n;
+    return out;
+}
+
 int main(int argc, char **argv)
 {
+    argv = expand(&argc, argv);
     if (argc < 4) { fprintf(stderr, "usage: render_s2 <image> <prefix> <v<s>[,<cars>]|r<i>|c<x>,<y>,<h>,<yaw>,<pitch>>...\n"); return 2; }
     map();
     FILE *f = fopen(argv[1], "rb");
@@ -325,9 +416,38 @@ int main(int argc, char **argv)
 
     for (int a = 3; a < argc; a++) {
         struct track_cam cam;
-        static struct track_object objs[ROAD_CARS];
+        static struct track_object objs[ROAD_CARS + S2ANIM_OBJECTS];
         int nobj = 0;
-        if (argv[a][0] == 'v') {
+        if (argv[a][0] == 'a') {
+            float clock, cx, cy, ch, yaw, pitch, roll;
+            int px, py, lap, show;
+            if (sscanf(argv[a] + 1, "%f,%d,%d,%d,%f,%f,%f,%f,%f,%f,%d", &clock, &px, &py, &lap, &cx, &cy, &ch, &yaw, &pitch, &roll, &show) != 11) {
+                fprintf(stderr, "bad camera %s\n", argv[a]);
+                return 2;
+            }
+            static int loaded_for;
+            if (loaded_for != tn) {                     /* the track's rows, paths and meshes from the game's containers, as the viewer reads them */
+                char name[64];
+                uint32_t gn, dn;
+                snprintf(name, sizeof name, "GFX/MAP%dH01.DAT", tn);
+                uint8_t *gfx = game_file(name, &gn);
+                snprintf(name, sizeof name, "DATA/MAP%d.DAT", tn);
+                uint8_t *data = game_file(name, &dn);
+                static uint8_t scratch[65536] __attribute__((aligned(4)));
+                printf("animated scenery: %d rows\n", s2anim_load(tn, gfx, gn, data, dn, misc_delta(gfx, gn), scratch, sizeof scratch));
+                loaded_for = tn;
+            }
+            s2anim_begin();
+            for (float t = clock - 1.0f; t < clock + 0.001f; t += 0.02f) s2anim_frame(t < 0.0f ? 0.0f : t, px, py, lap);   /* (the last second, so that a row that starts by the player's coming near has started) */
+            s2anim_frame(clock, px, py, lap);
+            nobj = show ? s2anim_objects(objs, S2ANIM_OBJECTS) : 0;
+            if (getenv("NOROTOR"))
+                for (int k = 0; k < nobj; k++) {
+                    scenery_make = objs[k].make;
+                    objs[k].make = scenery_without_rotors;
+                }
+            cam = (struct track_cam){ cx, cy, ch, yaw, pitch, roll };
+        } else if (argv[a][0] == 'v') {
             char *end;
             double s = strtod(argv[a] + 1, &end);
             int ncars = 4;
@@ -420,6 +540,10 @@ int main(int argc, char **argv)
         char name[512];
         snprintf(name, sizeof name, "%s%d.rgb", argv[2], a - 3);
         write_rgb(name, track_palette());
+        snprintf(name, sizeof name, "%s%d.idx", argv[2], a - 3);
+        FILE *fi = fopen(name, "wb");
+        if (fi) { for (int i = 0; i < FB_W * FB_H; i++) fputc(FB(0)[i], fi); fclose(fi); }
+        snprintf(name, sizeof name, "%s%d.rgb", argv[2], a - 3);
         printf("camera %.0f %.0f %.0f yaw %.3f: %u pieces handed on, %u faces, %u triangles, %u vertices, %u see-through, %u objects; %s\n",
                cam.x, cam.y, cam.h, cam.yaw, ts.pieces, ts.faces, ts.triangles, ts.vertices, ts.see_through, ts.objects, name);
     }

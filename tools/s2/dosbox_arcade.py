@@ -125,7 +125,8 @@ def front(pid):
 
 def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None, cars5=False, detail=None, cursor=None):
     """CONFIG/CHOICE.DAT: word i is kept as (v + i * 0x1050c) ^ i; word 10 (+0x28) is the tracks opened beyond the first three; team (word 0), the
-    team's chosen car (the first word of its record at +0xb0 + team * 0x188) and the player's name (+8) as given (--pages3d)"""
+    team's chosen car (the first word of its record at +0xb0 + team * 0x188) and the player's name (+8) as given (--pages3d); detail: the DETAIL LEVEL row
+    (+0x40: 0 LOW, 1 MEDIUM, 2 HIGH; the animated scenery exists at HIGH only, tools/s2/dosbox_anim.py)"""
     d = open(src, "rb").read()
     w = list(struct.unpack("<%dI" % (len(d) // 4), d))
     dec = [((v ^ i) - i * 0x1050C) & 0xFFFFFFFF for i, v in enumerate(w)]
@@ -341,6 +342,9 @@ class Mem:
 
 # ------------------------------------------------------------------------------------------------ the session
 
+HOOKS = {}                                      # more steps for other scripts (tools/s2/dosbox_anim.py): HOOKS[first letter](step, work folder, the game's memory, shots, times)
+
+
 def session(steps):
     """steps: w<sec> wait, k<hex> a key (ke<hex> an extended one), r<n>,<dt> n screenshots dt seconds apart, L<label> names what follows, q quit;
     K<hex> / Ke<hex> a key without waiting after it and R<n>,<dt> screenshots without bringing the window to the front first: the frames in
@@ -425,6 +429,10 @@ def session(steps):
                     what, at = e.split("@")
                     events.append((float(at), what))
                 mem.poll(f[0], work, float(f[1]), events, shots, times)
+        elif st[0] in HOOKS:
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                HOOKS[st[0]](st[1:], work, mem, shots, times)
         elif st[0] == "k":
             front(pid)
             ext = st[1] == "e"

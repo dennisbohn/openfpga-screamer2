@@ -176,6 +176,7 @@ struct track_cam;
    and the three float accumulators of the reflection's offsets along the view's axes (the
    original's x left, y up, z back) */
 struct track_refl { int32_t prev[3]; float acc[3]; };
+#define TRACK_MAX_OBJS  96              /* objects of a frame that the drawing takes (the rest is left out) */
 struct track_object {
     float x, y, h, radius;
     int n;

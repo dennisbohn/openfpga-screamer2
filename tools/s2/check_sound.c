@@ -99,6 +99,13 @@ int main(int argc, char **argv)
     for(int i = 0; i < S2SND_SAMPLES; i++)
         printf("sample %02x addr=%u len=%u rate=%u vol=%u loop=%d crc=%08x\n", i, smp[i].addr, smp[i].len, smp[i].rate, smp[i].vol,
                smp[i].loop, smp[i].len ? crc32(dat + smp[i].addr, smp[i].len) : 0u);
+    for(int track = 1; track <= 7; track++) {                               /* the scenery's samples of every track */
+        static struct s2snd_sample amb[S2SND_AMBIENT];
+        s2snd_parse_ambient(dat, size, 0, track, amb);
+        for(int i = 0; i < S2SND_AMBIENT; i++)
+            printf("ambient %d %d addr=%u len=%u rate=%u vol=%u loop=%d crc=%08x\n", track, i, amb[i].addr, amb[i].len, amb[i].rate, amb[i].vol, amb[i].loop,
+                   amb[i].len ? crc32(dat + amb[i].addr, amb[i].len) : 0u);
+    }
     int cd[7] = { 0 };
     int ok = s2snd_cd_tracks(game, gsize, cd);
     printf("cd_tracks %d %d %d %d %d %d %d %d\n", ok, cd[0], cd[1], cd[2], cd[3], cd[4], cd[5], cd[6]);

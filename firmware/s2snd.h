@@ -52,6 +52,12 @@ int s2snd_parse(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_s
 #define S2SND_MENU_SAMPLES  15
 int s2snd_parse_menu(const uint8_t *dat, uint32_t size, uint32_t base, struct s2snd_sample *out);
 
+/* The scenery's samples: AMBIENT<track - 1>.DTR of the same container lists the track's own, the ones its ANIMATIONS rows name (a crowd, a market, traffic, the works, wolves, cows, birds,
+   a mill, a helicopter ...), numbered from 0x40 on: sample 0x40 + k is out[k]. At most 5 a track (AMBIENT1 has 0x40 .. 0x44); track 1 .. 7. The same rules as above. */
+#define S2SND_AMBIENT       5
+#define S2SND_AMBIENT_FIRST 0x40
+int s2snd_parse_ambient(const uint8_t *dat, uint32_t size, uint32_t base, int track, struct s2snd_sample *out);
+
 /* CD_TRACKS of DATA/GAME.DAT's MISC.DTR: the CD track of each of the 7 tracks, in the game's order (0x2eb98
    plays CD_TRACKS[track - 1]); 1 if it read all seven */
 int s2snd_cd_tracks(const uint8_t *game_dat, uint32_t size, int out[7]);

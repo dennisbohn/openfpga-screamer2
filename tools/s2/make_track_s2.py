@@ -277,6 +277,7 @@ def main():
     teams = {t: datfile.read(os.path.join(root, "GFX", f"CARS{t}{look}1.DAT")) for t, _ in pick}
     car_mlb = [datfile.extract(teams[t], f"AUTO{c}.MLB") for t, c in pick]
     x3d = [datfile.extract(teams[t], f"AUTO{c}.3DX") for t, c in pick]
+    # the track's MISC.MLB (the materials of its small objects: the scenery's moving things, docs/development.md "Animated scenery") is one more library after the cars'
     libs = list(car_mlb)
     if not room:                                                        # ADAPTER: MISC.MLB is one more library (the shadow's and the smokes' materials, the rotor's ...)
         libs.append(datfile.extract(g, "MISC.MLB"))
@@ -347,7 +348,7 @@ def main():
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     with open(out, "wb") as fh:
         fh.write(blob)
-    print(f"{out}: {len(blob)} bytes ({len(crcs)} blocks of 256 KB; limit 28): MLB {len(mlb)} + {CARS} car libraries "
+    print(f"{out}: {len(blob)} bytes ({len(crcs)} blocks of 256 KB; limit 28): MLB {len(mlb)} + {CARS} car libraries{' and MISC.MLB' if not room else ''} "
           f"({sum(nrec)} materials) + windows' picture and see-through block {len(mlbsec) - env_at}, UNR {len(unr)}, {len(pl)} placements ({nground} drivable), {len(dirs)} road points, "
           f"{len(walls)} walls, {CARS} car models {[tuple(round(v) for v in struct.unpack_from('<4f', models, 24 * k)) for k in range(CARS)]}, "
           f"start {sx_},{sy_} yaw {sa:.3f}, far plane {far}, background colour {colour}")
