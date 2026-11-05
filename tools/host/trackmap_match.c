@@ -70,12 +70,15 @@ void su_view_regs(const struct su_view *v)
     SU_SCALE = v->scale;
     SU_FAR = (uint32_t)v->far8;
 }
+static unsigned pieces_drawn, faces_drawn;                      /* what the pieces handed to the unit were: the frame cost of a map page */
 void hw_piece(const struct gu_piece *g)
 {
     const struct su_view v = { (int16_t)(SU_CENTRE & 0xFFFF), (int16_t)(SU_CENTRE >> 16), SU_SCALE, (int32_t)SU_FAR };
     const struct rs_clip clip = { (int)(RS_CLIP0 & 0xFFFF), (int)(RS_CLIP0 >> 16), (int)(RS_CLIP1 & 0xFFFF), (int)(RS_CLIP1 >> 16) };
     struct gu_stats st = { 0, 0, 0, 0 };
     gu_draw(FB((GU_MODE >> 8) & 1), &clip, &v, (const uint8_t *)(uintptr_t)(SDRAM_BASE + GU_MLB), g, &st);
+    pieces_drawn++;
+    faces_drawn += st.faces;
 }
 void tl_mark(uint32_t t) { (void)t; }
 void tl_begin(uint32_t t) { (void)t; }
@@ -297,6 +300,8 @@ static int question_match(int *n_equal, int *n_drawn)
     return 1;
 }
 
+static unsigned cost_n[8], cost_pieces[8], cost_faces[8], cost_max[8];
+
 int main(int argc, char **argv)
 {
     if (argc < 4) { fprintf(stderr, "usage: %s <SCREAMER2.zip> <folder> <labels> [out prefix]\n", argv[0]); return 2; }
@@ -423,7 +428,14 @@ int main(int argc, char **argv)
             const int c = diff();
             if (c < best) { best = c; ba = (a + 2048) & 2047; }
         }
+        pieces_drawn = faces_drawn = 0;
         render(pic, track, ba);
+        if (track >= 1 && track <= 7) {
+            cost_n[track]++;
+            cost_pieces[track] += pieces_drawn;
+            cost_faces[track] += faces_drawn;
+            if (faces_drawn > cost_max[track]) cost_max[track] = faces_drawn;
+        }
         int sil, inner, near, covered;
         outline(pic, &sil, &inner, &near, &covered);
         memcpy(only3d, (const void *)FB(0), S2G_PIC_BYTES);
@@ -460,6 +472,8 @@ int main(int argc, char **argv)
     printf("%d frames: of %d map pixels in the screenshots %.1f %% differ at the outline, %.1f %% inside (%.1f %% of the inside within a pixel of the screenshot's colour)\n", frames, sum_cov,
            sum_cov ? 100.0 * sum_sil / sum_cov : 0.0, sum_cov ? 100.0 * sum_in / sum_cov : 0.0, sum_in ? 100.0 * sum_near / sum_in : 0.0);
     printf("2D parts of those frames: %d of %d pixels equal\n", sum2d_same, sum2d_n);
+    for (int n = 1; n <= 7; n++)
+        if (cost_n[n]) printf("the map of track %d: %u pieces, %.0f faces drawn a frame on average, %u at most (%u frames)\n", n, cost_pieces[n] / cost_n[n], (double)cost_faces[n] / cost_n[n], cost_max[n], cost_n[n]);
     if (end_n) printf("the end screens: %d of %d drawn pixels equal\n", end_eq, end_n);
     if (q_n) printf("the league's question: %d of %d drawn pixels equal\n", q_eq, q_n);
     return 0;
