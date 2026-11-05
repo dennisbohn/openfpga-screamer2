@@ -8,6 +8,8 @@
 #define STEP        0.02f               /* a step of the race: the game's raw frame time, which its spawn timer adds */
 #define PUFF_AGE    (2162.0f / 65536.0f)    /* the puff's age (0 .. 1) grows by 2162 of 65536 a frame: the game's step x 1.5 (0x2073b), its step 1.1 x the raw time, 0.022 (docs/screamer2/driving.md); 30 frames, as measured */
 #define PUFF_RADIUS 420.0f              /* culling radii of the objects (the quads' own are 409 and 871) */
+#define SHADOW_RADIUS 900.0f
+#define SHADOW_KEY  -200                /* "class 4 sorts 200 further back": the shadow is drawn before what stands round it */
 
 struct puff {
     uint8_t on, carried;
@@ -23,7 +25,7 @@ static struct {
 static struct s2car_fx before[S2FX_CARS];  /* each car as it stood when the last call ended: where the next step begins */
 static int have_before;
 
-static struct track_block puff_block[S2FX_CARS][2][S2FX_PUFFS];
+static struct track_block shadow_block[S2FX_CARS], puff_block[S2FX_CARS][2][S2FX_PUFFS];
 
 void s2fx_reset(void)
 {
@@ -135,6 +137,15 @@ int s2fx_objects(const struct track_cam *cam, struct s2car_state *const *cars, i
     for(int i = 0; i < n && i < S2FX_CARS; i++) {
         struct s2car_fx a;
         s2car_fx(cars[i], &a);
+        if(fx.shadow && count < max) {              /* 0x1f4a7: 30 units further from the camera than the car along the ground, 2 under the ground under it */
+            const float dx = cam->x - (float)a.x, dz = cam->y - (float)a.z, d = sqrtf(dx * dx + dz * dz);
+            const float x = d > 0.0f ? (float)(int32_t)((float)a.x - dx / d * 30.0f) : (float)a.x;
+            const float z = d > 0.0f ? (float)(int32_t)((float)a.z - dz / d * 30.0f) : (float)a.z;
+            struct car_look lk;
+            s2car_look(cars[i], &lk);
+            car_flat_block(fx.shadow, x, z, (float)(a.ground - 2), lk.yaw, lk.pitch, lk.roll, &shadow_block[i]);
+            objs[count++] = (struct track_object){ x, z, (float)(a.ground - 2), SHADOW_RADIUS, 1, &shadow_block[i], 0, i, SHADOW_KEY, 0, 0 };
+        }
         for(int k = 0; k < 2; k++) {
             const uint8_t *mesh = k ? fx.smoke2 : fx.smoke;
             for(int j = 0; j < S2FX_PUFFS && mesh && count < max; j++) {
