@@ -14,6 +14,9 @@
 #define REACH       52000.0f            /* a row within this of the player (both ways) is alive (0xcb20) */
 #define POOL        512                 /* keys of all the paths (the most any track has is 240) */
 #define MESH_BYTES  32768               /* the meshes of a track, unpacked (the most is 20 KB) */
+#ifndef PITCH_SIGN
+#define PITCH_SIGN  -1.0f               /* the object's pitch against the climb (the game's pitch is nose up, car.h's the other way); -DPITCH_SIGN=1.0f only for the picture tests */
+#endif
 
 struct key { float t, v, out, in; };
 struct chan { uint16_t first, n; };
@@ -308,7 +311,7 @@ static int make(int id, const struct track_cam *cam, struct track_object *ob)
         int heading, climb;
         s2anim_angles(id, r->st.part, &heading, &climb);
         lk.yaw = (float)heading * (TWO_PI / 2048.0f);
-        lk.pitch = -(float)climb * (TWO_PI / 2048.0f);          /* (the object's pitch is the game's negated, car.h) */
+        lk.pitch = PITCH_SIGN * (float)climb * (TWO_PI / 2048.0f);      /* (the object's pitch is the game's negated, car.h) */
     }
     ob->n = car_mesh_draw(meshes[r->mesh].file, &lk, cam, blocks);
     ob->b = blocks;

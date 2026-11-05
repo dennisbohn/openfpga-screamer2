@@ -19,7 +19,9 @@ import json
 import math
 import os
 import struct
+import subprocess
 import sys
+import threading
 import time
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -98,9 +100,34 @@ def frames(step, work, mem, shots, times):
 da.HOOKS["A"] = frames
 
 
+def others():
+    """the pids of every DOSBox that is running (tasklist)"""
+    out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True).stdout
+    pids = set()
+    for line in out.splitlines():
+        f = [x.strip('"') for x in line.split('","')]
+        if len(f) > 1 and "dosbox" in f[0].lower():
+            pids.add(int(f[1]))
+    return pids
+
+
+def watchdog():
+    """another DOSBox (the owner's, another agent's) must never meet our keys: if one is running besides the one this script started, the run stops at once and our DOSBox
+    goes with it"""
+    while True:
+        time.sleep(1.0)
+        if da.keyed_pid is not None and others() - {da.keyed_pid}:
+            print("another DOSBox is running: this run stops, no key is sent to it", flush=True)
+            subprocess.run(["taskkill", "/F", "/PID", str(da.keyed_pid)], capture_output=True)
+            os._exit(3)
+
+
 def main():
     if len(sys.argv) < 2 or not sys.argv[1].isdigit() or not 1 <= int(sys.argv[1]) <= 7:
         sys.exit(__doc__)
+    if others():
+        sys.exit("a DOSBox is running (the owner's, or another agent's): not started, wait until it is gone")
+    threading.Thread(target=watchdog, daemon=True).start()
     track = int(sys.argv[1])
     secs = float(sys.argv[2]) if len(sys.argv) > 2 else 120.0
     shots = [float(a) for a in sys.argv[3:] if a[0].isdigit()]

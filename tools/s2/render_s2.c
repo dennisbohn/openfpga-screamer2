@@ -54,6 +54,27 @@ static void map(void)
     }
 }
 
+/* NOROTOR=1: the blocks of the scenery whose first face has a see-through material (routine 208, 224: a helicopter's rotor, which needs the see-through table) are left
+   out, to compare what is opaque with the original's picture */
+static int (*scenery_make)(int id, const struct track_cam *cam, struct track_object *ob);
+static int scenery_without_rotors(int id, const struct track_cam *cam, struct track_object *ob)
+{
+    scenery_make(id, cam, ob);
+    struct track_block *b = (struct track_block *)ob->b;
+    int n = 0;
+    for (int k = 0; k < ob->n; k++) {
+        const uint8_t *blk = b[k].blk;
+        int32_t routine = 0;
+        for (int r = 0; r < 16 && !routine; r++) {          /* the first face of the first row that has any */
+            int32_t row = *(const int32_t *)(blk + 0x28 + 4 * r);
+            if (row > 0 && *(const uint16_t *)(blk + row) != 0xFFFF)
+                routine = *(const int32_t *)(track_mlb() + *(const int16_t *)(blk + *(const uint16_t *)(blk + row) + 4));
+        }
+        if (routine != 208 && routine != 224) b[n++] = b[k];
+    }
+    return ob->n = n;
+}
+
 /* a file of the game's folder ($S2_GAME) whole */
 static uint8_t *game_file(const char *name, uint32_t *size)
 {
@@ -420,6 +441,11 @@ int main(int argc, char **argv)
             for (float t = clock - 1.0f; t < clock + 0.001f; t += 0.02f) s2anim_frame(t < 0.0f ? 0.0f : t, px, py, lap);   /* (the last second, so that a row that starts by the player's coming near has started) */
             s2anim_frame(clock, px, py, lap);
             nobj = show ? s2anim_objects(objs, S2ANIM_OBJECTS) : 0;
+            if (getenv("NOROTOR"))
+                for (int k = 0; k < nobj; k++) {
+                    scenery_make = objs[k].make;
+                    objs[k].make = scenery_without_rotors;
+                }
             cam = (struct track_cam){ cx, cy, ch, yaw, pitch, roll };
         } else if (argv[a][0] == 'v') {
             char *end;
