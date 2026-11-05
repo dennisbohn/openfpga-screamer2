@@ -88,6 +88,8 @@ static int ref_load(struct zip *z, int team)
     return 1;
 }
 
+static uint32_t ref_faces, ref_pieces;               /* what the last ref_draw handed the unit: the pieces and the faces it drew */
+
 struct ref_cam { double x, y, h, pitch; };      /* the engine's (x, z, y) for the camera's place */
 
 /* a block with the matrix M (rows the track's x, y, height; columns the block's x, y up, z) at O as a piece */
@@ -127,6 +129,7 @@ struct ref_item {
 static void ref_draw(volatile uint8_t *fb, const uint8_t *pic, const struct ref_item *it, int n, const struct ref_cam *cam)
 {
     memcpy((void *)fb, pic, S2G_PIC_BYTES);
+    ref_faces = ref_pieces = 0;
     const struct su_view v = { S3D_CX * 16, S3D_CY * 16, 128 * 16, (int32_t)((43808.0f + 128.0f) * 256.0f) };
     const struct rs_clip clip = { 0, 0, 320, 200 };
     int order[64], m = 0;
@@ -152,6 +155,9 @@ static void ref_draw(volatile uint8_t *fb, const uint8_t *pic, const struct ref_
                 for (int j = 0; j < 9; j++) M[j] = b[k].m[j];
                 ref_piece(o->mesh, b[k].blk, M, O, cam, b[k].phase, &g);
                 gu_draw(fb, &clip, &v, o->mlb, &g, &st);
+                ref_pieces++;
+                ref_faces += st.faces;
+                st.faces = 0;
             }
             continue;
         }
@@ -172,6 +178,8 @@ static void ref_draw(volatile uint8_t *fb, const uint8_t *pic, const struct ref_
                               o->pos[1] + M[6] * t[0] + M[7] * t[1] + M[8] * t[2] };
         ref_piece(o->mesh, blk, M, O, cam, o->phase, &g);
         gu_draw(fb, &clip, &v, o->mlb, &g, &st);
+        ref_pieces++;
+        ref_faces += st.faces;
     }
 }
 
@@ -262,7 +270,7 @@ static void check_pages3d(const char *prefix)
         CHECK(d <= LIMIT_PIXELS, "TEAM SELECTION: %d pixels differ from the reference", d);
         rgb_of(prefix, "team3d_ref", ref_fb, p0);
         rgb_of(prefix, "team3d", cap[0], p0);
-        printf("pages3d: TEAM SELECTION at tick 150: %d of %d pixels differ from the independent reference (the 3D rows)\n", d, 136 * 320);
+        printf("pages3d: TEAM SELECTION at tick 150: %d of %d pixels differ from the independent reference (the 3D rows); %u pieces, %u faces a frame\n", d, 136 * 320, ref_pieces, ref_faces);
     }
     /* the name state at tick 280: the chosen badge's glide to its place up and back, the 26 letters on the ring (cur = 'M'), the tyres' tilts settled */
     {
@@ -289,7 +297,7 @@ static void check_pages3d(const char *prefix)
         const struct ref_cam cam = { 0, 4800, 500, 0.0 };
         ref_draw(ref_fb, logo_pic, it, n, &cam);
         int d = frame_diff(cap[1], ref_fb, 32, 170);
-        printf("pages3d: ENTER YOUR NAME at tick 280: %d of %d pixels differ from the independent reference (the 3D rows)\n", d, 138 * 320);
+        printf("pages3d: ENTER YOUR NAME at tick 280: %d of %d pixels differ from the independent reference (the 3D rows); %u pieces, %u faces a frame\n", d, 138 * 320, ref_pieces, ref_faces);
         rgb_of(prefix, "name3d_ref", ref_fb, p0);
         rgb_of(prefix, "name3d", cap[1], p0);
         CHECK(d <= 400, "ENTER YOUR NAME: %d pixels differ from the reference", d);
@@ -425,8 +433,8 @@ static void check_pages3d(const char *prefix)
             rgb_of(prefix, what, cap[2 + shot], bpal);
             snprintf(what, sizeof what, "car3d_%d_ref", shot);
             rgb_of(prefix, what, ref_fb, bpal);
-            printf("pages3d: CAR page, shot %d (tick %d, %s): %d of %d pixels differ from the independent reference (rows 50 to 150)\n", shot, ticks[shot],
-                   shot == 0 ? "the ring at rest" : shot == 1 ? "after RIGHT" : "the second state", d, 100 * 320);
+            printf("pages3d: CAR page, shot %d (tick %d, %s): %d of %d pixels differ from the independent reference (rows 50 to 150); %u pieces, %u faces a frame\n", shot, ticks[shot],
+                   shot == 0 ? "the ring at rest" : shot == 1 ? "after RIGHT" : "the second state", d, 100 * 320, ref_pieces, ref_faces);
             CHECK(d <= 150, "CAR page shot %d: %d pixels differ from the reference", shot, d);
         }
     }

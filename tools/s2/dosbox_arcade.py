@@ -250,7 +250,7 @@ def check(shots, extra, ref):
     def frames(page, st, nopen, keys, ticks, force=None):
         """the model's frames at the given ticks after the keys (a dict tick: key); force: a track page's (frame, arrows) shown or not"""
         s = dict(st, clicks=[])
-        m = (ref.title(s), ref.track(s, nopen), ref.car(s, 1), ref.trans(s))[page]
+        m = (ref.title(s), ref.track(s, nopen), ref.car(s, 1), ref.car(s, 1, True))[page]       # (the CAR page and its second state, the TRANSMISSION choice)
         m.force = force
         out = {}
         for t in range(max(ticks) + 1):

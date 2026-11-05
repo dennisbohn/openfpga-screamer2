@@ -24,7 +24,7 @@
  *   CAR (0x40c31, state 0): BKG_2L.BKK, the team's four or five cars in 3D on a carousel (s2showroom.h) turning, the chosen one in front; sprite 34
  *                           "CAR selection" at (28, 15), the team's badge (35 + team) at (226, 1), the car's plate at (18, 155): sprite 26 + car for the
  *                           four cars, 30 + team for the fifth (the names are the sprites' art), sprite 106 (the label "maxspeed:") at (166, 170), the top
- *                           speed as three digits (font 5 colour 5, fixed pitch, mph = CARS.DTR's MAX_SPEED x 1.188 / 1.6, or km/h without the 1.6, when GAME.TXT's
+ *                           speed as three digits (font 5 colour 5, fixed pitch, mph = CARS.DTR's MAX_SPEED x 1.12 x 1.188 / 1.6, or km/h without the 1.6, when GAME.TXT's
  *                           unit word starts with M) at (213, 169), the unit (sprite 110) at (231, 171) and the drive (sprites 107 front, 108 rear,
  *                           109 four-wheel: from the shares the two left wheels get) at (251, 163). LEFT / RIGHT turn the ring (sound 4; taken only while
  *                           the cars are within 150 of their places); the team was chosen on TEAM SELECTION. ENTER: the same page goes to its second state
@@ -188,11 +188,12 @@ static int cars_of(int team)
     return 4 + (s2save_car5_open(team) ? 1 : 0);
 }
 
-/* the plate's numbers for the chosen car (0x41766: MAX_SPEED x 1.188 / 1.6 as miles an hour, or x 1.188, cut, three digits, fixed pitch) */
+/* the plate's numbers for the chosen car (0x41766): the car's MAX_SPEED made into its record with the standard set-up (0x14e20: x 1.12, the tyre and pressure terms are 0 for
+   2 2 0 2 2 2), x 1.188 / 1.6 as miles an hour or x 1.188, cut, three digits, fixed pitch (HORIZON: 144.5 gives 120; the running original shows 120) */
 static void plate_numbers(struct car_page *p)
 {
     p->plate_ok = s2showroom_plate(p->zip, p->cfg->team, p->cfg->car, &p->plate);
-    int v = (int)((double)p->plate.max_speed * 1.188 / (p->miles ? 1.6 : 1.0));
+    int v = (int)((double)(p->plate.max_speed * 1.12f) * 1.188 / (p->miles ? 1.6 : 1.0));
     p->speed[0] = 1;
     p->speed[1] = (char)('0' + v / 100 % 10);
     p->speed[2] = (char)('0' + v / 10 % 10);

@@ -43,9 +43,13 @@ fi
 MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
     cd /b/host/pages3d && gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -D'ZIP_ADDR(p)=zip_addr(p)' -o ../pages3d_match host/pages3d_match.c \
         dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c s2showroom.c s2params.c blit.c geom.c setup.c raster.c track.c car.c -lm &&
-    cd /b/check/pages3d && /b/host/pages3d_match /game/SCREAMER2.zip /b/check/pages3d/idx /b/check/pages3d/p"
+    cd /b/check/pages3d && /b/host/pages3d_match /game/SCREAMER2.zip /b/check/pages3d/idx /b/check/pages3d/p" | tee "$out/match.log"
 for f in "$out"/*.rgb; do
     [ -f "$f" ] || continue
     "$py" -I "$root/tools/rgb2png.py" "$f" "${f%.rgb}.png" > /dev/null
     rm "$f"
 done
+# the 2D parts of the same screenshots (titles, names, the plate's sprites and digits) against the frames menu_screens.sh drew
+if [ -f "$root/build/check/menu/menu_car3d_0.png" ]; then
+    "$py" -I "$root/tools/pages3d_2d.py" "$out/match.log" "$shots" "$root/build/check/menu"
+fi

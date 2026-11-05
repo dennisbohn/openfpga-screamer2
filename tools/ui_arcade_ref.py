@@ -223,7 +223,7 @@ class Ref:
                     c.sprite(s, 110, 231, 171)
                     speed, trac = ref.cars[(team - 1) * 5 + car - 1]
                     c.sprite(s, 108 if trac[3] > 0.8 else 107 if trac[2] > 0.8 else 109, 251, 163)
-                    ref.text(c, 5, 5, 1, 213, 169, chr(1) + "%03d" % int(speed * 1.188 / 1.6))
+                    ref.text(c, 5, 5, 1, 213, 169, chr(1) + "%03d" % int(f32(speed * f32(1.12)) * 1.188 / 1.6))
                 else:
                     manual, lit = state["manual"], int(not (((tick - m.t0) * 2) & 0x20))
                     c.sprite(s, 40 + int(not manual and lit), 18, 155)
