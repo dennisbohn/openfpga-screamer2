@@ -247,9 +247,11 @@ void s2menu_log(const struct s2_menu_cfg *c, int go)
 #define REPEAT_FIRST    25              /* a held d-pad button repeats after 0.5 s, every 6th frame */
 #define REPEAT_EVERY    6
 
+int s2menu_row = S2M_ROW_ARCADE;                           /* (the row stays for the next visit) */
+
 int s2menu_run(struct s2_menu_cfg *c)
 {
-    static int cursor = S2M_ROW_ARCADE;                     /* (the row stays for the next visit) */
+    int cursor = s2menu_row;
     static int started;
     if (!started) {                                         /* the first start with a new save: TEAM SELECTION and ENTER YOUR NAME, as the original's every start */
         started = 1;
@@ -291,6 +293,7 @@ int s2menu_run(struct s2_menu_cfg *c)
             held = 0;
             continue;
         }
+        s2menu_row = cursor;
         if (r) {
             s2menu_store(c);
             return r;

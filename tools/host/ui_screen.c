@@ -944,8 +944,25 @@ static void check_menu_hook(const char *prefix)
 {
     char script[400];
     struct s2_menu_cfg c;
+    /* a new save shows TEAM SELECTION and ENTER YOUR NAME before the menu, once (ENTER, ENTER); then D D D to START RACE and A */
     s2save_reset();
-    s2save_set(S2S_PROFILE, 1);                                     /* (a new save shows TEAM SELECTION before the menu: its own test, check_pages3d) */
+    s2menu_load(&c);
+    CHECK(s2save_get(S2S_PROFILE) == 0, "a new save has no profile");
+    put_keys(script, sizeof script, "5:B 40:B 80:D 82:D 84:D 90:A");
+    begin_run(script, prefix);
+    int r0 = s2menu_run(&c);
+    CHECK(r0 == S2M_RACE && s2save_get(S2S_PROFILE) == 1 && c.team == 1 && !strcmp(s2save_name(), "MIL"), "first start: the menu ended with %d, profile %d", r0, s2save_get(S2S_PROFILE));
+    /* the TEAM SELECTION row (U from ARCADE wraps to it): B runs the page, A (ESC) and B (YES) leave it with nothing changed, back in the menu: U x 4 to START RACE, A */
+    put_keys(script, sizeof script, "3:U 6:B 20:A 30:B 80:U 82:U 84:U 86:U 90:A");
+    begin_run(script, prefix);
+    s2menu_row = S2M_ROW_ARCADE;
+    s2save_set(S2S_TEAM, 3);
+    s2menu_load(&c);
+    r0 = s2menu_run(&c);
+    CHECK(r0 == S2M_RACE && c.team == 3 && s2save_get(S2S_TEAM) == 3, "the TEAM row and YES: the menu ended with %d, team %d", r0, c.team);
+    s2save_reset();
+    s2save_set(S2S_PROFILE, 1);                                     /* (from here on a save that has been through the team pages) */
+    s2menu_row = S2M_ROW_ARCADE;
     s2menu_load(&c);
     /* five D from ARCADE to GAME SETTINGS, A; in the page D D B (laps 3 -> 5), A out (a cut); D to HI SCORES, A; A out; U U U to START RACE, A */
     put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:A 16:D 18:D 20:B 22:A 30:D 32:A 40:A 46:U 48:U 50:U 52:A");

@@ -32,6 +32,7 @@ static struct car {
 } car[S2SHOW_MAX];
 static int32_t slot[S2SHOW_MAX][3];
 static int n_cars, chosen_car, loaded_team, loaded_n, fresh;
+static uint32_t loaded_gen;                 /* s2scene_generation() after the load: another page's models in the region since make the cars gone */
 
 /* ------------------------------------------------------------------------------------------------ the engine's small routines */
 
@@ -67,10 +68,11 @@ static void rotate(int dir)
 int s2showroom_load(struct zip *z, int team, int n)
 {
     if (team < 1 || team > 4 || n < 1 || n > S2SHOW_MAX) return 0;
-    if (loaded_team == team && loaded_n >= n) return 1;
+    if (loaded_team == team && loaded_n >= n && loaded_gen == s2scene_generation()) return 1;
     char path[24] = "GFX/CARS101.DAT";
     path[8] = (char)('0' + team);
     static struct s2_cont c;
+    const uint32_t t0 = rdcycle();
     if (!s2scene_open(z, &c, path)) return 0;
     loaded_team = 0;
     uint8_t *base = s2scene_models();
@@ -88,7 +90,15 @@ int s2showroom_load(struct zip *z, int team, int n)
     }
     loaded_team = team;
     loaded_n = n;
+    loaded_gen = s2scene_generation();
     fresh = 1;
+    dlog_str("showroom: ");
+    dlog_dec(n);
+    dlog_str(" cars of team ");
+    dlog_dec(team);
+    dlog_str(" in ");
+    dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
+    dlog_str(" ms\n");
     return 1;
 }
 

@@ -73,5 +73,8 @@ void s2menu_draw(volatile uint8_t *fb, const struct s2_menu_cfg *c, int cursor);
 /* The one short line a start leaves in the debug log: "menu: race T4 CONDOR 1 3L NORMAL AUTO" */
 void s2menu_log(const struct s2_menu_cfg *c, int go);
 
+/* The row the cursor is on (S2M_ROW_*), kept from one visit of the menu to the next; the tests set it */
+extern int s2menu_row;
+
 /* The menu until a race or the ride is chosen; the choices are stored. Needs s2menu_init(). */
 int s2menu_run(struct s2_menu_cfg *c);

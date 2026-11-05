@@ -14,9 +14,17 @@
 #define WHOLE       ((uint8_t *)(uintptr_t)(MEM + S3D_STAGE_MAX))
 #define TAIL_MAX    4096u
 
+static uint32_t generation;
+
 uint8_t *s2scene_models(void)
 {
+    generation++;
     return (uint8_t *)(uintptr_t)(MEM + S3D_MODELS_OFF);
+}
+
+uint32_t s2scene_generation(void)
+{
+    return generation;
 }
 
 /* the SDRAM holds what the CPU wrote (the geometry unit reads the meshes there) */

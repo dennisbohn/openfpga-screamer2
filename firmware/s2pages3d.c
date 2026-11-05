@@ -359,7 +359,12 @@ int s2_page_team(struct s2_menu_cfg *c)
     if (!s2gfx_ready() || !s2gfx_bkk("LOGOL.BKK", s2gfx_pic(0), pal)) return S2P3D_FAIL;
     struct page *p = &P;
     memset(p, 0, sizeof *p);
-    if (!load(p, z)) {
+    const uint32_t t0 = rdcycle();
+    if (load(p, z)) {
+        dlog_str("pages3d: LOGO1.DAT in ");
+        dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
+        dlog_str(" ms\n");
+    } else {
         dlog_str("pages3d: LOGO1.DAT could not be read\n");
         return S2P3D_FAIL;
     }

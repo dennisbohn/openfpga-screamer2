@@ -26,8 +26,10 @@
 #define S3D_MODELS_OFF  0x140000u
 #define S3D_MODELS_MAX  0x2C0000u
 
-/* the memory for the page's models: 4-aligned, S3D_MODELS_MAX bytes */
+/* the memory for the page's models: 4-aligned, S3D_MODELS_MAX bytes. Every call counts as a new use of it (s2scene_generation() goes up): what a page loaded there
+   earlier may be gone, so a page that keeps its models between visits asks whether the generation is still the one after its own load. */
 uint8_t *s2scene_models(void);
+uint32_t s2scene_generation(void);
 
 /* ------------------------------------------------------------------------------------------------ the files */
 
