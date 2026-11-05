@@ -26,6 +26,8 @@
 #include "../raster.h"
 #include "../frame.h"
 #include "../s2sound.h"
+#include "../files.h"
+#include "../trackmem.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,6 +89,8 @@ void s2sound_menu(int id) { (void)id; }
 void s2sound_effects(int32_t f) { (void)f; }
 void music_frame(void) {}
 int s2page_run(const struct s2_page *p, void *self) { (void)p; (void)self; return 0; }
+struct viewer_image loaded;
+struct zip *files_zip(void) { return &zip; }
 
 #include "../s2room.c"                                          /* (included: the test reaches the page's drawing) */
 #include "../s2pages.c"                                         /* (and the pages of the other stations: the MULTIPLAYER MENU and GAME SETTINGS, drawn by the test) */
@@ -258,7 +262,9 @@ int main(int argc, char **argv)
     struct s2room_mem m = mem;
     m.scratch = SCRATCH;
     m.scratch_max = SCRATCH_MAX;
-    if (!s2room_load(&zip, &m, 1)) { fprintf(stderr, "the room\n"); return 1; }
+    const int team = getenv("TEAM") && atoi(getenv("TEAM")) >= 1 && atoi(getenv("TEAM")) <= 4 ? atoi(getenv("TEAM")) : 1;      /* TEAM=<1 .. 4>: the room of that team */
+    if (!s2room_load(&zip, &m, team)) { fprintf(stderr, "the room\n"); return 1; }
+    printf("%s", (const char *)(uintptr_t)DLOG_BASE + DLOG_HEAD);                       /* (the log: the room's size) */
     const char *only = getenv("ONLY"), *dump_name = getenv("DUMP");
     if (only && !*only) only = 0;
     if (dump_name && !*dump_name) dump_name = 0;
