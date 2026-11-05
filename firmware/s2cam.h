@@ -27,6 +27,7 @@ enum { S2CAM_TRACKSIDE = 1, S2CAM_BACK = 3 };
    cameras (no such file) view 3 is the only one. */
 void s2cam_begin(int track, int view);
 int s2cam_rows(void);
+int s2cam_shot(void);                           /* the trackside camera in use (a row of the track's list), -1 before the first frame */
 
 /* The view (S2CAM_TRACKSIDE, S2CAM_BACK: others are ignored; view 1 needs cameras; a view asked for is a new choice of camera) and the car followed (0 .. n - 1: the viewer
    sets s2car_state.cam_on on it, so that its chase camera is worked out) */

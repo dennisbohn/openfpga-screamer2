@@ -16,6 +16,9 @@
  *   stop        ESC in the replay: the race stops at that step, the player's car is done, the clock and the place stay; a second ESC changes nothing; a replay of a
  *               race that was not run to the end is not offered (race_replay_ok)
  *   long        a recording over S2GH_MAX steps is not a replay: race_init sets up an ordinary race
+ *   cameras     the trackside cameras of every track (CAMERASn.MCM, 23 to 34 cameras of all five kinds), a car driven along the polyline of the cameras' places at a speed
+ *               and in a loop: the camera of every frame (its place, angles and the camera in use) against a model of STARTL.EXE's routines written again in double precision
+ *               (the firmware's are single precision: places within 2 units, angles within 6 milliradians), the choice of the camera cutting along the track as the model
  *
  * Exit status 1 if any check fails.
  */
@@ -286,6 +289,178 @@ static void limits(void)
     CHECK(!s2gh_rec_full() && s2gh_rec_steps() == 0, "... and its recording begins again");
 }
 
+/* ------------------------------------------------------------------------------------------------ the cameras */
+
+#include "s2cam.h"
+#include "dat.h"
+
+struct mrow { int32_t x, h, z; float pitch, heading, roll; int32_t kind; float figure; };
+static struct { struct mrow row[80]; int n; int shot, last; int32_t x, h, z; double pitch, yaw, roll, turn, rise; } M;
+
+static double m_angle(double x, double y)                           /* 0x10d9e */
+{
+    double a = acos(x / sqrt(x * x + y * y));
+    return y < 0 ? 6.283185307179586 - a : a;
+}
+
+static void m_look(const int32_t p[3])                              /* 0x33905: the camera (M.x, M.h, M.z) looks at the car at p */
+{
+    const double dx = (double)M.x - p[0], dy = (double)M.h - p[1], dz = (double)M.z - p[2];
+    const double a = fabs(acos(sqrt(dx * dx + dz * dz) / sqrt(dx * dx + dy * dy + dz * dz)));
+    M.yaw = m_angle(dx, dz) - 1.5707963267948966;
+    M.pitch = dy < 0 ? a : 6.283185307179586 - a;
+}
+
+static void m_turn(double x, double z, double a, double out[2])    /* 0x10388 */
+{
+    out[0] = z * sin(a) + x * cos(a);
+    out[1] = z * cos(a) - x * sin(a);
+}
+
+static void m_frame(const int32_t p[3], double speed, double dt)
+{
+    int best = -1, pick = M.shot;
+    for (int i = 0; i < M.n; i++) {
+        const double dx = (double)(M.row[i].x >> 6) - (p[0] >> 6), dz = (double)(M.row[i].z >> 6) - (p[2] >> 6), d = sqrt(dx * dx + dz * dz);
+        if (d != 0.0 && ((double)best > d || best < 0)) { best = (int)d; pick = i; }
+    }
+    const int now = M.shot, next = now + 1, before = now - 1;
+    if ((pick == next || now == -1 || (next == M.n && pick == 0) || pick == before || (before < 0 && M.n - 1 == pick)) && pick != now) M.shot = pick;
+    const struct mrow *r = &M.row[M.shot];
+    double t[2];
+    switch (r->kind) {
+    case 0: M.x = r->x; M.h = r->h; M.z = r->z; M.pitch = r->pitch; M.yaw = r->heading; M.roll = r->roll; break;
+    case 1:
+        if (M.shot != M.last) { M.x = r->x; M.h = r->h; M.z = r->z; }
+        else if (r->figure != 0.0f) {
+            const double k = (double)r->figure * speed * 111.0;
+            M.x = (int32_t)(cos(M.pitch) * sin(M.yaw) * k * dt + M.x);
+            M.h = (int32_t)(sin(M.pitch) * k * dt + M.h);
+            M.z = (int32_t)(-cos(M.pitch) * cos(M.yaw) * k * dt + M.z);
+        }
+        m_look(p);
+        M.roll = r->roll;
+        break;
+    case 2:
+        for (int k = 0; k < 3; k++) {
+            const int32_t rv = k == 0 ? r->x : k == 1 ? r->h : r->z;
+            const int32_t v = (int32_t)((double)(rv - p[k]) * (0.8 - (double)r->figure * 0.75) + p[k]);
+            if (k == 0) M.x = v; else if (k == 1) M.h = v; else M.z = v;
+        }
+        m_look(p);
+        M.roll = r->roll;
+        break;
+    case 3:
+        m_turn(1100.0, 0.0, M.turn * 6.283185307179586, t);
+        M.x = p[0] + (int32_t)t[0];
+        M.h = p[1] + (int32_t)(sin(M.rise * 12.566370614359172) * 220.0 + 440.0);
+        M.z = p[2] + (int32_t)t[1];
+        M.turn += ((double)r->figure * 0.5 + 0.1) * dt;
+        if (M.turn > 1.0) M.turn -= 1.0;
+        M.rise += ((double)r->figure * 0.5 + 0.1) * dt;
+        if (M.rise > 1.0) M.rise -= 1.0;
+        m_look(p);
+        M.roll = 0.0;
+        break;
+    case 4:
+        m_turn((double)(int32_t)((double)r->figure * 500.0 + 1320.0), 0.0, (double)r->heading + 3.141592653589793, t);
+        M.x = p[0] + (int32_t)t[0];
+        M.h = p[1] + (int32_t)((double)r->figure * 200.0 + 550.0);
+        M.z = p[2] + (int32_t)t[1];
+        m_look(p);
+        M.roll = 0.0;
+        break;
+    }
+    M.last = M.shot;
+}
+
+static double wrap(double a)
+{
+    while (a > 3.141592653589793) a -= 6.283185307179586;
+    while (a < -3.141592653589793) a += 6.283185307179586;
+    return a;
+}
+
+static void cameras(const char *dir)
+{
+    static struct s2car_state car;
+    for (int track = 1; track <= 7; track++) {
+        CHECK(image(dir, track), "track %d: the image", track);
+        setup(1);
+        CHECK(race_init(track, road_floor() - 3000.0f), "track %d: race_init (the car's data)", track);
+        uint32_t msize;
+        const uint8_t *map = s2car_map_dat(&msize);
+        char name[16] = "CAMERAS0.MCM";
+        name[7] = (char)('0' + track);
+        struct dat_entry e;
+        static uint8_t buf[2048];
+        CHECK(map && dat_find(map, msize, name, &e) && dat_extract(map, msize, &e, buf, sizeof buf) == e.size, "track %d: %s in the container", track, name);
+        memset(&M, 0, sizeof M);
+        memcpy(&M.n, buf, 4);
+        CHECK(M.n > 0 && M.n <= 80 && e.size == 4u + 32u * (uint32_t)M.n, "track %d: %d cameras", track, M.n);
+        memcpy(M.row, buf + 4, 32u * (uint32_t)M.n);
+        M.shot = M.last = -1;
+        s2cam_begin(track, S2CAM_TRACKSIDE);
+        CHECK(s2cam_rows() == M.n && s2cam_get_view() == S2CAM_TRACKSIDE, "track %d: the firmware reads the same %d cameras", track, M.n);
+        /* a car along the cameras' places, round and round at 20,000 units a second, its height following */
+        const struct s2car_state *cars[1] = { &car };
+        struct track_cam cam;
+        int kinds_seen[5] = { 0 }, cuts = 0, last_shot = -1, bad_pos = 0, bad_ang = 0, bad_shot = 0;
+        double worst_pos = 0, worst_ang = 0;
+        float sp = 100.0f;
+        memcpy(&car.rec[0x500 / 4], &sp, 4);
+        double s = 0.0, len = 0, sx[81], sz[81], sh[81], cum[82];
+        for (int i = 0; i <= M.n; i++) {
+            const struct mrow *a = &M.row[i % M.n];
+            sx[i] = a->x; sz[i] = a->z; sh[i] = a->h;
+            cum[i] = len;
+            if (i < M.n) {
+                const struct mrow *b = &M.row[(i + 1) % M.n];
+                len += sqrt(((double)b->x - a->x) * ((double)b->x - a->x) + ((double)b->z - a->z) * ((double)b->z - a->z));
+            }
+        }
+        const int frames = 6000;
+        for (int f = 0; f < frames; f++) {
+            s += 0.02 * 20000.0;
+            const double d = fmod(s, len);
+            int seg = 0;
+            while (seg < M.n - 1 && cum[seg + 1] <= d) seg++;
+            const double u = (d - cum[seg]) / (cum[seg + 1] - cum[seg] > 0 ? cum[seg + 1] - cum[seg] : 1.0);
+            car.pos[0] = (float)(int32_t)(sx[seg] + (sx[seg + 1] - sx[seg]) * u);
+            car.pos[1] = (float)(int32_t)(sz[seg] + (sz[seg + 1] - sz[seg]) * u + 300.0);       /* (beside the road a little: never exactly on a camera) */
+            car.pos[2] = (float)(int32_t)(sh[seg] + (sh[seg + 1] - sh[seg]) * u - 200.0);
+            const int32_t p[3] = { (int32_t)car.pos[0], (int32_t)car.pos[2], (int32_t)car.pos[1] };
+            if (f) {                                                /* each frame from the camera the firmware had: a camera that passes through the car would turn the two apart (the angles there are all but undefined) */
+                M.x = (int32_t)cam.x; M.h = (int32_t)cam.h; M.z = (int32_t)cam.y;
+                M.pitch = cam.pitch; M.yaw = cam.yaw;
+            }
+            m_frame(p, (double)sp, 0.02);
+            s2cam_frame(cars, 1, 0.02f, &cam);
+            const struct mrow *r = &M.row[M.shot];
+            if (s2cam_shot() != M.shot && bad_shot++ < 3) printf("    track %d frame %d: shot %d, the model's %d\n", track, f, s2cam_shot(), M.shot);
+            kinds_seen[r->kind]++;
+            if (M.shot != last_shot) cuts++;
+            last_shot = M.shot;
+            const double dp = fmax(fabs((double)cam.x - M.x), fmax(fabs((double)cam.y - M.z), fabs((double)cam.h - M.h)));
+            const double da = fmax(fabs(wrap((double)cam.yaw - M.yaw)), fmax(fabs(wrap((double)cam.pitch - wrap(M.pitch))), fabs((double)cam.roll - M.roll)));
+            if (dp > worst_pos) worst_pos = dp;
+            if (da > worst_ang) worst_ang = da;
+            const double dist = sqrt(((double)M.x - p[0]) * ((double)M.x - p[0]) + ((double)M.h - p[1]) * ((double)M.h - p[1]) + ((double)M.z - p[2]) * ((double)M.z - p[2]));
+            if (r->kind != 3 && dp > 2.5) bad_pos++;                         /* (the circling camera's two turns are floats against doubles: a few units after thousands of frames) */
+            if (r->kind != 3 && da > 0.006 + 3.0 / (dist > 1.0 ? dist : 1.0)) bad_ang++;
+        }
+        CHECK(bad_pos == 0, "track %d: %d frames of the camera's place differ from the model by more than 2 units (worst %.1f)", track, bad_pos, worst_pos);
+        CHECK(bad_ang == 0, "track %d: %d frames of the camera's angles differ from the model by more than 6 milliradians (worst %.4f)", track, bad_ang, worst_ang);
+        CHECK(bad_shot == 0, "track %d: the camera in use differs from the model's in %d frames", track, bad_shot);
+        CHECK(cuts >= M.n / 2, "track %d: the camera cuts along the track (%d cuts)", track, cuts);
+        int present[5] = { 0 };
+        for (int i = 0; i < M.n; i++) present[M.row[i].kind] = 1;
+        for (int k = 0; k < 5; k++) CHECK(!present[k] || kinds_seen[k] > 0, "track %d: a camera of kind %d is in the file and was never in use", track, k);
+        printf("  track %d: %d cameras, %d cuts in %d frames, kinds in use %d %d %d %d %d, worst place %.1f units, worst angle %.4f rad\n", track, M.n, cuts, frames,
+               kinds_seen[0], kinds_seen[1], kinds_seen[2], kinds_seen[3], kinds_seen[4], worst_pos, worst_ang);
+    }
+}
+
 int main(int argc, char **argv)
 {
     map();
@@ -294,6 +469,8 @@ int main(int argc, char **argv)
     for (int track = 1; track <= 7; track++) check_track(argv[1], track);
     CHECK(image(argv[1], 1), "image of track 1");
     limits();
+    printf("cameras\n");
+    cameras(argv[1]);
     printf("%d checks, %d failures\n", checks, failures);
     return failures != 0;
 }

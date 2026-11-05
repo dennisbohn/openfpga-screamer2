@@ -66,6 +66,11 @@ int s2cam_rows(void)
     return C.n;
 }
 
+int s2cam_shot(void)
+{
+    return C.shot;
+}
+
 void s2cam_view(int view)
 {
     if((view == S2CAM_TRACKSIDE && C.n) || view == S2CAM_BACK) {
