@@ -69,6 +69,7 @@ struct s2car_state {
     uint32_t rec[0xcc0 / 4];            /* the game's car record, word for word where the port keeps its layout */
     float camst[5];                     /* the chase camera's eased distance, pitch, yaw, roll and height */
     int cam_started;
+    int squeal;                         /* the tyres squeal (set by the step on the ground, read by the outputs) */
 };
 
 /* GAME SETTINGS' DAMAGES (the original's 0x130d54): 0 and a knock from a wall marks nothing and hurts nothing (0x19aaa returns at once), 1 the
@@ -118,6 +119,38 @@ void s2car_set_data(const uint8_t *game_dat, uint32_t game_size, const uint8_t *
 
 /* ONE 20 ms step of the car; fills the outputs. */
 void s2car_step(struct s2car_state *s, const struct s2car_input *in);
+
+/* The step in the game's order, which cars touching need (race.c: the solver 0x245a3 comes between the passes over all the cars and what is done
+   with the controls). s2car_step() is s2car_move() and s2car_finish(), s2car_step_driven() s2car_move() and s2car_finish_driven().
+   s2car_move(): the tyres, the walls and the ground, the step on the ground (0x2baa4's first three passes); driven: a driver's car (the gearbox is
+   automatic whatever .manual says). s2car_move_again(): the same again for dt, what is left of the step after a touch, from the place the touch put the
+   car at (0x2baa4's second pass; the flag +0x4c bit 8 set by the solver stays), s2car_walls() the walls and ground alone (0x16824, which the game runs
+   again for every car at that point). s2car_finish(): the rest of the step: the wheels' picture, the clocks, the engine, the controls, the outputs. */
+void s2car_move(struct s2car_state *s, int driven);
+void s2car_move_again(struct s2car_state *s, float dt);
+void s2car_walls(struct s2car_state *s);
+void s2car_finish(struct s2car_state *s, const struct s2car_input *in);
+void s2car_finish_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx);
+
+/* A knock on side 0 .. 3 at corner 0 .. 3 (0x19aaa: the side's count and mark, with DAMAGES on the corner's and the car's damage), share of the edge 0 .. 1, force,
+   the damage's scale for the level (MISC.DTR's DAMAGES: pro 5, normal 2.5, rookie 1; the walls' knocks of the player's car are not scaled); and
+   where two lines meet (0x20970: the line through p along d and the one through q along e, x at [0] and z at [2]; the distances along each; 0 when they
+   run side by side). The touching cars' solver and push use them. */
+void s2car_knock(struct s2car_state *s, int side, int corner, float share, float force, float scale);
+int s2car_lines_meet(const float p[3], const float d[3], const float q[3], const float e[3], float *s, float *u);
+
+/* A place after the game's cut to whole numbers towards zero (the game's fistp in chop mode), or not: the header of s2car.c says why the firmware keeps the
+   fraction (S2_WHOLE_PLACES=1 cuts it, as the host tests do to follow the reference to the unit) */
+#ifndef S2_WHOLE_PLACES
+#define S2_WHOLE_PLACES 0
+#endif
+static inline float s2car_placed(float f)
+{
+    if(!S2_WHOLE_PLACES) return f;
+    if(!(f > -2147483648.0f)) return -2147483648.0f;
+    if(f >= 2147483648.0f) return 2147483520.0f;
+    return (float)(int32_t)f;
+}
 
 /* The car as car.h draws it (struct car_look): place, heading, tilt, body lean, the wheels' turn and
    steering, the texture phase (look >> 2). */

@@ -25,7 +25,7 @@ game's addresses (the comment at each routine in `s2car.c` names it):
 
 Left out of `s2car.c` because one car does not need them: the other cars (the solver 0x245a3, the outlines 0x22d35, 0x20a18),
 the driver of the computer's cars (0x17726), laps and the position along the road (0x153c6): these are in `race.c`
-(section "The race" below, with a simpler touch between cars); cones, sparks, smoke and dust,
+(section "The race" below); cones, sparks, smoke and dust,
 sound, the road kind's look (0x1f1ef), the other camera views are not done. The car's damage takes power away, softens
 a spring and shows on the car (the marks of the four sides, "The cars' look" below).
 
@@ -164,6 +164,7 @@ OpenScreamer text (`s2r_car.h`) in single precision:
 | 0x201ee | a lap done (a lap not done before counts; the car's best lap; the last lap: the car has finished (`+0x4c` gets the bits 1 and 2) and gets a fifth of a second for each car behind it) |
 | 0x2da06 | places by the distance along the line (the finished cars keep theirs); the computers' pace (`+0x48`, what the engine takes off their speed: `SKILLS` of `MISC.DTR`, 3 rows x 7 numbers, the arcade race's level 1 = normal, from 0 before the sixth second, then by how far ahead of the player the car is) |
 | 0x17726 | the computer's driver |
+| 0x245a3, 0x2348b, 0x20a18, 0x20970, 0x22d35, 0x19aaa | the cars touching: the swept solver, its gate, the push apart, the knock (below, "Cars touching") |
 | 0x14e20, 0x1b36f, 0x29571, 0x1f756 | the computer's car in the car model: its handling, wheel lock x 1.3, half the road's roughness in the grip, its own rule at a wall under speed 30, the engine's speed less the pace |
 
 **The laps are counted on the line**, not on markers: Screamer 2 has no `MAPn.MRK`; the game's lap counter is the car's place on the line
@@ -174,15 +175,26 @@ OpenScreamer text (`s2r_car.h`) in single precision:
 seconds, then 170 x its speed held to 10 .. 130, so 1,700 to 22,100 units) from a point one step ahead on its way, and steers the wheels by the angle between the two, times 2, 3 or 5
 by which axle drives. The throttle: full minus how far its heading is off the line's, lifted when its speed is over the line's speed share
 (`+0xc` of the node: percent under the top speed; the corners), cut by the pace and the lock. It looks for slower cars between itself and the
-point it aims at and goes round the one nearest by the side that turns it the least (within an eighth of a turn), and lifts behind one it cannot pass. On the grid it
+point it aims at (from a fifth of the way back of where it aims from: a car alongside counts) and goes round the one nearest by the side that turns it the least (within an eighth of a turn), and lifts behind one it cannot pass. On the grid it
 revs the engine now and then. All of it from the game's own text, nothing invented but the floats.
 
-**Cars touching.** The game's solver (0x245a3, 18 KB) sweeps the cars' outlines (the wheel corners 1.4 times as wide) through the
-step for the first touch and runs the rest of the step again; it also sparks, knocks the springs and the sound. Here (`collide()`
-in `race.c`) two outlines that overlap at the end of a step are pushed apart along the axis of least overlap and swap their closing speed
-along it (equal masses, as the game's push does): the same outlines, tested once a step, no damage, sparks or sound. A car that is hit
-at speed from behind therefore takes that speed, as in the game. A step moves a car by 280 units at most (the top speed), a quarter of an
-outline's length (1,165), so the overlap found at the end of a step is shallow.
+**Cars touching** (0x245a3 with 0x2348b, 0x20a18, 0x22d35; `touch_solver()`, `push_apart()`, `collide_slice()` in `race.c`; the section "Cars touching,
+against the original" below says how it was checked). The game does not test the cars at the end of a step: after every car has been through the
+tyres, the walls and the ground and the step on the ground (`s2car_move()`), its solver sweeps the cars' outlines (the four wheel corners 1.4 times as far from
+their mean, the last step's against this step's, every corner of one car against every edge of the other) for the first touch of the step. A touch is a share
+of the step. Both cars are flagged (`+0x4c` bit 8, `+0x30` = 1), put back to where they were at that share (place, turns, corners, the wheels' places and
+springs), knocked (0x19aaa: the side's mark, with DAMAGES on the corner's and the car's damage, the force scaled by the level's row of `MISC.DTR`'s `DAMAGES`, pro 5,
+normal 2.5, rookie 1) and each car's four corners get a push: the speed of the corner against the edge's at the point, along the line from the car's middle
+to the point in full and across it weighted by the corner's angle from that line (up to 0.3), so the closing speed does not simply change owners. The
+rest of the step is then run for the two cars alone, with what is left of its length (`s2car_move_again()`; not at all when that is 0.005 s or less, the
+touch then stays at the put-back place), after the walls and ground of every car have been looked at again (0x16824) -- all of that is the game's, once a
+step, for any two cars. 0x22d35 then pushes apart two cars that still overlap (a corner of one inside the other's outline: back along the line between the
+middles, the corners only; two cars both under speed 5 are turned away from each other). Only then the cars do what they do with the step's controls
+(`s2car_finish()`: the wheels' picture, the clocks, the engine, the throttle and the steering, and for a computer the driver, which therefore sees every car
+as the physics left it). Sparks and the sound's own call are not done; the player's touch is heard through `race_knock_take()` with the game's knock to the
+unit. The computers' steps are in slices for the viewer (`race_others_slice()`): each car's passes, the touch (in pieces: the solver, the walls again, a
+car's rest of the step each), each car's rest. The player's car has done all of its step before the first slice; where it is one of the two it is put back
+and its passes are run again with its newest controls and without its engine, wheels' picture and outputs being worked out again (one step's change).
 
 **The computers' bodies on the Pocket** came apart (spinning and floating next to their wheels) because `car.c` took the wheels of a car
 model to be its blocks that sit off the middle of the car (Screamer 1's rule). In AUTO02 and AUTO03 the body blocks (`MV_m`, `faut`,
@@ -213,7 +225,7 @@ the hubs with bit 1 and bit 6 (the rear-drive cars have the rear hubs on bit 1, 
 is the mark of side 2, so a car that was not braking showed the scraped left flank (picture 32, "damaged" bodywork next to the rear light), the
 picture went whole when the player braked, and the brake (`0x200`, picture 1) was never asked for: the lights never lit (a car in the viewer
 showed the scraped flank as well). The damage marks are set by `knock()` with the damage on (the GAME SETTINGS row DAMAGES, off at the first start as in the game: `s2car_damages`, which the viewer sets
-from the save when a race is set up; off, a knock marks and hurts nothing, as the game's 0x19aaa returns at once); a car against a car does not knock yet.
+from the save when a race is set up; off, a knock marks and hurts nothing, as the game's 0x19aaa returns at once); a car against a car knocks as a wall does ("Cars touching").
 
 ### Checks of the race
 
@@ -243,18 +255,19 @@ from the save when a race is set up; off, a knock marks and hurts nothing, as th
   images of the seven tracks) and prints, every `every` steps, per car the laps done, place, mph and node along the line, a line
   per lap done, and at the end the player's lap, place and times and the number of cars put back on the line. `RACE_GAS=1` makes the
   player hold the gas, `RACE_ROBOT=1` lets the game's driver drive his car as well (it is marked finished with no end to its time).
-  25,000 steps (500 s) on every track, the game's normal level:
+  25,000 steps (500 s) on every track, the game's normal level (the table is of 2026-11-05, with the cars touching as the game's solver does and the driver
+  of "The driver" above; the first run of the section had them touching by the push apart, and lap times a few seconds off these):
   every computer car does its three laps, finishes and stops; no car was put back on the line, on any track, in either run.
 
   | Track | line (units) | computers' best laps, player parked (s) | computers' best laps, player driven by the driver (s) | all four finish at (s) |
   |---|---|---|---|---|
-  | 1 | 1,019,900 | 98.4, 99.0, 99.6 | 78.6, 79.2, 79.4 | 235 (player, 1st), 244, 247, 248 |
-  | 2 | 896,700 | 90.9, 91.2, 94.7 | 77.3, 79.2, 79.3 | 251, 251, 253 (player, 3rd), 254 |
-  | 3 | 1,171,100 | 117.0, 117.7, 118.3 | 96.2, 96.8, 96.8 | 295 (player, 1st), 299, 300, 303 |
-  | 4 | 1,481,300 | 130.8, 131.4, 131.7 | 105.2, 105.2, 106.7 | 312 (player, 1st), 329, 332, 334 |
-  | 5 | 1,288,300 | 130.3, 131.7, 133.9 | 117.5, 117.6, 118.6 | 359, 362, 362 (player, 2nd), 362 |
-  | 6 | 1,375,400 | 128.5, 129.2, 129.2 | 105.5, 106.5, 106.5 | 316 (player, 1st), 327, 329, 330 |
-  | 7 | 812,600 | 77.6, 77.7, 80.7 | 67.3, 69.4, 70.1 | 216, 217, 219, 220 (player, 4th) |
+  | 1 | 1,019,900 | 98.7, 98.3, 97.6 | 79.1, 79.3, 78.8 | 246 (player, 1st), 254, 256, 257 |
+  | 2 | 896,700 | 91.0, 91.0, 94.7 | 78.2, 77.9, 75.4 | 242, 248, 248, 252 (player, 4th) |
+  | 3 | 1,171,100 | 118.7, 117.8, 120.5 | 96.1, 95.6, 96.5 | 293 (player, 1st), 302, 305, 308 |
+  | 4 | 1,481,300 | 132.1, 132.1, 130.6 | 106.5, 106.4, 105.7 | 321 (player, 1st), 335, 337, 340 |
+  | 5 | 1,288,300 | 133.3, 131.4, 131.9 | 119.4, 120.4, 123.2 | 376, 379 (player, 2nd), 379, 394 |
+  | 6 | 1,375,400 | 129.2, 129.4, 128.8 | 107.5, 104.3, 105.7 | 320 (player, 1st), 329, 334, 338 |
+  | 7 | 812,600 | 77.6, 77.7, 83.1 | 68.6, 67.8, 67.1 | 218, 219, 220 (player, 3rd), 221 |
 
   The two columns differ by a quarter because of the game's catch-up (0x2da06): a computer car 200,000 units or more ahead of the
   player gets the level's largest handicap (3.6 against 2.0 level with him), which takes that much off the engine's speed and, through the driver,
@@ -263,6 +276,74 @@ from the save when a race is set up; off, a knock marks and hurts nothing, as th
   average 93 on the car's speed scale (the dial / 1.513), OpenScreamer's port had measured 97 for the same level with a parked player (`NOTES2.md`
   S2-5n; its cars ran at 25 steps a second). The original ran at 17 pictures a second with whole-number places that hold a car back (this
   page, "The car's place stays a float"), so its cars' laps are longer than these; they were not compared with a recording of the original.
+
+### Cars touching, against the original
+
+**The fault (2026-11-05).** On tracks 2, 3, 4, 6 and 7 the first touch of two computer cars, 5 to 12 s after the lights, shoved a car by up to about
+31 units in one frame where the original does not. Two causes, both in the port of the game's routines, neither a constant of the physics:
+(1) the touch itself was not the game's: the port tested the outlines once, at the end of a step, and pushed the two apart along the axis of least overlap
+by half the overlap each (up to 31 units at 60 units of closing a step) and swapped the closing speed along it; the game's solver (0x245a3) finds the
+share of the step at which the outlines first touch, puts the two cars back to that moment, gives the corners a push and runs the rest of the step, so
+nothing is ever inside anything; (2) the driver (0x17726) did not steer round a car alongside it: the game counts a slower car as in its way from -0.2 of
+the way from its own point to the aim (a signed compare of the float's bits), the port from 0; two computers side by side therefore drove into each other
+where the game's steered away (it is also what made the free-running cars part from the reference before any touch).
+The order of the frame mattered too: the game steps every car's tyres, walls and ground before any car's driver runs, the port stepped car by car; now the
+computers' passes are `s2car_move()` for all, the touch, then each one's `s2car_finish_driven()` (the engine and driver).
+
+**How it was checked.** The reference is OpenScreamer's hand-written routines (the same ones `check_car.sh` holds the player's car against; checked there to
+the bit against the converted routines of the game's program, and for the physics against DOSBox), run for four cars at 20 ms steps:
+`tools/s2/ref_trace/ref_run.sh race` writes every car's whole record after every frame. `tools/s2/check_aicontact_s2.sh` finds the frames at which the
+reference's solver stopped a step (102 touches: tracks 1 to 7, the three levels, the player's car standing or holding the gas, three choices of cars; on
+tracks 2, 3, 4, 6 and 7 together 83 of them) and starts the firmware's race from the reference's state six frames before each (the places cut to whole numbers,
+as the game's; `race_replay_s2.c`), so that both start from one state and what parts them is the code. Errors are distances in units between a car of the firmware and
+the same car of the reference.
+
+| 102 touches, 210 windows | the code before (`7e45786`) | now |
+|---|---|---|
+| the cars the solver stops are the reference's | (it had none) | 102 of 102 |
+| error in the 10 frames from the touch: median, 75 %, 90 %, worst | 202, 400, 602, 1,135 | 0.0, 7.0, 17, 590 |
+| a car's move in one frame off by (the shove): median, 90 %, worst | 20.9, 73, 113 | 0.0, 2.2, 95 |
+| frames within 2 units of the reference after the touch: median | 0 | 27 (60 of the 102 for 20 frames or more, 22 for 100 or more) |
+| error 150 frames (3 s) after the touch: median, 75 % | 3,158, 6,567 | 211, 967 |
+| windows with no touch: frames within 2 units: median, 25 % | 38, 13 | 82, 35 (of 175) |
+| windows with no touch: worst error in 150 frames: median, 75 % | 135, 1,034 | 54, 182 |
+
+In 96 of the 102 touches the error at the touch frame is exactly 0 (the put-back, the push and the rest of the step are the reference's), in 79 still 3 frames later, 67 stay within 2 units
+for the 10 frames (example: track 2, frame 295: the car behind takes 87.9 -> 54.8 and the one in front 54.6 -> 88.2, the reference's own numbers). The 3 s after a touch are not the same run:
+a corner a hair from the edge of the road is cut to the other whole number and a wall answers differently, and a touch amplifies what float32 does differently from the
+game's 53-bit sums: the same firmware built with another rounding (fused multiply-add) parts from itself by a median of 168 units in 150 frames after a touch (62 touches; with no touch: median 0, 75 % 15),
+the firmware from the reference by 211. The five touches over 25 units in the first 10 frames are such cases (track 4, level 0, frame 903: a corner on the road's edge a frame before; track 7, frame 463:
+the touch at 0.7498 of the step, 0.7500 being where the game stops running the rest of the step); the rest of the table is what the code is held to (`PASS` or `FAILED` at the end of the script).
+`FW=<tree>` runs the same on an older firmware.
+
+**Against the original itself, in DOSBox** (`tools/s2/dosbox_race_s2.py`, one race: track 2, the arcade defaults of the private game folder, level rookie, the player's car standing,
+30 s, 1,501 frames, every car's whole record each). (1) In this DOSBox the original runs 50 pictures a second and its physics step is **0.022 s** (1.1 x the 0.02 the clock goes
+by), not the 0.02 of the model and the traces above: `driving.md`'s "The step" says why that is the model's own choice; a firmware step of 0.02 cannot be laid beside the
+original's frames. (2) The reference run with the recorded steps (`--compare`) is the original's to the unit for **287 frames (5.7 s)**: the grid, the release at 3 s, the
+three computers' start and 2.7 s of driving (error 0.0 for all three computers), then it parts (4 units at 6.0 s, 70 to 350 at 8 s: DOSBox's emulated FPU and the reference's
+x87 do not give the last bit of the same sine). (3) The original's first touch (cars 1 and 2, 8.58 s, frames 428 to 430) comes after that, so the reference does not reproduce it
+step for step; there is no touch of the original laid beside the solver's numbers, only the reference's own (above). What the original's touch looks like: the cars are put back
+in the first frame (the move of the car behind 231 -> 220, the car in front's 196 -> 188), the speeds change over the three frames (94 -> 74 and 81 -> 94 km/h), and no
+car's move changes by more than 32 units from one frame to the next; the old code's shove was 20.9 units at the median and 113 at most. The other tracks were not recorded.
+
+**Approximated, or not done.** (a) The player's car does its whole step (`race_step_player()`) before the computers' first slice, so a touch that puts it back runs its
+passes again with the controls of the whole step and without its engine, wheels' picture and outputs worked out a second time (four touches of the set have the player
+in them: the errors are like the others). (b) The sparks. (c) The damage the knock does is scaled by the level as the game does; a wall's knock of the player's car is not
+(it has been scaled by 1, the rookie level's, at every level: with the level normal, the default, the game hurts it 2.5 times as much -- not changed here: the player's car).
+(d) The sums are float32: the reach of the driver's avoidance (the widths x 1.2, a double in the game) is worked out as 12 x the widths / 10 for the same rounding.
+
+**The computers' step of 7.2 ms.** Not found in the opponent code, and not reproduced on the PC. The loops are short: in 8,000 steps of a race on each of the seven tracks the
+driver's line_step takes 2 turns on the mean and 5 at most, locate 1.02 and 3 at most, a ground look tries 6 faces on the mean and 98 at most (counted in a copy of the code
+of before); timed natively a computer's step has outliers of 10 to 50 times the mean, in single ground looks of 20 to 40 us against a mean of 0.1 us at places that differ from run
+to run: not a count of turns, but data that is not in the cache. What can make 7.2 ms on the Pocket against 3.0 on the mean is a frame that is late (the computers then take two
+steps when the picture before took over 20 ms: `DRIVE_MAX_STEPS`), a cold cache on the ground tables of a part of the track, or, since the solver above, a touch. None of it is
+measured on the Pocket.
+
+**What the solver costs** (PC, natively, 8,000 steps of the race robot on tracks 2, 4, 6 and 7; the Pocket's figures are those by the ratio of the computers' mean, 4.9 us here, 3.0 ms
+there). A frame in which the solver finds a touch (0.03 to 1.1 % of the frames) takes the computers' part to 9 or 10 us, about 3 ms more on the Pocket: the sweep of the two
+cars, their passes again and the walls and ground of the cars again, in pieces of at most one car's step. A frame without a touch costs 0.2 to 0.5 us more (4 to 8 %, about 0.15 to
+0.3 ms): the nearness of the six pairs, and the computers' work in two slices a car. The new code's stack: `touch_solver()` 688 bytes in a frame, over the 336 of the slice, about 300
+bytes deeper than the old deepest path (8 KB of stack, 4.5 KB used by the race). The simulation (`tools/s2/sim_race.sh`) was not run for this change.
 
 ### The race on the Pocket's CPU
 
@@ -308,8 +389,8 @@ in each of the 68 intervals; the frame time is the same, 10.3 ms mean and 11.4 w
   what the check measures.
 - The pose of a tilted car (`s2car_look`) and the wheels' sign of turning have not been seen on a slope, and the camera
   of view 3 only in the numbers.
-- Not done: the road kind's effects on the look, the dust, the camera's other views, damage from a car against a car.
-- The race (section above): the game's swept solver for touching cars, sparks, sounds and damage from a touch; the split times and
+- Not done: the road kind's effects on the look, the dust, the camera's other views, the sparks of a touch.
+- The race (section above): the sparks of a touch; the split times and
   "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie, `race_level`) and the number of laps (`race_laps`) and the player's team and car
   (`race_grid`) are set by the start menu (`firmware/s2menu.c`, docs/development.md "Start menu"); the computers' cars are the other three
   teams' cars of their own numbers; the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text.

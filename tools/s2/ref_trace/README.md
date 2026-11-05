@@ -18,6 +18,8 @@ audio), no threads in the physics, no timers: the traces are byte-identical run 
     ./ref_run.sh run a_full_throttle 1            # one trace: scenario, track [team model [dt20|dtport]]
     ./ref_run.sh all          # the whole set: 102 traces + 102 .meta, ~50 MB, about 1.5 minutes
     ./ref_run.sh check        # `all` twice, compared byte for byte
+    ./ref_run.sh race 2 1 park 2500 1   # a race of four cars (track, level 0..2, park|gas, frames, the player's car 0..4): every car's whole record after every frame
+                                        # -> $REF_WORK/traces_race/ (not part of `all`: tools/s2/check_aicontact_s2.sh makes and uses them; 33 MB each)
 
 Built with port version 0.6.52b, OpenScreamer commit `dd0ecf6`, gcc 16.2.0, SDL2 2.32.10.
 `s2_ref.patch` adds `port/src/s2_ref.h` (the scenario reader and the CSV writer, `s2_ref_run`), two

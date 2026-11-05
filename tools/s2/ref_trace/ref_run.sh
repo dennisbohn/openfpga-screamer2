@@ -10,11 +10,15 @@
 #                                  step: dt20 (20 ms, default) or dtport (the port's own pace, 1.1 / 17.7 s)
 #   all                            the whole set (see README.md)
 #   check                          run `all` twice and compare the two sets byte for byte
+#   race <track> <level> <park|gas> [frames [car]]
+#                                  a race of four cars at 20 ms steps (the lights go out at 3 s): the player's team 1 car <car> + 1 (0 .. 4, default 1),
+#                                  the computers the next cars in turn, one of each of the other teams (car 1: 2, then team 2 car 3, team 3 car 4, team 4 car 1),
+#                                  the player's car standing (park) or holding the gas, level 0 pro, 1 normal, 2 rookie; every car's whole record (0xCC0
+#                                  bytes) after every frame -> $WORK/traces_race/race.t<track>.L<level>.<mode>.c<car>.ref.bin
 #
 # Nothing in the user's checkout is touched; the traces are derived from the game and are not committed.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
-: "${OPENSCREAMER:?set OPENSCREAMER to the OpenScreamer checkout}"
 : "${S2_GAME:?set S2_GAME to the Screamer 2 game folder}"
 WORK=${REF_WORK:-$HERE/work}
 SRC=$WORK/build-src
@@ -22,6 +26,7 @@ OUT=$WORK/traces
 MSYS=${MSYS:-/c/msys64}
 
 build() {
+    : "${OPENSCREAMER:?set OPENSCREAMER to the OpenScreamer checkout}"
     mkdir -p "$WORK"
     if [ ! -d "$SRC/.git" ]; then git clone -q --local "$OPENSCREAMER" "$SRC"; fi
     git -C "$SRC" rev-parse HEAD > "$WORK/openscreamer.commit"
@@ -92,6 +97,19 @@ all() {
     run d_offroad 1 0 1 dtport "$dest"; run f_jump 4 0 1 dtport "$dest"
 }
 
+race() {
+    local track=$1 level=${2:-1} mode=${3:-park} frames=${4:-2500} car=${5:-1} keys=-
+    [ "$mode" = gas ] && keys=A
+    local out=$WORK/traces_race/race.t$track.L$level.$mode.c$car.ref.bin
+    mkdir -p "$WORK/traces_race" "$WORK/home" "$WORK/run"
+    ( export PATH=$MSYS/ucrt64/bin:$PATH; cd "$WORK/run"
+      env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy OS_NOMUSIC=1 OS_NOSOUND=1 OS_S2PHYS="$frames" OS_S2CARS=4 OS_TRACK="$track" OS_CAR="$car" OS_DIFF="$level" \
+          OS_S2STEP=0.02 OS_S2HOLD=1 OS_S2KEYS="$keys" OS_S2EVERY=1000000 OS_S2TRACEFILE="$out" \
+          "$(exe)" -game 2 -data "$S2_GAME" -home "$WORK/home" -renderer software > "$WORK/run/last.log" 2>&1 ) \
+        || { echo "run failed: race track $track (see $WORK/run/last.log)" >&2; return 1; }
+    echo "$out"
+}
+
 check() {
     rm -rf "$WORK/traces_a" "$WORK/traces_b"
     all "$WORK/traces_a" > /dev/null; all "$WORK/traces_b" > /dev/null
@@ -109,5 +127,6 @@ case $cmd in
     run) run "$@" ;;
     all) all ;;
     check) check ;;
-    *) sed -n '2,15p' "$0" ;;
+    race) race "$@" ;;
+    *) sed -n '2,19p' "$0" ;;
 esac

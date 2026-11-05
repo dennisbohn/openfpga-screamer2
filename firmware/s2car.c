@@ -24,10 +24,7 @@
  * copies at 0x734), kept to the fraction. -DS2_WHOLE_PLACES=1 cuts it as the game does: that is how the host test
  * (tools/s2/check_car.sh) follows the reference traces step for step. The heights stay whole numbers.
  */
-#ifndef S2_WHOLE_PLACES
-#define S2_WHOLE_PLACES 0
-#endif
-#include "s2car.h"
+#include "s2car.h"                            /* (S2_WHOLE_PLACES, s2car_placed) */
 #include "s2params.h"
 #include "s2env.h"
 #include "track.h"
@@ -51,6 +48,8 @@
 #define TWO_PI_F    6.28318548f
 #define HALF_PI_F   1.57079637f
 #define DT          0.02f                   /* the step; the game's raw frame time is the same */
+static float step_dt = DT;                  /* the step the passes before the touching cars' solver work with (the game's 0x133350): DT, or
+                                               what is left of it after a touch (s2car_move_again) */
 
 union word { int32_t i; uint32_t u; float f; };
 typedef struct s2car_state car_t;
@@ -187,9 +186,6 @@ static int32_t cut(float f)
     return (int32_t)f;
 }
 
-/* the place after the game's cut (or not, see above) */
-static float placed(float f) { return S2_WHOLE_PLACES ? (float)cut(f) : f; }
-
 static float easing(int i) { return 0.5f + (float)(i < 0 ? 0 : i > 99 ? 99 : i) * 0.005f; }
 
 /* 0x111d6: a float eased towards a target by the row of the easing table; 0x11212 the same for a whole number */
@@ -325,8 +321,8 @@ static void angles_from_corners(car_t *c)
             m[k] = RF(CORNER(0) + 4 * k) + (((RF(CORNER(2) + 4 * k) - RF(CORNER(0) + 4 * k)) + (RF(CORNER(3) + 4 * k) - RF(CORNER(0) + 4 * k)))
                                             + (RF(CORNER(1) + 4 * k) - RF(CORNER(0) + 4 * k))) * 0.25f;
     }
-    RF(0x4d8) = placed(m[0]);
-    RF(0x4e0) = placed(m[2]);
+    RF(0x4d8) = s2car_placed(m[0]);
+    RF(0x4e0) = s2car_placed(m[2]);
     for(int i = 0; i < 4; i++) RF(0x518 + 0xc * i) = (float)RI(0x5a4 + 0x70 * i);
     RF(0xc14) = atanf((float)(RI(0x5b8) - RI(0x698)) / (float)RI(0x4c8));
     RF(0xc0c) = atanf((float)(RI(0x698) - RI(0x708)) / (float)RI(0x4d0));
@@ -405,12 +401,14 @@ static void ground_under_wheels(car_t *c, const struct corner_ground q[4])
 #undef CZ
 }
 
-/* 0x19aaa: a knock from a wall: the side's count for the look and, once it is 1, a knock over 2000 puts the side's mark
+/* 0x19aaa: a knock: the side's count for the look and, once it is 1, a knock over 2000 puts the side's mark
    in the car's flags (+0xb8: what the drawn car's textures show), and with DAMAGES on (s2car_damages: the game has it off
-   until its menu says so; the level ROOKIE: x 1) the corner's and the car's damage, and the corner's spring softer */
+   until its menu says so) the corner's and the car's damage, and the corner's spring softer. The game scales the force the damage
+   goes by with the level's row of MISC.DTR's DAMAGES (pro 5, normal 2.5, rookie 1): `scale`, which a wall's knock leaves at 1 (the level ROOKIE's;
+   the player's car against the walls has been that at every level) and a car's touch (race.c) sets. */
 int s2car_damages = 1;
 
-static void knock(car_t *c, int side, int corner, float share, float force)
+static void knock_scaled(car_t *c, int side, int corner, float share, float force, float scale)
 {
     if(!s2car_damages) return;
     static const uint32_t mark[4] = { 0x2000, 0x800, 0x4000, 0x1000 };       /* sides 0 .. 3 (the table at 0x19b58) */
@@ -420,6 +418,7 @@ static void knock(car_t *c, int side, int corner, float share, float force)
         RF(count) = 1.0f;
         if(force > 2000.0f) RI(0xb8) |= (int32_t)mark[side];
     }
+    force = force * scale;
     int hurt = 0xc + 4 * corner;
     RF(hurt) = share * force / 50000.0f + RF(hurt);
     if(RF(hurt) > 2.0f) RF(hurt) = 2.0f;
@@ -428,6 +427,8 @@ static void knock(car_t *c, int side, int corner, float share, float force)
     if(RF(8) > 2.0f) RF(8) = 2.0f;
     RI(0x59c + corner * 0x70) = (int32_t)((1.0f - RF(hurt)) * 55.0f + RF(hurt) * 99.0f);
 }
+
+static void knock(car_t *c, int side, int corner, float share, float force) { knock_scaled(c, side, corner, share, force, 1.0f); }
 
 /* 0x20970: where two lines meet: the car's line (point p, direction d) and the wall's (q, e) on the ground */
 static int lines_meet(const float p[3], const float d[3], const float q[3], const float e[3], float *s, float *u)
@@ -546,7 +547,7 @@ static void against_wall(car_t *c, const struct corner_ground q[4])
 static void springs(car_t *c)
 {
     RI(0x4f4) = 0; RI(0x4dc) = 0; RI(0x510) = 0;
-    const float dt = DT;
+    const float dt = step_dt;
     float onground = 0.0f;
     for(int i = 0; i < 4; i++) {
         int w = WH(i), corner = 0x518 + 0xc * i;
@@ -616,7 +617,7 @@ static void speed_and_way(car_t *c)
     float dx = RF(0x4d8) - RF(0x734), dz = RF(0x4e0) - RF(0x73c), dy = (float)(RI(0x4dc) - RI(0x738));
     if(dx == 0.0f && dz == 0.0f) RF(0x508) = RF(0x4e8);
     else RF(0x508) = ground_angle(dx, dz);
-    const float dt = DT;
+    const float dt = step_dt;
     RF(0x500) = len3(dx, dy, dz) / dt * 3600.0f / 400000.0f;
     float best[3] = { 0.0f, 0.0f, 0.0f };
     for(int i = 0; i < 4; i++) {
@@ -641,8 +642,8 @@ static void speed_and_way(car_t *c)
         }
     }
     RI(0x34) = 0;
-    RF(0x4d8) = placed(RF(0x4d8) + best[0]);
-    RF(0x4e0) = placed(RF(0x4e0) + best[2]);
+    RF(0x4d8) = s2car_placed(RF(0x4d8) + best[0]);
+    RF(0x4e0) = s2car_placed(RF(0x4e0) + best[2]);
     float h = -sqrtf(dz * dz + dx * dx);
     if(h == 0.0f) RI(0x50c) = 0;
     else RF(0x50c) = ground_angle(dy, h);
@@ -670,7 +671,7 @@ static void push_sideways(car_t *c, float angle)
 static void body_lean(car_t *c)
 {
     if((RI(0x4c) & 8) || RI(0x150)) { RI(0xc18) = 0; RI(0xc20) = 0; return; }
-    float pitch = (0.12f / RF(0x674) * cosf(RF(0x4d4)) * (RF(0x75c) - RF(0x500))) / DT;
+    float pitch = (0.12f / RF(0x674) * cosf(RF(0x4d4)) * (RF(0x75c) - RF(0x500))) / step_dt;
     float roll = -(0.12f / RF(0x674)) * sinf(RF(0x4d4)) * RF(0x500);
     float w[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     w[2] = w[2] - pitch; w[0] = w[2];
@@ -701,7 +702,7 @@ static float tyre(car_t *c, int wheel, float angle)
 {
     float s = sinf(angle), co = -cosf(angle), y0 = 0.0f;
     int push = PUSH(wheel), w = WH(wheel);
-    const float dt = DT;
+    const float dt = step_dt;
     float V[3] = { RF(push), RF(push + 4), RF(push + 8) }, N[3] = { 0.0f, 0.0f, 0.0f };
     {
         float len = len3(RF(w + 0x64), RF(w + 0x68), RF(w + 0x6c));
@@ -1012,22 +1013,35 @@ static void wheel_pictures(car_t *c)
     c->look = look | (uint32_t)RI(0xb8) | (RF(0x1e8) + RF(0x1e4) != 0.0f ? 0x200u : 0u);
 }
 
-/* 0x2baa4 for one car alone, up to the engine (0x167e2's first part) */
-static void frame_body(car_t *c, const struct s2car_input *in, int manual, int *squeal)
+/* 0x16824: the car against the walls, then the ground under the wheels */
+static void walls_ground(car_t *c)
 {
     PF_VAR(pf);
-    RI(0x4c) &= ~8;
-    tyres(c, squeal);
-    PF_ADD(PF_TYRES, pf); PF_SET(pf);
     struct corner_ground under[4];
     look_under_corners(c, under);
     PF_ADD(PF_LOOK, pf); PF_SET(pf);
-    against_wall(c, under);                             /* 0x16824 */
+    against_wall(c, under);                             /* 0x29571 */
     PF_ADD(PF_WALL, pf); PF_SET(pf);
-    ground_under_wheels(c, under);
-    PF_ADD(PF_GROUND, pf); PF_SET(pf);
+    ground_under_wheels(c, under);                      /* 0x28f96 */
+    PF_ADD(PF_GROUND, pf);
+}
+
+/* 0x2baa4's passes over the cars before the touching cars' solver, for one car: the tyres (0x1b36f), the walls and the ground
+   (0x16824), the step on the ground (0x1b92b) */
+static void move_pass(car_t *c)
+{
+    PF_VAR(pf);
+    tyres(c, &c->squeal);
+    PF_ADD(PF_TYRES, pf); PF_SET(pf);
+    walls_ground(c);
     ground_step(c);                                     /* 0x1b92b */
-    PF_ADD(PF_GSTEP, pf); PF_SET(pf);
+    PF_ADD(PF_GSTEP, pf);
+}
+
+/* 0x2baa4 for one car alone, after the solver: the wheels' picture (0x16878), the clocks and the engine (0x167e2's first part) */
+static void frame_rest(car_t *c, const struct s2car_input *in, int manual)
+{
+    PF_VAR(pf);
     wheel_pictures(c);                                  /* 0x16878 */
     PF_ADD(PF_WPIC, pf); PF_SET(pf);
     RF(0x30) = RF(0x30) - DT;                           /* 0x1f3ce: the knock's clocks run down */
@@ -1036,13 +1050,6 @@ static void frame_body(car_t *c, const struct s2car_input *in, int manual, int *
     if(RF(4) < 0.0f) RF(4) = 0.0f;
     engine(c, in, manual);                              /* 0x167e2: the clocks, the engine, the controls */
     PF_ADD(PF_ENGINE, pf);
-}
-
-static void frame(car_t *c, const struct s2car_input *in, int *squeal)
-{
-    frame_body(c, in, c->manual, squeal);
-    pedals(c, in);
-    steering(c, in, c->stick);
 }
 
 /* ------------------------------------------------------------------------------------- the camera: 0x13f38 */
@@ -1133,24 +1140,49 @@ static void outputs(car_t *c, int squeal)
     c->cam[2] = c->camst[4];
 }
 
-void s2car_step(struct s2car_state *s, const struct s2car_input *in)
+void s2car_move(struct s2car_state *s, int driven)
 {
-    int squeal = 0;
     car_t *c = s;
-    RI(100) = c->manual ? 0 : 1;
-    frame(c, in, &squeal);
+    RI(100) = (c->manual && !driven) ? 0 : 1;
+    RI(0x4c) &= ~8;
+    move_pass(c);
+}
+
+void s2car_move_again(struct s2car_state *s, float dt)
+{
+    car_t *c = s;
+    step_dt = dt;
+    move_pass(c);
+    step_dt = DT;
+}
+
+void s2car_walls(struct s2car_state *s)
+{
+    walls_ground(s);
+}
+
+void s2car_finish(struct s2car_state *s, const struct s2car_input *in)
+{
+    car_t *c = s;
+    frame_rest(c, in, c->manual);
+    pedals(c, in);
+    steering(c, in, c->stick);
     PF_VAR(pf);
-    outputs(c, squeal);
+    outputs(c, c->squeal);
     PF_ADD(PF_OUTPUTS, pf);
 }
 
-void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx)
+void s2car_step(struct s2car_state *s, const struct s2car_input *in)
+{
+    s2car_move(s, 0);
+    s2car_finish(s, in);
+}
+
+void s2car_finish_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx)
 {
     static const struct s2car_input none;
-    int squeal = 0;
     car_t *c = s;
-    RI(100) = 1;
-    frame_body(c, &none, 0, &squeal);
+    frame_rest(c, &none, 0);
     RF(0x1e8) = 0.0f;                                   /* 0x1756f: no pedals */
     RF(0x1e4) = 0.0f;
     PF_VAR(pf);
@@ -1159,8 +1191,24 @@ void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state 
     if((RI(0x4c) & 1) && (RI(4) & 0x7fffffff) == 0) { RI(0x1ec) = 0; RF(0x1e8) = 1.0f; }     /* finished and the time is up */
     steering_out(c, c->ai);
     PF_ADD(PF_STEER, pf); PF_SET(pf);
-    outputs(c, squeal);
+    outputs(c, c->squeal);
     PF_ADD(PF_OUTPUTS, pf);
+}
+
+void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx)
+{
+    s2car_move(s, 1);
+    s2car_finish_driven(s, driver, ctx);
+}
+
+void s2car_knock(struct s2car_state *s, int side, int corner, float share, float force, float scale)
+{
+    knock_scaled(s, side, corner, share, force, scale);
+}
+
+int s2car_lines_meet(const float p[3], const float d[3], const float q[3], const float e[3], float *s, float *u)
+{
+    return lines_meet(p, d, q, e, s, u);
 }
 
 float s2car_ground_grip(const struct s2car_state *s)
@@ -1392,8 +1440,8 @@ static int init_car(struct s2car_state *s, int team, int car, int track, int gri
     RI(0x4c8) = RI(0x5ac) - RI(0x68c) < 0 ? RI(0x68c) - RI(0x5ac) : RI(0x5ac) - RI(0x68c);
     RF(0xc34) = 1.0f;
     float x0 = at ? at[0] : (float)G.start_x, z0 = at ? at[1] : (float)G.start_z;
-    RF(0x4d8) = placed(x0);
-    RF(0x4e0) = placed(z0);
+    RF(0x4d8) = s2car_placed(x0);
+    RF(0x4e0) = s2car_placed(z0);
     RI(0x4dc) = -100000;
     for(int i = 0; i < 4; i++) {
         int w = WH(i);
@@ -1412,8 +1460,8 @@ static int init_car(struct s2car_state *s, int team, int car, int track, int gri
     float gx = (float)k * sinf(a + HALF_PI_F) * 1000.0f + back * sinf(a + PI_F) * 2000.0f + x0;
     float gz = z0 - ((float)k * cosf(a + HALF_PI_F) * 1000.0f + back * cosf(a + PI_F) * 2000.0f);
     if(at) { gx = x0; gz = z0; }                        /* put back on the line itself (a car that left the road) */
-    RF(0x4d8) = placed(gx);
-    RF(0x4e0) = placed(gz);
+    RF(0x4d8) = s2car_placed(gx);
+    RF(0x4e0) = s2car_placed(gz);
     memmove((uint8_t *)c->rec + 0x734, (uint8_t *)c->rec + 0x4d8, 0x25c);
     corners(c);
     struct corner_ground under[4];
