@@ -11,7 +11,7 @@
  *       not run through the frames) is the game's: world places as they stand, carried ones the car's place plus the game's rotated spot (rec +0xc ..); a puff lives 30 frames
  *   check_fx_s2 render <image> <track> <recording> <frame bytes> <objects> <first> <last> <out prefix>
  *       the same replayed, and from frame <first> to <last> the scene (the cars as the game's records pose them, their shadows and puffs) drawn by the firmware's engine from
- *       the camera record of the frame into <out prefix><frame>.rgb (320 x 200 x 3); with NOFX=1 without the shadows and the puffs, with FXONLY=shadow or puff only those
+ *       the camera record of the frame into <out prefix><frame>.rgb (320 x 200 x 3); with NOFX=1 without the shadows and the puffs, with FXONLY=shadow or puff only those; with COST=1 (no sanitizer) check also counts the pixels and faces the effects' pieces draw
  */
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -95,6 +95,8 @@ static struct track_cam camera_of(const uint8_t *fr)
 }
 
 static int bad;
+static uint32_t fx_pieces, fx_px_sum, fx_px_max, fx_faces_sum, fx_faces_max;
+static int fx_px_max_at;
 
 /* the scene of a frame: the cars as the records pose them, then the effects, from the recorded camera, into <prefix><frame>.rgb */
 static void render_frame(int fi, const uint8_t *fr, struct s2car_state **cp, const char *prefix)
@@ -156,6 +158,7 @@ int main(int argc, char **argv)
     static struct s2car_state cars[CARS];
     struct s2car_state *cp[CARS];
     for (int i = 0; i < CARS; i++) cp[i] = &cars[i];
+    const int shift = getenv("SHIFT") ? atoi(getenv("SHIFT")) : 0;
     const int first = render ? atoi(argv[7]) : 0, last = render ? atoi(argv[8]) : rec.n - 1;
     const int has_objs = rec.frame == 12 + 4 * REC + 0x1C * (size_t)rec.nobj + 0xAEC + 4 * 17 * 0x40;     /* (the first recordings have no object records) */
     int places_unit = 0, silent = 0, shadows = 0, shadows_ok = 0, shadows_exact = 0, doubles = 0, ages = 0, ages_ok = 0, frames_ok = 0, places = 0, places_ok = 0, carried_n = 0, carried_ok = 0, spawns = 0, spawns_ok = 0, ended = 0, ended_30 = 0, wrong_on = 0;
@@ -166,7 +169,8 @@ int main(int argc, char **argv)
     for (int fi = 0; fi <= last; fi++) {
         const uint8_t *fr = frame_at(fi), *pf = frame_at(fi ? fi - 1 : 0);
         const uint32_t T = (uint32_t)i32(fr, 4);
-        for (int i = 0; i < CARS; i++) state_of(&cars[i], fr + 12 + REC * i);
+        const uint8_t *cf = frame_at(fi + shift < rec.n ? fi + shift : rec.n - 1);      /* (SHIFT=n: the cars n frames ahead of the puffs: the negative control, which must fail) */
+        for (int i = 0; i < CARS; i++) state_of(&cars[i], cf + 12 + REC * i);
         s2fx_update(cp, CARS, 1, T - 2, 0);
         /* a frame in which the game worked a step twice (cars touching: its solver runs the step again; the car's timer shows it) is not a step of ours: the car's puffs and
            timer are taken from the game's records from there on */
@@ -252,6 +256,25 @@ int main(int argc, char **argv)
         static struct track_object objs[S2FX_MAX];
         const struct track_cam cam = camera_of(fr);
         const int no = s2fx_objects(&cam, cp, CARS, objs, S2FX_MAX);
+        if (getenv("COST")) {                                    /* what the effects cost the unit: the pixels their pieces draw (a blended one takes two clocks), their faces */
+            const struct rs_clip clip = { 0, 0, FB_W, FB_H };
+            struct su_view v;
+            track_view(&clip, &v);
+            uint32_t px_s = 0, px_p = 0;
+            struct gu_stats gst = { 0, 0, 0, 0 };
+            for (int m = 0; m < no; m++)
+                for (int b = 0; b < objs[m].n; b++) {
+                    struct gu_piece g;
+                    track_block_piece(&cam, &objs[m].b[b], &g);
+                    const uint32_t px = gu_draw(FB(1), &clip, &v, track_mlb(), &g, &gst);
+                    if (objs[m].key) px_s += px; else px_p += px;
+                }
+            fx_pieces += (uint32_t)no;
+            fx_px_sum += px_s + px_p;
+            fx_faces_sum += gst.faces;
+            if (px_s + px_p > fx_px_max) { fx_px_max = px_s + px_p; fx_px_max_at = fi; }
+            if (gst.faces > fx_faces_max) fx_faces_max = gst.faces;
+        }
         int at = 0;
         for (int i = 0; i < CARS; i++) {
             const uint8_t *r = fr + 12 + REC * i;
@@ -310,6 +333,7 @@ int main(int argc, char **argv)
         printf("%d frames: the puffs alive equal the game's in %d of them (%d records wrong); %d spawns, %d at a place the game's rule gives; %d places compared (%d carried: %d equal), %d equal, %d within a unit; "
                "%d ages compared with the objects' records, %d equal; %d shadows compared, %d within a unit, %d exactly; %d puffs ended, %d of them after 30 frames; %d frames in which the game worked a step twice (timer shows it), %d more in which its puffs aged a step more; %d wrong in all\n",
                rec.n, frames_ok, wrong_on, spawns, spawns_ok, places, carried_n, carried_ok, places_ok, places_unit, ages, ages_ok, shadows, shadows_ok, shadows_exact, ended, ended_30, doubles, silent, bad);
+        if (getenv("COST")) printf("the effects' pieces (shadows and puffs): %.1f a frame on average, the faces %.1f on average and %u at most; the pixels their faces draw (overdraw included, each blended: two clocks of the rasterizer) %.0f on average, %u at most (frame %d), %.2f ms of the rasterizer's clocks at the most\n", (double)fx_pieces / rec.n, (double)fx_faces_sum / rec.n, fx_faces_max, (double)fx_px_sum / rec.n, fx_px_max, fx_px_max_at, 2.0 * fx_px_max / 74250.0);
         const int pass = !bad && frames_ok == rec.n && ended >= ended_30 && (doubles + silent) * 20 <= rec.n && (!has_objs || (ages == ages_ok && shadows == shadows_ok && shadows_exact * 10 >= shadows * 9));
         printf(pass ? "PASS\n" : "FAIL\n");
         return !pass;

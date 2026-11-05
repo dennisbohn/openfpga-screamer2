@@ -24,8 +24,9 @@ name, a field), **new** (nothing of ours reads it), **unknown** (not looked at).
    reworked; the renderer, the units, the mixer, CD music and the build/test tools carry over.
 3. **Two hard limits, neither in the renderer.** (a) *Data slots*: the minimum set for a race needs 31
    of the 32 slots (we use 26 now); night, reflections, 3D menu rooms and intro scenes do not fit.
-   (b) *Block RAM*: 292 of 308 M10K are used; S2 needs a wider see-through table (112 rows made at
-   race start; ours has 64) and, for night and fog, a per-face colour map (`DEPTHn.DPT`).
+   (b) *Block RAM*: 292 of 308 M10K are used; S2's see-through table has 112 rows made at race start, ours 64: the image
+   builder fits the 40 to 62 texels the effects use into them (no hardware change, docs/development.md "Wheel smoke and shadows");
+   for night and fog S2 needs a per-face colour map (`DEPTHn.DPT`).
 
 ## 0. Which files are "the 320x200 256-colour ones"
 
@@ -73,7 +74,7 @@ menu rooms and scenes included. The ZIP reader is `firmware/zip.c`, the files sc
 | `.UNR` meshes | size, count, offsets; object header 0x330 (3 detail tables of 65 entries at `+0x18`, class word at `+0x32C`); block +0x0C position, +0x10 vertices, +0x14 faces, +0x18 flags, +0x1C verts, +0x20 normals, +0x24 uv, +0x28 16 row pointers, +0x68 name; 36-byte faces | the same blocks and faces (all 11,351 gaps between consecutive faces are 36 bytes; 0 faces with 3..4 corners violated in 12,001; all 16 rows used). Object header **0xC8** (44 entries at `+0x18`, first block at 0xC8; block b at level of detail L is entry b + 13 L, entry 41 is -1, entry 43 a sort bias; `performance.md` section 6): no class word at `+0x32C` (our `track_class_key` reads junk). 345 to 705 objects (S1 223 to 390), 1 block almost everywhere, a few of 3 to 4 with 60 to 100 frames | small change (class key = 0; see Hardware) | E2; E3: using the junk word changes 93 of 64,000 pixels in the start picture, 0 in two others. N2 S2-5 says the "revised 3DX" is only the header |
 | `.MLB` materials | 16-byte materials, texture records, pixels; routines 16, 64, 128, 160 (car glass), 192, 224 | the same; routines 16, 64, 128 on tracks, 160 on cars, **208** on track 7 and the shadow/smoke (acts like 224, N2 S2-5p); textures up to 254x254 (S1 256); 1.05 to 1.95 MB (S1 2.4 to 3.0 MB); frames up to 23 on tracks, 128 pictures on cars (damage, brake, wheel blur: N2 S2-5zq) | identical for tracks (208 = 224) | E2, E3, E5 |
 | `.WLB` | - | the "8 MB version" of the `.MLB` (smaller, 0.7 to 1.0 MB); the game takes it only on 8 MB machines | new (not needed) | N2 S2-5e |
-| `.SMG` see-through | 64 rows x 256 (16 KB) read from the file into the unit | 48 rows (12 KB) with black ramps in the smoke rows; the game does not read it but **makes a 112-row table** at race start from `TRACK_DATA` (`asmoke`, `a2smoke` rgb) and the palette | new (firmware makes it; hardware table widens) | E1; N2 S2-5zd |
+| `.SMG` see-through | 64 rows x 256 (16 KB) read from the file into the unit | 48 rows (12 KB) with black ramps in the smoke rows; the game does not read it but **makes a 112-row table** at race start from `TRACK_DATA` (`asmoke`, `a2smoke` rgb) and the palette | new (the image builder makes 62 rows of it: `firmware/smg.c`, equal to the game's rows for the texels the art uses; **built**) | E1; N2 S2-5zd |
 | `.COL` | 768 bytes, 6-bit VGA | the same; colours 0 to 119 are equal in every file of the game, tracks own 120 to 255 | identical | E1; N2 S2-5e |
 | `.BCK` | PCX 512x256, 8 bit | the same (night look 21 KB instead of 63 KB; track 7 none) | identical | E3 (all 6 with a backdrop parse) |
 | `.DPT` | - | 65,536 bytes = 256 rows x 256: row 0 identity, `DEPTH1` darkens to black, `DEPTH2` lightens to fog grey; the game picks a row **per face** from the face's depth and sends every texel through it (128 steps). Used in night (except on one track: N2 says "track 3 (the fourth)", MAP4 if the game counts from 0) and in fog | new | E1; N2 S2-5d |
@@ -102,7 +103,7 @@ code, against about 2,400 lines of car, drive and opp in our firmware.
 | Module | Reads in S1 | S2 data | Verdict | Work |
 |---|---|---|---|---|
 | `dat.c`, `crc32.c`, `slot.c`, `dlog.c`, `console.c`, `blit.c`, `selftest`, `memtest` | containers, slots | same | identical | none |
-| `efx.c` | `MAPn.SMG`, `SHADOW.3DX`, `SMOKE.3DX`; radar row 63 | `ASHADOW/ASMOKE/A2SMOKE.3DX` + `MISC.MLB`; table made from `TRACK_DATA` colours (112 rows) | small change | small (with the hardware table) |
+| `efx.c` | `MAPn.SMG`, `SHADOW.3DX`, `SMOKE.3DX`; radar row 63 | `ASHADOW/ASMOKE/A2SMOKE.3DX` + `MISC.MLB`; table made from `TRACK_DATA` colours (112 rows) | small change | **built**: `smg.c` (the table), `s2fx.c` (smoke and shadows) |
 | `track_build.c` | 5 containers, 14 sections | stops at "camera path" on S2 (E4); also missing: `.MRK`, `AUTO00..06.3DX`, `IMPLET_L/IMPRES_L.PKC`, `MAPnB.DTR`, `CARS_DATA` | small change | sections for splines (one), cars (`CAR_PARAMS`), `TRACK_DATA`, no markers; adapter is `tools/s2/make_track_s2.py` |
 | `tb_mmp.c` | `.MMP` | same | identical | none |
 | `tb_spl.c` | 10 splines | 1 spline, `DIR`, `OST` | small change | indices |
@@ -141,7 +142,7 @@ Measured against `core/src/fpga/core` (geom.v, setup.v, raster_tex.v, ...) and t
 | Cells of the map | not limited | 222 to 573 | 251 to 843 | identical |
 | Track image | 28 CRC blocks = 7 MB, window `0x1210_0000` to `0x1280_0000` | 4.2 to 4.8 MB | 3.0 to 4.9 MB (MLB + UNR + map, no `.WLB`) | identical |
 | Cars' libraries | one MLB base register; materials within +-32 KB | cars inside the track MLB | 4 teams x (MLB 0.6 MB + 3DX 0.2 MB) + `MISC` + `ENV` as separate files: merged after the track MLB with rebased offsets (the PC port's `mlb_add`/`mesh_rebase`); 8.3 MB with all five cars of all four teams loaded against the 7 MB window. **A race draws four cars**, one per grid slot (the game loads `cars<team>` and `auto<model>` per car record, 0x2f519), so the image holds those four, each from its own team: 0.72 MB for the default grid, 0.82 MB at most for any four cars, against 0.87 MB for the five cars of team 1; the images are 3.5 to 5.4 MB | small change (a merge step; **no move of the window**, E11) |
-| See-through table (routine 224/208) | 64 rows x 256 = 16 KB = 16 M10K, texel index 6 bits | 64 rows (row 63 = radar) | made at race start, 112 rows (smoke 0..31 and 48..79, shadow 32..41, brighter and white rows above): needs a 7-bit index; 80 rows would take about +8 M10K, 128 rows +16 | **hardware change** (16 M10K are left: 292 of 308 used) |
+| See-through table (routine 224/208) | 64 rows x 256 = 16 KB = 16 M10K, texel index 6 bits | 64 rows (row 63 = radar) | made at race start, 112 rows (smoke 0..31 and 48..79, shadow 32..47, brighter and white rows above); the art uses 40 to 62 distinct texels per track (day) | **no hardware change** (the image builder gives each texel a row and copies the textures: 62 rows, row 63 the radar's; a 7-bit index would have taken +8 to +16 of the 16 free M10K) |
 | Reflection (routine 160) | wrap at 256, face size scale | car glass uses the track's picture | the picture is the first material of `ENV.MLB` (128 x 128, 1 to 3 frames); wraps at 128 (`& 0x7f7f`, `STARTL.EXE` 0xcd771). The port's notes say the face's size counts 16 x (cars 8 x); the face routine's code (0xcd118: `shl eax,3`, the same as Screamer 1's 0xdb310) takes the reflection's u, v as whole texels like ours, and only the clippers (0xcc6e0, 0xcca6c, 0xcce98) multiply by the material's size and shift by 5 | **no hardware change** (E10): each frame stored tiled 2 x 2 as 256 x 256 after the cars' libraries, the windows' materials point to it; 64 KB a frame |
 | Fade by depth (`.DPT`) | - | none | per face: row = |z - near| x 16384 / range & 0x3f80, every texel through a 256-byte row; night (all but one track) and fog | **new hardware** (a 256-byte row buffer per face plus the geometry unit picking the row; small in M10K, a big step in design) or accept day only |
 | Mesh class word | track.c sort key | at `+0x32C` | does not exist (header 0xC8); the S2 rule is the table entry 43 at `+0xC4` and d^2 >> 3, read in `STARTL.EXE 0x7e8c0` and done 2026-11-04 (`draw_distance.md`): it fixed the crowd over the barrier and a wall hidden by a backdrop panel | done |
@@ -176,7 +177,7 @@ commits). Sizes: small = under a day, medium = 1 to 2 days, large = 3 days or mo
 |---|---|---|
 | Files, slots, `files.c`, saves | small | but the slot count is a decision |
 | Track build on the Pocket (S2 sections, constants, merge of libraries) | small | adapter exists as a PC tool |
-| Hardware: 7-bit see-through table, routine 208 (the reflection's wrap is done in the image, E10) | small to medium | Quartus cycles; block RAM 95 % |
+| ~~Hardware: 7-bit see-through table, routine 208~~ not needed: done in the image (docs/development.md "Wheel smoke and shadows"; the reflection's wrap likewise, E10) | - | - |
 | Fade by depth (night, fog) | medium to large | new unit logic; may stay out at first |
 | Car, physics, wheels, body, road kinds, damage | large | the heart; 8,000-line reference |
 | Opponents, skills, cones, animations (`.PTH`), cameras (`.MCM`), mirror | large | together |

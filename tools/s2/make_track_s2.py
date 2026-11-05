@@ -32,6 +32,10 @@ Image layout, version 7 (the version 6 of tools/make_track.py with the car mater
          then the reflection picture: a texture record (frames, the ENV record's word +4, the frames' offsets)
          padded to 256 bytes and the frames, 64 KB each (256 x 256, rows of 256); the header's MLB offset
          (0x08) is the MLB, its size (0x0C) all of it
+         The MLB section also holds MISC.MLB (a race's one more library after the cars': its 11 to 48 material records go into the section in front, like a car's),
+         and after the reflection picture the see-through copies and the effects block (tools/s2/smg_ref.py, firmware/smg.c): every material of routine 208 or 224
+         turned into routine 224 on a copy of its texture whose texels are the hardware's rows, then the meshes of the shadow and the two smokes (faces onto MISC's
+         records), the table of 64 x 256 and a directory of 256 bytes ('S2FX', 1, the table's offset, the meshes', the rows used, the texels found), the section's last
   then   UNR, palette, placements (and after them the cells' visibility table, visibility() below), camera path
          (empty), ground index, markers (empty), cars (one stand-in row per car model, its livery word the car:
          team * 256 + car),

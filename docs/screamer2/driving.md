@@ -25,7 +25,7 @@ game's addresses (the comment at each routine in `s2car.c` names it):
 
 Left out of `s2car.c` because one car does not need them: the other cars (the solver 0x245a3, the outlines 0x22d35, 0x20a18),
 the driver of the computer's cars (0x17726), laps and the position along the road (0x153c6): these are in `race.c`
-(section "The race" below); cones, sparks, smoke and dust,
+(section "The race" below), `s2fx.c` (the wheel smoke and the shadows: docs/development.md "Wheel smoke and shadows"); cones, sparks and dust,
 sound, the road kind's look (0x1f1ef), the other camera views are not done. The car's damage takes power away, softens
 a spring and shows on the car (the marks of the four sides, "The cars' look" below).
 

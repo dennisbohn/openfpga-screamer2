@@ -46,11 +46,13 @@ open(p, "w").write(t)
 PY
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
 LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c s2car.c s2params.c race.c s2ghost.c s2fx.c"
-san="-fsanitize=address,undefined -fno-sanitize-recover"
+san="-fsanitize=address,undefined -fno-sanitize=shift -fno-sanitize-recover"      # (geom.c's model shifts negative numbers left, as the hardware does: not flagged)
 [ $mode = render ] && san=""            # (the picture is drawn through fixed mappings of the SDRAM: no sanitizer shadow there)
 args="$mode /b/s2/ref$track.bin $track /b/check/$(basename "$recd")/smoke_t$track.bin $fb $nobj"
 [ $mode = render ] && args="$args $first $lastf /b/s2/fx_"
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -e NOFX -e FXONLY -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2/fxsrc && gcc -O1 -g -w $san -o ../check_fx_s2 check_fx_s2.c $LIST -lm &&
-    cd /b/s2 && ./check_fx_s2 $args"
+    cd /b/s2 && ./check_fx_s2 $args &&
+    if [ $mode = check ]; then if SHIFT=3 ./check_fx_s2 $args > /dev/null 2>&1; then echo 'NEGATIVE CONTROL NOT FOUND'; exit 1; else echo 'negative control (the cars three frames ahead of the puffs) found: it fails'; fi; fi &&
+    if [ $mode = check ]; then cd /b/s2/fxsrc && gcc -O1 -g -w -o ../check_fx_s2_cost check_fx_s2.c $LIST -lm && cd /b/s2 && COST=1 ./check_fx_s2_cost $args | grep \"the effects' pieces\"; fi"
 if [ $mode = render ]; then mkdir -p "$(dirname "$outp")"; for f in "$out"/fx_*.rgb; do mv "$f" "$outp$(basename "$f" | sed "s/^fx_//")"; done; fi
