@@ -333,6 +333,7 @@ static int manual;
 static int race_start(int n, float floor_z)
 {
     uint32_t t0 = rdcycle();
+    race_car(0)->manual = manual;                       /* (before the cars are set up: the first gear depends on it; the other kinds of race clear it and it is set again) */
     int ok = race_init(n, floor_z);
     race_car(0)->manual = manual;
     static int logged;                                  /* the log has 4 KB: the first start of the run tells how long it took */
@@ -637,9 +638,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 in.gear_up = k == 0 && (press & KEY_R);         /* a gear on the one step the button went down */
                 in.gear_down = k == 0 && (press & KEY_L);
                 race_step_player(&in);
-                if (!RACE_OVERLAP) race_step_others(1);
+                /* the race is the same race whatever the frames took (a replay of it is exact): every step is the player's and then the computers', so that
+                   a late frame's extra steps run in that order and only the last step's computers overlap the scene */
+                if (!RACE_OVERLAP || k + 1 < steps) race_step_others(1);
             }
-            race_pending = RACE_OVERLAP ? steps : 0;
+            race_pending = RACE_OVERLAP ? 1 : 0;
             hud_steps = steps;
             if (race_pending && RACE_OVERLAP > 1) race_others_begin(race_pending);
             struct s2car_state *rc[RACE_CARS];

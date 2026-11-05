@@ -650,7 +650,9 @@ int race_init(int track, float floor_z)
     for(int i = 0; i < ncars; i++) {
         R.team[i] = race_grid[i].team - 1;              /* the player's team and car, then the computers' (the physics counts from 0) */
         R.model[i] = race_grid[i].car - 1;
-        if(R.kind != RACE_NORMAL) R.car[i].manual = 0;  /* (the first gear of a car depends on it: the ghost must start as the car it was recorded from; the viewer sets the player's after) */
+        if(R.kind != RACE_NORMAL || i > 0) R.car[i].manual = 0;     /* (the first gear of a car depends on it: the ghost must start as the car it was recorded from, and a
+                                                                       computer's car has the automatic gearbox, not what the ghost of an earlier race left in the record;
+                                                                       the player's in the arcade is the viewer's, set before this) */
         if(R.kind == RACE_NORMAL) {
             const int grid = RACE_CARS - 1 - i;         /* the player starts last */
             if(!s2car_init_grid(&R.car[i], R.team[i], R.model[i], track, grid, i > 0)) return 0;
