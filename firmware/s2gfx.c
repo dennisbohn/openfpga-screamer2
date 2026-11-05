@@ -471,6 +471,11 @@ static void text_centred_of(const struct set *set, struct blit_list *l, int font
 
 void s2gfx_sprite(struct blit_list *l, int n, int x, int y) { sprite_of(&menu, l, n, x, y); }
 void s2gfx_sprite_centred(struct blit_list *l, int n, int y) { sprite_centred_of(&menu, l, n, y); }
+
+void s2gfx_sprite_boxed(struct blit_list *l, int n, int x0, int width, int y)
+{
+    if (sprite_ok(&menu, n)) sprite_of(&menu, l, n, x0 + ((width - menu.img[n].w) >> 1), y);
+}
 int s2gfx_text(struct blit_list *l, int font_no, int colour, int space, int x, int y, const char *s) { return text_of(&menu, l, font_no, colour, space, x, y, s); }
 void s2gfx_text_centred(struct blit_list *l, int font_no, int colour, int space, int y, const char *s) { text_centred_of(&menu, l, font_no, colour, space, y, s); }
 
