@@ -866,18 +866,22 @@ static void check_hiscores(const char *ref, const char *prefix)
 static void check_end(const char *ref, const char *prefix)
 {
     static struct {
-        const char *name, *race; struct s2_end_in in; int keep[6], right_at, last;
-    } runs[4] = {
-        { "A", "s2_track4_city", { 4, 3, 1, 85.5f, 29.5f, 2, 3 }, { 100, 200, 231, 302, 400, -1 }, 300, 400 },
-        { "B", "s2_track1_village", { 1, 3, 3, 140.125f, 45.0f, 4, 2 }, { 100, 400, -1 }, -1, 400 },
-        { "C", "s2_track5_snow", { 7, 1, 4, 99.0f, 0.0f, 1, 1 }, { 400, -1 }, -1, 400 },
-        { "D", "s2_track1_village", { 1, 3, 1, 78.25f, 26.5f, 1, 1, 0, 1 }, { 100, 400, -1 }, -1, 400 },          /* time attack's end: TOTAL .. LAP TIME, the lists of kind 2 */
+        const char *name, *race; struct s2_end_in in; int keep[6], right_at[3], last, want;
+    } runs[7] = {
+        { "A", "s2_track4_city", { 4, 3, 1, 85.5f, 29.5f, 2, 3 }, { 100, 200, 231, 302, 400, -1 }, { 300, -1 }, 400, S2END_EXIT },
+        { "B", "s2_track1_village", { 1, 3, 3, 140.125f, 45.0f, 4, 2 }, { 100, 400, -1 }, { -1 }, 400, S2END_AGAIN },
+        { "C", "s2_track5_snow", { 7, 1, 4, 99.0f, 0.0f, 1, 1 }, { 400, -1 }, { -1 }, 400, S2END_AGAIN },
+        { "D", "s2_track1_village", { 1, 3, 1, 78.25f, 26.5f, 1, 1, 0, 1 }, { 100, 400, -1 }, { -1 }, 400, S2END_AGAIN },          /* time attack's end: TOTAL .. LAP TIME, the lists of kind 2 */
+        /* menus row 10: REPLAY first in thirds; RIGHT once RACE AGAIN, twice EXIT; the replay's own screen starts on REPLAY and takes nothing into the lists */
+        { "E", "s2_track4_city", { 4, 3, 2, 91.5f, 30.75f, 3, 2, 0, 0, 1, 0 }, { 100, 200, 231, 302, 400, -1 }, { 300, -1 }, 400, S2END_AGAIN },
+        { "G", "s2_track4_city", { 4, 3, 2, 91.5f, 30.75f, 3, 2, 0, 0, 1, 1 }, { 100, 231, 400, -1 }, { -1 }, 400, S2END_REPLAY },
+        { "F", "s2_track1_village", { 1, 3, 4, 150.0f, 48.0f, 2, 1, 0, 0, 1, 0 }, { 400, -1 }, { 300, 310, -1 }, 400, S2END_EXIT },
     };
     static uint32_t pal[256];
     static uint8_t table[256];
     shot_prefix = prefix;
     fill_save(ref);
-    for (int r = 0; r < 4; r++) {
+    for (int r = 0; r < 7; r++) {
         char name[64];
         snprintf(name, sizeof name, "frame_%s", runs[r].race);
         uint8_t *base = ref_file(ref, name, "idx", S2G_PIC_BYTES);
@@ -890,7 +894,9 @@ static void check_end(const char *ref, const char *prefix)
         int result = 0, early = 0;
         for (int j = 0; j <= runs[r].last; j++) {
             memcpy((void *)FB(0), base, S2G_PIC_BYTES);
-            uint32_t press = j == runs[r].right_at ? KEY_RIGHT : j == 50 ? KEY_B : 0;
+            uint32_t press = j == 50 ? KEY_B : 0;
+            for (int k = 0; runs[r].right_at[k] >= 0; k++)
+                if (runs[r].right_at[k] == j) press = KEY_RIGHT;
             int got = s2end_frame(FB(0), 0, pal, &runs[r].in, (uint32_t)j, 1000 + (uint32_t)j, press);
             if (j == 50) early = got;
             for (int k = 0; runs[r].keep[k] >= 0; k++)
@@ -911,7 +917,7 @@ static void check_end(const char *ref, const char *prefix)
         CHECK(early == S2END_NONE, "run %s: ENTER in the first four seconds took effect (%d)", runs[r].name, early);
         /* ENTER: the lit choice: RACE AGAIN, or EXIT after right */
         result = s2end_frame(FB(0), 0, pal, &runs[r].in, (uint32_t)runs[r].last + 1, 1000 + (uint32_t)runs[r].last + 1, r == 2 ? KEY_START : KEY_B);
-        CHECK(result == (runs[r].right_at >= 0 ? S2END_EXIT : S2END_AGAIN), "run %s: ENTER gave %d", runs[r].name, result);
+        CHECK(result == runs[r].want, "run %s: ENTER gave %d, want %d", runs[r].name, result, runs[r].want);
         free(base);
         free(pb);
     }
@@ -945,7 +951,7 @@ static void check_end(const char *ref, const char *prefix)
     s2_best_get(1, 3, &total, &lap);
     s2_record_text(tx, &total);
     CHECK(!strcmp(tx, "01:20:50 AAA"), "BEST TIME text '%s'", tx);
-    printf("ui: end of the race: four runs of frames (the fourth is time attack's) equal to the reference, ENTER, the best times and the loading screen's records checked\n");
+    printf("ui: end of the race: seven runs of frames (D is time attack's, E to G have REPLAY in thirds and the replay's own screen) equal to the reference, ENTER, the best times and the loading screen's records checked\n");
 }
 
 /* the start menu's two rows open the pages and take the settings back */

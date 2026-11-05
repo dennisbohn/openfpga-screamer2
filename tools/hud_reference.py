@@ -89,10 +89,12 @@ class Hud:
         self.game = game
         self.kind, self.ncars = 0, 4                    # the kind of race (0 arcade, 1 time attack, 2 the free run) and the cars in it (time attack alone has one, with a ghost two)
         self.free = dict(lt=[3599.999] * 5, rt=[3599.999] * 5, sign=" " * 5, msg=("_", 0.0, 0.0))
+        self.cam_view, self.cam_follow = 3, 0          # the view the scene is drawn in (1 the trackside cameras, 3 the chase camera) and the car it follows (menus row 10)
 
     # a race begins: the track's best lap and total, the first checkpoint, the bends' arrows (MAPnDIR.SPL: a count, nodes of 56 bytes)
     def begin(self, track, laps, rec_lap, rec_total, cars):
         self.laps, self.rec_lap, self.rec_total = laps, f32(rec_lap), f32(rec_total)
+        self.cam_view, self.cam_follow = 3, 0
         self.speed = self.revs = self.wrong = 0.0
         self.msg_left = self.best_left = self.bend_left = 0.0
         self.bend_next = self.bend_id = 0
@@ -112,8 +114,9 @@ class Hud:
         k = 1.0
         for _ in range(steps):
             k = f32(k * f32(0.75))
-        speed = f32(p.speed * f32(1.513))
-        revs = f32(p.rpm / p.maxrpm) if p.maxrpm != 0 else 0.0
+        fc = cars[self.cam_follow]                      # (the dial shows the car the camera follows)
+        speed = f32(fc.speed * f32(1.513))
+        revs = f32(fc.rpm / fc.maxrpm) if fc.maxrpm != 0 else 0.0
         self.speed = f32(f32(f32(self.speed - speed) * k) + speed)
         self.revs = f32(f32(f32(self.revs - revs) * k) + revs)
         self.msg_left = f32(self.msg_left - dt) if self.msg_left > dt else 0.0
@@ -188,20 +191,21 @@ class Hud:
             my = trunc(view[1] / 16.0 - sum(d[j] * u[j] for j in range(3)) * k) - 12
             if -15 < mx < 320 and -11 < my < 200:
                 self.sprite(c, 0x26, mx, my)
-        # the dial (0x46d42)
-        self.sprite(c, 0x1a, 238, 132)
-        shown = self.speed / f32(1.6) if self.miles else self.speed
-        v = trunc(shown) if shown > 0 else 0
-        self.put_text(c, 2, 5, 1, 267, 177, "%03d" % v)
-        self.put_text(c, 2, 4, 2, 299, 177, "%d" % max(p.gear, 0))
-        a = f32(f32(self.revs * f32(math.pi)) - 2.0)
-        if abs(a) < 0.001:
-            a = 0.0
-        s, co = f32(math.sin(a)), f32(math.cos(a))
-        px, py = 271, 168
-        tx, ty = trunc(f32(float(px) + f32(s * 30.0))), trunc(f32(float(py) - f32(co * 30.0)))
-        for ox, oy in ((0, 0), (co, s), (-co, -s)):
-            c.line(trunc(f32(float(px) + ox)), trunc(f32(float(py) + oy)), tx, ty, 0x5b)
+        # the dial (0x46d42): not over the trackside cameras (0x46fea); the car's the camera follows
+        if self.cam_view != 1:
+            self.sprite(c, 0x1a, 238, 132)
+            shown = self.speed / f32(1.6) if self.miles else self.speed
+            v = trunc(shown) if shown > 0 else 0
+            self.put_text(c, 2, 5, 1, 267, 177, "%03d" % v)
+            self.put_text(c, 2, 4, 2, 299, 177, "%d" % max(cars[self.cam_follow].gear, 0))
+            a = f32(f32(self.revs * f32(math.pi)) - 2.0)
+            if abs(a) < 0.001:
+                a = 0.0
+            s, co = f32(math.sin(a)), f32(math.cos(a))
+            px, py = 271, 168
+            tx, ty = trunc(f32(float(px) + f32(s * 30.0))), trunc(f32(float(py) - f32(co * 30.0)))
+            for ox, oy in ((0, 0), (co, s), (-co, -s)):
+                c.line(trunc(f32(float(px) + ox)), trunc(f32(float(py) + oy)), tx, ty, 0x5b)
         if not finished and self.kind == 2:                  # the free run (0x460ae ..): THIS LAP and BEST LAP on top, the five markers' list
             if self.bend_left > 0:
                 self.centred(c, 0x1b + self.bend_id, 0x32 + top)
@@ -224,7 +228,7 @@ class Hud:
                     self.say(c, 7, 1, -1, 0x23 + top, s)
             if self.best_left > 0 and trunc(f32(self.best_left * 2.0)) & 1:
                 self.say(c, 0, 1, 2, 0xf + top, T[4])
-        elif not finished:
+        elif not finished and self.cam_view != 1:           # (and none of the texts over the trackside cameras, 0x45d17)
             if self.bend_left > 0:
                 self.centred(c, 0x1b + self.bend_id, 0x32 + top)
             if self.ncars > 1:
@@ -258,13 +262,25 @@ class Hud:
                     d = max(-1.0, min(1.0, d))
                     self.sprite(c, 4 + cars[i].team - 1, trunc(f32(f32(160.0 - f32(d * 50.0)) + -4.0)), y)
                 self.sprite(c, 9, 0x9c, y)
-        if trunc(self.wrong) & 1:
+        if trunc(self.wrong) & 1 and self.cam_view != 1:
             self.say(c, 0, 1, 2, 0xf + top, T[5])
         if 0 <= (3 - trunc(clock) if clock < 4.0 else -1) and not finished:
             self.centred(c, 0x42 + trunc(clock), 60)
 
 
 # ------------------------------------------------------------------------------------------------ the scenario
+
+
+def dark_table(pal):
+    """the original's darkening: for each colour the entry nearest to 0.67 of it (the first of equals); where that is the colour itself, the entry nearest to 0.67 x 0.7 of it"""
+    def near(c, k):
+        want = [(c >> s & 255) * k for s in (16, 8, 0)]
+        return min(range(256), key=lambda q: sum(((pal[q] >> s & 255) - w) ** 2 for s, w in zip((16, 8, 0), want)))
+    table = []
+    for i in range(256):
+        q = near(pal[i], 0.67)
+        table.append(near(pal[i], 0.67 * 0.7) if q == i else q)
+    return table
 
 
 def main():
@@ -321,10 +337,30 @@ def main():
         cam = tuple(float(v) for v in c)
         lines.append("camera " + " ".join(repr(float(v)) for v in c))
 
+    last = [None]
+
+    def set_view(v, follow):
+        hud.cam_view, hud.cam_follow = v, follow
+        lines.append("view %d %d" % (v, follow))
+
+    def emit_band(name, text):
+        """the replay's band (0x4658c) over the last frame: the bottom 20 rows through the darkening table of the palette, the text at (10, 180) in font 0, colour 1, space 2"""
+        c = Canvas()
+        c.px = bytearray(last[0])
+        table = dark_table([p[0] << 16 | p[1] << 8 | p[2] for p in pal])
+        for y in range(0xb4, 0xc8):
+            for x in range(320):
+                c.px[y * 320 + x] = table[c.px[y * 320 + x]]
+        hud.put_text(c, 0, 1, 2, 10, 0xb4, text)
+        open(os.path.join(out, name + ".idx"), "wb").write(bytes(c.px))
+        lines.append("band %s %s.idx %s" % (name, name, text))
+        nframes[0] += 1
+
     def emit(name, steps=1, top=0):
         c = Canvas()
         c.px = bytearray(bg)                                # the screen is drawn over the race picture
         hud.frame(c, steps, top, cars, clock, cam, view)
+        last[0] = bytes(c.px)
         open(os.path.join(out, name + ".idx"), "wb").write(bytes(c.px))
         lines.append("frame %s %d %d %s.idx" % (name, steps, top, name))
         nframes[0] += 1
@@ -495,6 +531,34 @@ def main():
     free([12.0, 25.0, 38.9, 52.0, NONE], [0.34, 0.5, 1.15, 0.25, 64.25], "--++ ", 64.25, ("+", 0.25, 2.0))
     emit("free_second_c", 3)
     kind(0, 4)
+
+    # ---------------- 11. the replay (menus row 10): over the trackside cameras (view 1) the race screen has no dial, none of its texts and no WRONG WAY, only the lights, the leader's mark
+    # and the band; over the chase camera of another car the dial is that car's
+    begin(4, 3, 83.5, 270.0)
+    car(0, place=2, lapcnt=1, lapt=12.34, total=52.5, speed=70.0, rpm=0.5, maxrpm=1.0, gear=3, n4b8=-1.0, wrong=-1.0)
+    car(1, place=1, n4b8=-1.0, n4bc=500.0, px=0.0, py=-3000.0, ph=100.0, speed=90.0, rpm=0.8, gear=4)
+    car(2, place=3, n4b8=-1.0, speed=40.0, rpm=0.3, gear=2)
+    car(3, place=4, n4b8=-1.0)
+    camera(0.0, 0.0, 300.0, 0.0, 0.0, 0.0)
+    set_view(1, 0)
+    set_clock(5.0)
+    emit("rp_view1", 50)
+    emit("rp_view1_b", 50)
+    set_clock(1.5)
+    emit("rp_view1_lights", 1)
+    emit_band("rp_band_condor", "CONDOR - EXTERNAL")
+    set_clock(5.0)
+    set_view(3, 0)
+    emit("rp_chase_wrong", 50)
+    emit_band("rp_band_back", "CONDOR - BACK")
+    set_view(3, 2)
+    car(0, wrong=1.0)
+    emit("rp_follow_2", 50)
+    emit("rp_follow_2_b", 50)
+    emit_band("rp_band_wasp", "WASP - BACK")
+    set_view(1, 2)
+    emit("rp_view1_car2", 50)
+    emit_band("rp_band_angels", "ANGELS - EXTERNAL")
 
     # ---------------- 8. the player has finished: no texts, the dial and the rest of the screen stay as they were
     begin(4, 3, 3599.999, 3599.999)

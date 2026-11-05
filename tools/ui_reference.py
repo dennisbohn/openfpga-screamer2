@@ -218,6 +218,11 @@ END_RUNS = [
     ("C", "s2_track5_snow", dict(track=7, laps=1, place=4, time=99.0, best=0.0, team=1, car=1), [400], None),
     # time attack's end (0x48b4c, menus row 7): TOTAL, the time, LAP TIME and the best lap for four seconds, then the list of kind 2 (the three-lap totals)
     ("D", "s2_track1_village", dict(track=1, laps=3, place=1, time=78.25, best=26.5, team=1, car=1, attack=1), [100, 400], None),
+    # menus row 10: the race can be run again, REPLAY is the first choice (thirds of the band); RIGHT once is RACE AGAIN, twice EXIT; the replay's own screen ("again": the list
+    # as run E left it, nothing is put into it, the choice starts on REPLAY)
+    ("E", "s2_track4_city", dict(track=4, laps=3, place=2, time=91.5, best=30.75, team=3, car=2, replay=1), [100, 200, 231, 302, 400], [300]),
+    ("G", "s2_track4_city", dict(track=4, laps=3, place=2, time=91.5, best=30.75, team=3, car=2, replay=1, again="E"), [100, 231, 400], None),
+    ("F", "s2_track1_village", dict(track=1, laps=3, place=4, time=150.0, best=48.0, team=2, car=1, replay=1), [400], [300, 310]),
 ]
 
 
@@ -330,9 +335,14 @@ def pages(game, out, graf, game1, spr, fnt):
 
     # ---- the end of the race: the clocks of the original's screen run in frames of 20 ms (a hundredth of a second is half a frame)
     gspr = sprites(datfile.extract(game1, "GAMEL.SPR"))
+    final = {}
     for run, race, cfg, keep, right_at in END_RUNS:
         track, place = cfg["track"], cfg["place"]
         clock, blink, choice, rank, recorded, top, frac = 0, 0x20, 0, -1, False, 0, f32(0.0)
+        if cfg.get("again"):                            # the replay's end screen: the list as the race's own left it, nothing put into it
+            rank, top, frac = final[cfg["again"]]
+            recorded = True
+        right_at = [right_at] if isinstance(right_at, int) else right_at or []
         for j in range(max(keep) + 1):
             if j:
                 clock += 2
@@ -359,8 +369,8 @@ def pages(game, out, graf, game1, spr, fnt):
                     rank = lists.add(kind, track, lst, cfg["time"], "MIL", cfg["team"], cfg["car"])
                     if cfg["best"] > 0:
                         lists.add(kind, track, 4, cfg["best"], "MIL", cfg["team"], cfg["car"])
-                if right_at is not None and j == right_at:
-                    choice, blink = 1, 0x20
+                if j in right_at:
+                    choice, blink = choice + 1, 0x20
                 for y in range(180, 200):
                     for x in range(320):
                         dk[y * 320 + x] = 1
@@ -369,9 +379,12 @@ def pages(game, out, graf, game1, spr, fnt):
                         dk[y * 320 + x] = 1
                 sx, sy, w, h, _ = gspr[0x27 + track - 1]
                 c.sprite(gspr, 0x27 + track - 1, (320 - (w + sx)) // 2 - (sx - (1 if sx < 0 else 0)) // 2, 4)
-                for k in range(2):
+                for k in range(3 if cfg.get("replay") else 2):
                     lit = choice == k and blink & 0x20
-                    c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 160 * k, 160, 184, gtxt[12 + k])
+                    if cfg.get("replay"):               # REPLAY, RACE AGAIN, EXIT in thirds: boxes of 106 from x 0, 106, 212 (0x47a4f ..)
+                        c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 106 * k, 106, 184, gtxt[11 + k])
+                    else:
+                        c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 160 * k, 160, 184, gtxt[12 + k])
                 y0 = int(f32(80.0 - f32(12.0 * frac)))
                 c.clip_text, c.clip_spr = (0x51, 0x8C), (0x50, 0x8C)
                 rows = lists.rows(kind, track, lst)
@@ -392,6 +405,7 @@ def pages(game, out, graf, game1, spr, fnt):
                 for i in range(64000):
                     ov[i] = 1 if c.px[i] else 0
                 write("end_%s_%d" % (run, j), c, dk, ov)
+        final[run] = (rank, top, frac)
 
 
 def main():

@@ -296,6 +296,13 @@ END_RUNS = [
      [("MIL", 4, 2, 3, 1, 140.125), ("CPU", 1, 3, 1, 1, 121.0), ("CPU", 2, 4, 2, 1, 130.5), ("CPU", 3, 5, 4, 0, 0.0)], [100, 400]),
     ("L3", "s2_track5_snow", 7, 1, 2, 99.0, 0.0, 1, 1,
      [("A", 1, 1, 2, 1, 99.0), ("CPU", 2, 2, 1, 1, 90.0), ("CPU", 3, 3, 3, 1, 101.5), ("CPU", 4, 4, 4, 1, 120.0)], [400]),
+    # menus row 10: the race can be run again (names R...): REPLAY and CONTINUE in halves, REPLAY first; R2 presses RIGHT in frame 300: CONTINUE lit; P1 is the replay's own screen
+    ("R1", "s2_track4_city", 4, 3, 1, 85.5, 29.5, 2, 3,
+     [("MIL", 2, 3, 1, 1, 85.5), ("CPU", 3, 4, 2, 1, 88.25), ("CPU", 4, 1, 3, 0, 0.0), ("CPU", 1, 2, 4, 0, 0.0)], [100, 231, 450]),
+    ("R2", "s2_track1_village", 1, 3, 3, 140.125, 45.0, 4, 2,
+     [("MIL", 4, 2, 3, 1, 140.125), ("CPU", 1, 3, 1, 1, 121.0), ("CPU", 2, 4, 2, 1, 130.5), ("CPU", 3, 5, 4, 0, 0.0)], [231, 302, 400]),
+    ("P1", "s2_track4_city", 4, 3, 1, 85.5, 29.5, 2, 3,
+     [("MIL", 2, 3, 1, 1, 85.5), ("CPU", 3, 4, 2, 1, 88.25), ("CPU", 4, 1, 3, 0, 0.0), ("CPU", 1, 2, 4, 0, 0.0)], [231, 400]),
 ]
 
 
@@ -308,7 +315,7 @@ class End:
         loc = container(game, "DATA/LOCAL.DAT")
         self.gtxt = [l for l in datfile.extract(loc, "GAME.TXT").decode("latin-1").replace("\r", "").split("\n") if l and not l.startswith("*")]
 
-    def draw(self, track, place, ptime, cars, clock, blink):
+    def draw(self, track, place, ptime, cars, clock, blink, replay=False, choice=0):
         """(the canvas of text and sprites, the passes of darkening) of a frame; cars: (name, team, car, place, done, time) of the four"""
         c, dk, fnt, gtxt = self.Canvas(), bytearray(64000), self.fnt, self.gtxt
         n = len([k for k in cars if k[4]])
@@ -328,7 +335,12 @@ class End:
         sx, sy, w, h, _ = self.gspr[0x27 + track - 1]
         c.sprite(self.gspr, 0x27 + track - 1, (320 - (w + sx)) // 2 - (sx - (1 if sx < 0 else 0)) // 2, 4)
         lit = bool(blink & 0x20)
-        c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 0, 320, 184, gtxt[15])
+        if replay:                                                          # REPLAY and CONTINUE in halves (0x4849f ..)
+            for k in range(2):
+                on = lit and choice == k
+                c.text_boxed(fnt[SMALL2 if on else SMALL], 3 if on else 1, 2, 160 * k, 160, 184, gtxt[11 if k == 0 else 15])
+        else:
+            c.text_boxed(fnt[SMALL2 if lit else SMALL], 3 if lit else 1, 2, 0, 320, 184, gtxt[15])
         c.text(fnt[SMALL], 1, 2, 38, y0, gtxt[16])
         for (nm, t, cr, pl, dn, tm) in cars:
             if not dn:
@@ -346,14 +358,17 @@ def end_screens(game, out, graf, game1, spr, fnt, helpers):
     end = End(game, game1, spr, fnt, helpers)
     lines = []
     for name, race, track, laps, place, ptime, best, team, car, cars, keep in END_RUNS:
-        clock, blink = 0, 0x20
+        clock, blink, choice = 0, 0x20, 0
+        replay = name[0] in "RP"
         lines.append("run %s %s %d %d %d %r %r %d %d %s %s" % (name, race, track, laps, place, ptime, best, team, car,
                                                                  " ".join("%s %d %d %d %d %r" % c for c in cars), ",".join(str(k) for k in keep)))
         for j in range(max(keep) + 1):
             if j:
                 clock += 2
                 blink += 2
-            c, dk = end.draw(track, place, ptime, cars, clock, blink)
+            if name == "R2" and j == 300:
+                choice, blink = 1, 0x20
+            c, dk = end.draw(track, place, ptime, cars, clock, blink, replay, choice)
             if j in keep:
                 ov = bytearray(64000)
                 for i in range(64000):

@@ -11,6 +11,8 @@
  *                                       (ints), total, lapt, best, speed, rpm, maxrpm, wrong, px, py, ph (floats)
  *   clock <seconds>                     the race's clock (the start lights)
  *   camera <x> <y> <h> <yaw> <pitch> <roll>
+ *   view <v> <follow>                   the view the scene is drawn in (1 the trackside cameras, 3 the chase camera) and the car it follows (s2hud_view)
+ *   band <name> <expected> <text>       the replay's band (s2hud_band) over the last frame's picture, compared with the expected picture
  *   frame <name> <steps> <top> <expected>  one s2hud_draw() of `steps` 20 ms steps; the picture is saved as <prefix>_<name>.rgb and, unless
  *                                       the expected file is -, must equal it (320 x 200 palette indices) in every pixel
  *   expect_cmd <name> <n> <x> <y> <tol> the frame's blitter list must hold a sprite of the leader's mark (command with the 10-bit x, y of
@@ -287,6 +289,29 @@ static int run_scenario(const char *ref, const char *prefix)
                 free_state.lt[k] = v[k];
                 free_state.rt[k] = v[5 + k];
                 free_state.sign[k] = sg[k] == '_' ? ' ' : sg[k];
+            }
+        } else if (sscanf(line, "view %d %d", &i, &n) == 2) {
+            s2hud_view(i, n);
+        } else if (!strncmp(line, "band ", 5)) {
+            char text[128];
+            CHECK(sscanf(line, "band %255s %255s %127[^\n]", a, b, text) == 3, "band line");
+            volatile uint8_t *fb = FB(0);                           /* (over the last frame's picture) */
+            s2hud_band_prepare(pal);
+            s2hud_band(fb, 0, text);
+            blit_model(fb, &captured);
+            save(prefix, a);
+            frames++;
+            snprintf(path, sizeof path, "%s/%s", ref, b);
+            uint32_t len;
+            uint8_t *want = slurp(path, &len);
+            CHECK(want && len == 64000, "expected frame %s", path);
+            if (want) {
+                int differ = 0, first = -1;
+                for (int k = 0; k < 64000; k++)
+                    if (fb[k] != want[k] && differ++ == 0) first = k;
+                CHECK(!differ, "band %s: %d pixels differ from the reference, first at x %d y %d (%02x, expected %02x)", a, differ, first % 320, first / 320,
+                      first >= 0 ? fb[first] : 0, first >= 0 ? want[first] : 0);
+                free(want);
             }
         } else if (sscanf(line, "clock %f", &secs) == 1) {
             race_clock = secs;
