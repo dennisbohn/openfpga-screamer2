@@ -104,6 +104,7 @@ static uint32_t tkg_pal[256];
 #define Y0 36
 #define Y1 172
 
+static int open_tracks = 7;                                     /* the tracks open on the save the screenshots were taken on (TA_OPEN: 3 for a new save) */
 static uint8_t only3d[S2G_PIC_BYTES];                           /* the map, the picture and the box's darkening, no text: what render() drew */
 
 /* the whole page as its own drawing makes it, with the arrows shown or not (the page's clock 0 or 64 hundredths): the text, banner and arrows are the pixels where it
@@ -115,7 +116,7 @@ static void page_full(const uint8_t *pic, int ta, int track, int a1, int arrows,
     if (ta) {
         int pos = 0;
         for (int i = 0; i < 7; i++) if (order[i] == track) pos = i;
-        struct ta p = { .cfg = 0, .cur = pos, .prev = pos, .n = 7, .t = 1.0f, .a1 = a1, .now = arrows ? 0 : 32, .t0 = 0, .fresh = 1 };
+        struct ta p = { .cfg = 0, .cur = pos, .prev = pos, .n = open_tracks, .t = 1.0f, .a1 = a1, .now = arrows ? 0 : 32, .t0 = 0, .fresh = 1 };
         ta_draw(&p, l, 0);
     } else {
         struct lg p = { .league = 0, .race = 1, .track = track, .asking = asking, .yes = yes, .a1 = a1, .fresh = 1, .now = arrows ? 0 : 32 };
@@ -279,6 +280,7 @@ int main(int argc, char **argv)
     if (zip_open(&zip, 3, SCRATCH, SCRATCH_MAX) != ZIP_OK || !s2gfx_init(&zip)) { fprintf(stderr, "zip / toolkit\n"); return 1; }
     if (!s2map_load(&zip)) { fprintf(stderr, "the maps\n"); return 1; }
     s2gfx_bkk("LEAG_0L.BKK", picture_buf[0], pic_pal[0]);
+    if (getenv("TA_OPEN") && *getenv("TA_OPEN")) open_tracks = atoi(getenv("TA_OPEN"));
     const char *only = getenv("ONLY"), *dump_name = getenv("DUMP");
     if (only && !*only) only = 0;
     if (dump_name && !*dump_name) dump_name = 0;

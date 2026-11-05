@@ -15,12 +15,18 @@ out="$root/build/check/trackmap"
 [ -f "$game/SCREAMER2.zip" ] || { echo "$game/SCREAMER2.zip is missing: name the game's folder"; exit 1; }
 py=python3
 "$py" -c "" 2>/dev/null || py=python
-mkdir -p "$out/idx_ta" "$out/idx_league" "$out/idx_taend"
+mkdir -p "$out/idx_ta" "$out/idx_league" "$out/idx_taend" "$out/idx_taclosed"
 rm -f "$out"/idx_*/* "$out"/*.rgb "$out"/*.png
 have=0
 if ls "$root"/build/check/dosbox_ta/*.png > /dev/null 2>&1; then
     "$py" -I "$root/tools/pages3d_idx.py" "$root/build/check/dosbox_ta" "$out/idx_ta"
     cp "$root/build/check/dosbox_ta/labels.txt" "$out/labels_ta.txt"
+    have=1
+fi
+if ls "$root"/build/check/dosbox_ta_closed/*.png > /dev/null 2>&1; then
+    mkdir -p "$out/idx_taclosed"
+    "$py" -I "$root/tools/pages3d_idx.py" "$root/build/check/dosbox_ta_closed" "$out/idx_taclosed"
+    cp "$root/build/check/dosbox_ta_closed/labels.txt" "$out/labels_taclosed.txt"
     have=1
 fi
 if ls "$root"/build/check/dosbox_ta_race/*.png > /dev/null 2>&1; then
@@ -64,7 +70,8 @@ MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -e TA_RAM=/b/
     cd /b/host/trackmap && gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_match host/trackmap_match.c $LIST -lm &&
     gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -DGU_MAX_VERT=1024 -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_whole host/trackmap_match.c $LIST -lm &&
     cd /b/check/trackmap &&
-    for k in ta taend league; do
+    for k in ta taclosed taend league; do
+        TA_OPEN=7; [ \$k = taclosed ] && TA_OPEN=3; export TA_OPEN
         [ -d idx_\$k ] && [ -f labels_\$k.txt ] && ls idx_\$k/*.idx > /dev/null 2>&1 || continue
         echo '== the cut blocks (the firmware): '\$k; /b/host/trackmap_match /game/SCREAMER2.zip /b/check/trackmap/idx_\$k /b/check/trackmap/labels_\$k.txt /b/check/trackmap/p_\$k
         echo '== the whole blocks (a unit without the limit): '\$k; /b/host/trackmap_whole /game/SCREAMER2.zip /b/check/trackmap/idx_\$k /b/check/trackmap/labels_\$k.txt /b/check/trackmap/w_\$k

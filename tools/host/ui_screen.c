@@ -1000,6 +1000,9 @@ static void draw_banner(int track, uint8_t *out)
 /* the championship's pages and end screen: league_screen.c */
 #include "league_screen.c"
 
+/* time attack's pages: trackpage_screen.c */
+#include "trackpage_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -1025,6 +1028,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_league_end(ref, prefix);
     check_league_flow(prefix);
     check_pages3d(prefix);
+    check_trackpages(prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
     int stored_banners = s2gfx_banner(1) != 0x13;
