@@ -447,8 +447,8 @@ static void drive(int self)
             if(j == self || F(o, 0x500) >= speed) continue;
             const float p[3] = { F(o, 0x4d8), 0.0f, F(o, 0x4e0) };
             const float s = share_along(p, A, B);
-            if(!(s >= 0.0f) || s > 1.0f || s >= best) continue;
-            const float om = 1.0f - s, r = (float)(I(o, 0x4c8) + I(c, 0x4c8)) * 1.2f;
+            if(!(s >= -0.2f) || s > 1.0f || s >= best) continue;       /* (a car up to a fifth of the way back from where it aims from counts too) */
+            const float om = 1.0f - s, r = (float)((I(o, 0x4c8) + I(c, 0x4c8)) * 12) / 10.0f;
             float d[3];
             for(int k = 0; k < 3; k++) d[k] = (A[k] * om + B[k] * s) - p[k];
             if(sqrtf(d[1] * d[1] + d[0] * d[0] + d[2] * d[2]) >= r) continue;
