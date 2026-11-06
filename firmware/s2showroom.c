@@ -168,11 +168,14 @@ int s2showroom_chosen(void)
     return chosen_car;
 }
 
-void s2showroom_draw(struct blit_list *l)
+/* the cars (all of them on the ring, or car `one` alone at `at` turned a1 if one >= 0) into the back buffer; a box of the picture and the cars darkened through the table before the page's
+   sprites and text are drawn over it (the CPU does it: the units are done first) */
+static void showroom_draw(struct blit_list *l, int one, const int32_t at[3], int a1, const uint8_t *table, int bx, int by, int bw, int bh)
 {
     const int buffer = l->buffer;
     if (!n_cars) {                                          /* (no cars: the picture alone) */
         s2gfx_flush();
+        if (table) s2gfx_dark_fb(FB(buffer), bx, by, bw, bh, table);
         blit_start(l, buffer);
         return;
     }
@@ -180,29 +183,55 @@ void s2showroom_draw(struct blit_list *l)
     int order[S2SHOW_MAX];
     float key[S2SHOW_MAX];
     int m = 0;
-    for (int i = 0; i < n_cars; i++) {
-        const float d = s2scene_dist2(&cam, (float)car[i].pos[0], (float)car[i].pos[1], (float)car[i].pos[2]);
-        int j = m++;
-        for (; j > 0 && key[j - 1] < d; j--) {                  /* far first */
-            order[j] = order[j - 1];
-            key[j] = key[j - 1];
+    if (one >= 0) {
+        order[m++] = one;
+    } else {
+        for (int i = 0; i < n_cars; i++) {
+            const float d = s2scene_dist2(&cam, (float)car[i].pos[0], (float)car[i].pos[1], (float)car[i].pos[2]);
+            int j = m++;
+            for (; j > 0 && key[j - 1] < d; j--) {                  /* far first */
+                order[j] = order[j - 1];
+                key[j] = key[j - 1];
+            }
+            order[j] = i;
+            key[j] = d;
         }
-        order[j] = i;
-        key[j] = d;
     }
-    s2scene_begin(car[0].mlb, buffer, fresh);
+    s2scene_begin(car[one >= 0 ? one : 0].mlb, buffer, fresh);
     fresh = 0;
     track_reflection_rate(0.002f);                          /* how fast the windows' picture slides: the page's value (measured: the offsets of the original's cars at their places) */
     for (int j = 0; j < m; j++) {
         const struct car *c = &car[order[j]];
         struct track_block b[CAR_BLOCKS];
-        const struct car_look lk = { (float)c->pos[0], (float)c->pos[2], (float)c->pos[1], s2scene_rad(c->a1), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0 };
+        const int32_t *pos = one >= 0 ? at : c->pos;
+        const struct car_look lk = { (float)pos[0], (float)pos[2], (float)pos[1], s2scene_rad(one >= 0 ? a1 : c->a1), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0 };
         const int nb = car_mesh_draw(c->mesh, &lk, &cam, b);
         s2scene_mlb(c->mlb);
         s2scene_blocks_refl(&cam, b, nb, track_object_reflection(&cam, lk.x, lk.y, lk.z, &car[order[j]].refl));
     }
     s2scene_end();
+    if (table) {
+        while (RS_DRAW & RS_BUSY)
+            ;
+        s2gfx_dark_fb(FB(buffer), bx, by, bw, bh, table);
+    }
     blit_start(l, buffer);
+}
+
+void s2showroom_draw(struct blit_list *l)
+{
+    showroom_draw(l, -1, 0, 0, 0, 0, 0, 0, 0);
+}
+
+void s2showroom_draw_dark(struct blit_list *l, const uint8_t table[256], int x, int y, int w, int h)
+{
+    showroom_draw(l, -1, 0, 0, table, x, y, w, h);
+}
+
+void s2showroom_draw_one(struct blit_list *l, int k, int32_t x, int32_t y, int32_t z, int a1)
+{
+    const int32_t at[3] = { x, y, z };
+    showroom_draw(l, k >= 0 && k < n_cars ? k : 0, at, a1, 0, 0, 0, 0, 0);
 }
 
 /* ------------------------------------------------------------------------------------------------ the plate */
