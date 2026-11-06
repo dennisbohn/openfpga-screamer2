@@ -123,6 +123,24 @@ feel of the car, so `s2car.c` keeps the place as a float (words 0x4d8 and 0x4e0,
 stay whole numbers (the spring and the wheels' heights are in units of the springs' travel, 30). `-DS2_WHOLE_PLACES=1`
 cuts the place as the game does; the host test uses it to follow the reference step for step.
 
+**Decision 2026-11-06: the place stays a float.** The owner found the Pocket's start sluggish against the original in DOSBox (about 50 frames a second). The reference
+routines say why, and that it is a matter of the frame rate and of where the car stands: the same full-throttle start from the grid with the game's whole-number places
+(`ref/traces`, `a_full_throttle`, team 1 car 2, speed in mph) at 20 ms steps (50 frames a second, DOSBox) and at the port's pace of 62 ms (16 frames a second, about what the
+machines of 1995 did):
+
+| Track | 62 ms: after 1 s / 2 s / 4 s | 20 ms: after 1 s / 2 s / 4 s |
+|---|---|---|
+| 1 England | 22.5 / 47.8 / 102.1 | 39.6 / 85.1 / 104.0 |
+| 3 Egypt | 20.6 / 44.9 / 89.0 | 20.2 / 38.5 / 74.4 |
+| 4 California | 26.7 / 59.3 / 115.4 | 28.8 / 61.8 / 89.6 |
+| 7 The Tunnel | 22.0 / 48.9 / 105.1 | 19.4 / 42.8 / 90.1 |
+
+The cut-off of every frame goes towards the map's origin and comes back as speed, once a frame: with more frames it grows, and depending on whether the car heads towards or away
+from the origin it adds speed (England's grid at 50 frames a second: nearly twice the speed after a second) or takes it (Egypt and the Tunnel: 14 to 16 % less after two seconds).
+Our float car start (22.6 mph after a second on England) is the original's at 16 frames a second; the original's start is not one number, it moves with the machine and the
+track. Not imitated, and no launch tuning: the owner decided to keep the float values (the DOS behaviour cannot be imitated in a way that holds on every track). The tracks 2, 5
+and 6 were not measured.
+
 ## The step
 
 One call of `s2car_step` is 20 ms; the viewer calls it once per video frame since the last picture, at most
