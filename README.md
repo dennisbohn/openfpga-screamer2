@@ -52,5 +52,4 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
 - **Animated scenery (the race):** the tracks' moving things run along their paths as the original runs them at DETAIL HIGH (`firmware/s2anim.c`): the helicopters of
   Columbia, Egypt and Switzerland (Egypt's comes 7 s into the racing), England's and Columbia's flocks of birds, California's airship, cable cars and bulldozers, Finland's trains;
   and the sounds that stand in places (crowds, market, mill, traffic, works, wolves, cows, ...), heard from the camera. Their materials are the track's `MISC.MLB`, which the
-  track image now holds. Open: the helicopters' rotors are see-through (the game's routine 208) and need the see-through table; until it is there they show as a black square
-  with a sand-coloured disc. Checked against the running original's memory (`tools/s2/check_anim_s2.sh`, `tools/s2/dosbox_anim.py`). Docs: docs/development.md, "Animated scenery".
+  track image now holds. The helicopters' rotors are see-through (the game's routine 208) and are drawn through the wheel smoke's table (docs/development.md, "Wheel smoke and shadows"). Checked against the running original's memory (`tools/s2/check_anim_s2.sh`, `tools/s2/dosbox_anim.py`). Docs: docs/development.md, "Animated scenery".

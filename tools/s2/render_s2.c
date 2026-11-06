@@ -94,6 +94,14 @@ static uint8_t *game_file(const char *name, uint32_t *size)
 
 /* what the builder reports as track_build_info.misc_delta, found in the image: MISC.MLB's records are the last of the car materials in front of the MLB, so the place
    where they all agree with the container's (the routine and the two extents of each) */
+/* a material record's routine, 208 and 224 as one: the see-through step (firmware/smg.h) makes 224 of both */
+static uint32_t routine_of(const uint8_t *rec)
+{
+    uint32_t r;
+    memcpy(&r, rec, 4);
+    return r == 208 ? 224 : r;
+}
+
 static int32_t misc_delta(const uint8_t *gfx, uint32_t gfx_size)
 {
     static uint8_t misc[0x40000];
@@ -103,7 +111,7 @@ static int32_t misc_delta(const uint8_t *gfx, uint32_t gfx_size)
     uint32_t mlb_off = (uint32_t)(track_mlb() - img), nmisc = s2_mlb_records(misc, e.size), total = (mlb_off - 0x100) / 16;
     for (uint32_t i = total - nmisc + 1; i-- > 0;) {
         uint32_t k = 0;
-        while (k < nmisc && !memcmp(img + 0x100 + 16 * (i + k), misc + 16 * k, 4) && !memcmp(img + 0x100 + 16 * (i + k) + 8, misc + 16 * k + 8, 8)) k++;
+        while (k < nmisc && routine_of(img + 0x100 + 16 * (i + k)) == routine_of(misc + 16 * k) && !memcmp(img + 0x100 + 16 * (i + k) + 8, misc + 16 * k + 8, 8)) k++;
         if (k == nmisc) return (int32_t)(0x100 + 16 * i - mlb_off);
     }
     return 0;
@@ -407,6 +415,8 @@ int main(int argc, char **argv)
     if (!track_open(TEX_FILE)) { fprintf(stderr, "track_open: not a track image (%zu bytes)\n", n); return 1; }
     int pieces = track_init();
     if (!pieces) { fprintf(stderr, "track_init: the image does not fit the limits (objects > MAX_OBJ or pieces > MAX_PIECES)\n"); return 1; }
+    struct track_fx fx;
+    if (track_fx(&fx)) rs_smg = fx.table;               /* the image's see-through table (firmware/smg.h), as the race loads it into the rasterizer (smg_load) */
     int loop = road_build();
     printf("image %zu bytes, %d placements, road loop %d points, %.0f units\n", n, pieces, loop, road_length());
     int failures = check_models();
@@ -440,8 +450,7 @@ int main(int argc, char **argv)
             s2anim_begin();
             for (float t = clock - 1.0f; t < clock + 0.001f; t += 0.02f) s2anim_frame(t < 0.0f ? 0.0f : t, px, py, lap);   /* (the last second, so that a row that starts by the player's coming near has started) */
             s2anim_frame(clock, px, py, lap);
-            nobj = show ? s2anim_objects(objs, S2ANIM_OBJECTS) : 0;
-            if (getenv("NOROTOR"))
+            nobj = show ? s2anim_objects(objs, S2ANIM_OBJECTS) : 0;            if (getenv("NOROTOR"))
                 for (int k = 0; k < nobj; k++) {
                     scenery_make = objs[k].make;
                     objs[k].make = scenery_without_rotors;

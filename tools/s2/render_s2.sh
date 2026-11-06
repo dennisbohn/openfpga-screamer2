@@ -34,7 +34,7 @@ shift 2
 # the car physics behind firmware/s2car.h: the real s2car*.c when there is s2car.c, else the stand-in (firmware/Makefile)
 car=s2car_stub.c
 if [ -f "$root/firmware/s2car.c" ]; then car=$(cd "$root/firmware" && ls s2car*.c | grep -v '^s2car_stub.c$' | tr '\n' ' '); car="$car s2params.c race.c s2ghost.c"; fi
-LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c s2anim.c s2env.c track_build.c tb_gfx.c tb_hud.c tb_spl.c tb_mmp.c $car"
+LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c s2anim.c s2env.c smg.c track_build.c tb_gfx.c tb_hud.c tb_spl.c tb_mmp.c $car"
 # the real car physics reads its numbers from the unzipped game (DATA/GAME.DAT, DATA/MAPn.DAT): $GAME_DIR, default as elsewhere
 game=${GAME_DIR:-C:/GOG Games/Screamer 2}
 if command -v cygpath >/dev/null 2>&1; then game_mount=$(cygpath -wa "$game"); else game_mount=$game; fi

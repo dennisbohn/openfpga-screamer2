@@ -163,7 +163,10 @@ def mesh_materials(x):
 
 
 def check_misc(game, image, track, negative=False):
-    """the `misc` mode: prints what was checked, or raises. negative: one pixel of the first texture the meshes use is changed in the copy of the image first: the check must fail"""
+    """the `misc` mode: prints what was checked, or raises. negative: one pixel of the first texture the meshes use is changed in the copy of the image first: the check must fail.
+    A material of routine 208 or 224 (the rotor, the smokes) is in the image as the see-through step made it (firmware/smg.h): a copy of the texture with its texels turned into
+    the hardware's table rows, the record routine 224. Of those the check wants the same size, texel 0 staying 0 and no other texel becoming 0, one row for each texel (the same in
+    every material of the image) and the rows within 1 .. 62; the table itself is checked by check_smg_s2.sh"""
     import datfile
     img = bytearray(open(image, "rb").read())
     mlb_off, = struct.unpack_from("<I", img, 8)
@@ -173,8 +176,10 @@ def check_misc(game, image, track, negative=False):
     rec = lambda m, k: struct.unpack_from("<4i", m, 16 * k)
     total = (mlb_off - 0x100) // 16
     start = None
+    see = lambda r: r in (208, 224)                             # the see-through step makes 224 of both
+    norm = lambda r: 224 if see(r) else r
     for i in range(total - nmisc, -1, -1):                      # the last place where MISC's records are (a routine and the extents each)
-        if all(rec(img[0x100:], i + k)[0::2][0] == rec(misc, k)[0] and rec(img[0x100:], i + k)[2:] == rec(misc, k)[2:] for k in range(nmisc)):
+        if all(norm(rec(img[0x100:], i + k)[0]) == norm(rec(misc, k)[0]) and rec(img[0x100:], i + k)[2:] == rec(misc, k)[2:] for k in range(nmisc)):
             start = i
             break
     assert start is not None, "MISC.MLB's records are not in the image"
@@ -185,18 +190,25 @@ def check_misc(game, image, track, negative=False):
     if negative:                                                # one pixel of the first textured material's first frame
         for nm in names[:1]:
             for m in sorted(mesh_materials(datfile.extract(g, nm + ".3DX"))):
-                b = rec(img[0x100:], start + m // 16)
+                a, b = rec(misc, m // 16), rec(img[0x100:], start + m // 16)
                 if b[1] > 0:
-                    img[mlb_off + struct.unpack_from("<I", img, mlb_off + b[1] + 8)[0] + 256 + 1] ^= 0xFF
+                    at = mlb_off + struct.unpack_from("<I", img, mlb_off + b[1] + 8)[0] + 256 + 1
+                    if see(a[0]):                               # a see-through texture: a texel that was 0 is drawn, or one that was not is cut
+                        img[at] = 0 if misc[struct.unpack_from("<I", misc, a[1] + 8)[0] + 256 + 1] else 7
+                    else:
+                        img[at] ^= 0xFF
                     break
     mlb = bytes(img[mlb_off:])
+    lut = {}                                                    # the see-through step's texel -> row, one for all the materials
+    n_see = 0
     for nm in names:
         x = datfile.extract(g, nm + ".3DX")
         for m in sorted(mesh_materials(x)):
             k = m // 16
             assert m % 16 == 0 and 0 <= k < nmisc, (nm, m)
             a, b = rec(misc, k), rec(img[0x100:], start + k)
-            assert (a[0], a[2], a[3]) == (b[0], b[2], b[3]), (nm, m, a, b)
+            assert (norm(a[0]), a[2], a[3]) == (b[0], b[2], b[3]), (nm, m, a, b)
+            assert b[0] == (224 if see(a[0]) else a[0]), (nm, m, a, b)
             n_mat += 1
             if a[1] <= 0:                                       # a flat colour: no texture
                 assert b[1] == a[1], (nm, m)
@@ -208,10 +220,17 @@ def check_misc(game, image, track, negative=False):
                 po = struct.unpack_from("<I", misc, a[1] + 8 + 4 * f)[0]
                 pi = struct.unpack_from("<I", mlb, b[1] + 8 + 4 * f)[0]
                 for row in range(a[3]):
-                    assert mlb[pi + 256 * row:pi + 256 * row + a[2]] == misc[po + 256 * row:po + 256 * row + a[2]], (nm, m, f, row)
+                    want, got = misc[po + 256 * row:po + 256 * row + a[2]], mlb[pi + 256 * row:pi + 256 * row + a[2]]
+                    if not see(a[0]):
+                        assert got == want, (nm, m, f, row)
+                        continue
+                    for o, n in zip(want, got):
+                        assert (o == 0) == (n == 0) and n <= 62 and lut.setdefault(o, n) == n, (nm, m, f, row, o, n, lut.get(o))
                 n_fr += 1
-    print("track %d: MISC.MLB's %d records in the image at record %d (the faces move by %d), the %d materials of %s with their %d frames equal the container's" %
-          (track, nmisc, start, delta, n_mat, " ".join(names), n_fr))
+            n_see += see(a[0])
+    print("track %d: MISC.MLB's %d records in the image at record %d (the faces move by %d), the %d materials of %s with their %d frames equal the container's"
+          " (%d see-through ones turned into the table's rows: %d texels, one row each)" %
+          (track, nmisc, start, delta, n_mat, " ".join(names), n_fr, n_see, len(lut)))
 
 
 def check_limits(game, track):

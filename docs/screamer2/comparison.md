@@ -180,7 +180,7 @@ commits). Sizes: small = under a day, medium = 1 to 2 days, large = 3 days or mo
 | ~~Hardware: 7-bit see-through table, routine 208~~ not needed: done in the image (docs/development.md "Wheel smoke and shadows"; the reflection's wrap likewise, E10) | - | - |
 | Fade by depth (night, fog) | medium to large | new unit logic; may stay out at first |
 | Car, physics, wheels, body, road kinds, damage | large | the heart; 8,000-line reference |
-| Opponents, skills, cones, animations (`.PTH`), cameras (`.MCM`), mirror | large | together (the animations are built, `s2anim.c`; their rotors wait for the see-through table) |
+| Opponents, skills, cones, animations (`.PTH`), cameras (`.MCM`), mirror | large | together (the animations are built, `s2anim.c`, their rotors through the see-through table) |
 | HUD, cockpits, dashboards | medium | the race screen in the chase camera is done (docs/screamer2/hud.md); cockpits, dashboards, mirror open |
 | Sound (new tables), CD cue | small | |
 | Menus (3D rooms, `.BKK`, league), intro, attract race | large | a plain menu first: small |

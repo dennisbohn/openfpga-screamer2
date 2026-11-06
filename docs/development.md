@@ -394,6 +394,7 @@ no four cars of any team make it larger than 0.82 MB of cars (the five cars of t
 | image now (the four teams' cars), bytes | 4,544,512 | 5,085,696 | 5,073,920 | 5,265,408 | 4,713,216 | 5,391,616 | 3,544,064 |
 | worst grid (four of the dearest cars), at most | 4.65 MB | 5.19 MB | 5.17 MB | 5.37 MB | 4.81 MB | 5.49 MB | 3.64 MB |
 | image with the track's `MISC.MLB` (the animated scenery's materials, "Animated scenery"; the default grid), bytes | 4,619,520 | 5,189,120 | 5,148,672 | 5,402,624 | 4,784,128 | 5,491,200 | 3,618,560 |
+| image with `MISC.MLB`, the see-through copies and table ("Wheel smoke and shadows"; the default grid), bytes | 4,711,168 | 5,628,928 | 5,318,144 | 5,536,512 | 4,906,752 | 5,688,832 | 3,792,640 |
 
 All of them in the 7 MB window (7,340,032 bytes); the builder's scratch needs 0.32 to 0.71 MB (track 4; 0.25 to 0.57 MB before the unpacked `MISC.MLB` joined it), and sits above the cars'
 blobs from `0x12E4_0000` (1.75 MB). The load takes less time than before: the first track load reads 0.20 s of cars at the
@@ -549,8 +550,9 @@ original's order for a moving object's blocks, its level of detail at 2,000 and 
 the cars' (its records in front of the `MLB` after the cars', its textures after the cars' libraries; `track_build_s2()` and `make_track_s2.py`; the image grows by 74 to 136 KB), and `s2anim_load()` moves each
 mesh's faces onto those records by the builder's `misc_delta` (`s2_faces_onto()`, the cars' routine). The helicopter's rotor is a second block (`fai`, a flat quad of 5,600 units) with a **routine 208 material of 20
 frames** (64 x 64, the disc as texel values 33 to 41, 0 outside): a see-through material that turns with the texture clock (the geometry unit's frame is the frames x the clock, one turn of the clock in 3.33 s;
-the object has no frames of its own, header `+0x10` = -1); the body has two more faces of it (the tail rotor). **That part needs the see-through table** (the game's routines 224 / 208): until it is there the
-geometry unit draws routine 208 as an opaque picture, so the rotor shows as a black square with a sand-coloured disc in it (palette entry 33) and the tail rotor as a small sand-coloured leaf. Everything else is drawn.
+the object has no frames of its own, header `+0x10` = -1); the body has two more faces of it (the tail rotor). **That part needs the see-through table** (the game's routines 224 / 208): the geometry unit draws routine 208 as an opaque picture (a black square with a sand-coloured disc in it,
+palette entry 33), so the image builder's see-through step (`firmware/smg.h`, "Wheel smoke and shadows") turns the rotor's material, as every material of routine 208, into routine 224 on a copy of its texture with
+the texels as the table's rows (14 texels on tracks 2, 3 and 6, `check_anim_s2.sh` checks the copy), and the rotor and the tail rotor are drawn through the table like the smoke: a translucent disc over the body, as in the original's screenshots.
 
 **Sound.** A row with a sample (the fourth column: a sample of the track's `AMBIENT<n - 1>.DTR` in `SOUND.DAT`, numbered from 0x40: bird, mill, horse, crowd, market, waterfall, jungle, helicopter, works, traffic,
 tram, train, wolf, cow; the `SOUND_FX` list of the `.DTR` is empty on every track) has a looping voice while it is heard: an `@` row while it is alive, an object while it is shown. It is heard from the camera within
@@ -592,8 +594,8 @@ the headings and climbs the original stores in the objects (`+0x18`, `+0x14`):
 That is every row of every track, the birds' laps and once-only runs (England: three laps), the helicopters' starts (10 s, 60 s) and the trains, which this comparison found out (the path's span, above).
 The helicopter's picture, from the 14 screenshots taken where it came near the camera on Egypt (`anim_shots.py`): its body is where the original draws it and has its shape, tilt and colours
 (the climb's sign: with the other sign the tail boom and the cockpit are drawn elsewhere, with this one on the original's pixels by eye; 95 to 98 % of the pixels the firmware draws of the body are pixels the original
-changed, but only 26 to 45 % have a colour within 24 of 765 of the original's: the object is 10 to 30 pixels across, the original maps its textures without perspective correction, the screenshot's frame is known to a
-frame or two, and the rotors are drawn opaque). England's and Columbia's birds are flocks of white cards that face the screen, as in the original's screenshot of Columbia, not compared pixel for pixel. The airship, the cable cars,
+changed, but only 17 to 62 % have a colour within 24 of 765 of the original's (26 to 45 % while the rotors were still drawn opaque): the object is 10 to 30 pixels across, the original maps its textures without perspective correction and the screenshot's frame is known to a
+frame or two; the rotor is a translucent disc over the body in both). England's and Columbia's birds are flocks of white cards that face the screen, as in the original's screenshot of Columbia, not compared pixel for pixel. The airship, the cable cars,
 the bulldozers and the trains were never in sight of the camera in the recordings (the driver's lap passes none of them close): their positions and angles are equal to the original's numbers, their pictures
 are not compared with the original's.
 
