@@ -764,7 +764,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         if (!veiled) hw_blit(&back);
         pal_faded(pal, 0x8000);
         if (attract_mode) {                                     /* the picture out of white at the third stage, and into black at the end */
-            uint32_t ap[256];
+            static uint32_t ap[256];                            /* (not on the stack: the race's 5.2 of 8 KB) */
             if (s2att_palette(pal, &att_view, ap))
                 for (int i = 0; i < 256; i++) VID_PAL[i] = ap[i];
         }
