@@ -34,6 +34,7 @@ static struct kind kinds[KINDS];
 static uint8_t mesh_mem[MESH_BYTES] __attribute__((aligned(4)));
 static int nkinds, spark_kind[2];       /* the sparks' sets' meshes: [1] AZTRI (set 1, the touching cars'), [0] AZ1TRI (the walls'); -1 if the track has none */
 static struct prop obst[S2PROPS_OBSTACLES], spark[S2PROPS_SPARKS];
+static int32_t home[S2PROPS_OBSTACLES][2];            /* where an obstacle stands (x, z of the list: a new race stands it there again, whatever became of it) */
 static struct track_block block[S2PROPS_OBSTACLES];   /* an obstacle's picture as it lies (made when it is drawn, again after it moved) */
 static int nobst, nlive;                /* the obstacles; the sparks flying */
 static float lo[3], hi[3];              /* the obstacles' extent in x, height and z: a car further than 2,000 / 200 outside it knocks none */
@@ -99,7 +100,9 @@ int s2props_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t
         const uint8_t *q = scratch + 8 + 0x38 * (uint32_t)i;
         const int32_t row = (int32_t)rd32(q + 0xc);
         if(row < 0 || row >= rows || rowkind[row] < 0) continue;
-        obst[nobst] = (struct prop){ { (float)(int32_t)rd32(q + 4), 0.0f, (float)(int32_t)rd32(q + 8) }, { 0 }, { 0 }, 0.0f, (uint8_t)rowkind[row], 0, 0, 1 };
+        home[nobst][0] = (int32_t)rd32(q + 4);
+        home[nobst][1] = (int32_t)rd32(q + 8);
+        obst[nobst] = (struct prop){ { 0 }, { 0 }, { 0 }, 0.0f, (uint8_t)rowkind[row], 0, 0, 1 };
         nobst++;
     }
     return nobst;
@@ -129,13 +132,15 @@ static void widen(const float p[3])
 }
 
 /* 0x30b29: on the ground at its place (the height there, 0 where there is none), the road's heading there, leant to the ground's slope; not flying, not knocked */
-static void stand(struct prop *o)
+static void stand(struct prop *o, const int32_t at[2])
 {
     static float heading;                               /* (the game keeps the last heading found: 0x11cddc) */
     int held, h = 0, n[3] = { 0, 0, 0 }, kind;
-    const int found = track_ground_s2((int)o->p[0], (int)o->p[2], &held, &h, n, &kind);
+    const int found = track_ground_s2(at[0], at[1], &held, &h, n, &kind);
+    o->p[0] = (float)at[0];
     o->p[1] = found ? (float)h : 0.0f;
-    s2car_road_near((int)o->p[0], (int)o->p[2], &heading);
+    o->p[2] = (float)at[1];
+    s2car_road_near(at[0], at[1], &heading);
     o->a[1] = heading;
     lean(o, n);
     o->v[0] = o->v[1] = o->v[2] = 0.0f;
@@ -153,7 +158,7 @@ void s2props_begin(void)
     race_step_hook = s2props_step;
     for(int k = 0; k < 3; k++) { lo[k] = 1e30f; hi[k] = -1e30f; }
     for(int i = 0; i < nobst; i++) {
-        stand(&obst[i]);
+        stand(&obst[i], home[i]);
         widen(obst[i].p);
     }
 }
@@ -205,18 +210,18 @@ static void fly(struct prop *o)
             if(fabsf(a) > 1.570796370506286f) a = s2car_ang_diff(a, PI_F);
             const float b = a * 2.0f, s = sinf(b), c = cosf(b);
             const float vx = o->v[0] * c - o->v[2] * s, vz = o->v[2] * c + o->v[0] * s;
-            const float k = (float)((double)cosf(a) * 0.5);
+            const float k = cosf(a) * 0.5f;
             o->v[0] = vx * k;
             o->v[2] = vz * k;
-            o->v[1] = (float)((double)o->v[1] * 0.5);
+            o->v[1] *= 0.5f;
         }
     }
     if((float)g >= o->p[1]) {
         cover[3]++;
         o->p[1] = (float)g;
-        o->v[0] = (float)((double)o->v[0] * 0.7);
-        o->v[2] = (float)((double)o->v[2] * 0.7);
-        o->v[1] = fabsf((float)((double)o->v[1] * 0.7));
+        o->v[0] *= 0.7f;
+        o->v[2] *= 0.7f;
+        o->v[1] = fabsf(o->v[1] * 0.7f);
         if(sqrtf(o->v[1] * o->v[1] + o->v[0] * o->v[0] + o->v[2] * o->v[2]) < 300.0f) {
             o->on = 0;
             cover[4] += !off;
@@ -251,7 +256,7 @@ static void knock(struct s2car_state *c, int player)
         if(!(sqrtf(qx * qx + qz * qz) < reach)) continue;
         const int32_t r = (int32_t)(o->p[0] + o->p[2]);
         const float way = (float)((r & 15) - 7) * 0.0314159281f + RF(c, 0x508);      /* the car's way, turned by the obstacle's place: a chance */
-        const float sp = (float)((double)RF(c, 0x500) * 1.4 * 111.0);
+        const float sp = RF(c, 0x500) * 1.4f * 111.0f;
         o->v[0] = sinf(way) * sp;
         o->v[2] = -cosf(way) * sp;
         o->v[1] = sinf(RF(c, 0x50c) + 0.261799395f) * sp;
@@ -276,8 +281,8 @@ void s2props_spark(const float at[3], const float dir[3], float hit, int set)
         s->p[0] = at[0];
         s->p[1] = at[1] + 100.0f;
         s->p[2] = at[2];
-        s->v[0] = (float)((double)(rand_() % 3000) + (double)dir[0] * 0.9 + -1500.0);
-        s->v[2] = (float)((double)(rand_() % 3000) + (double)dir[2] * 0.9 + -1500.0);
+        s->v[0] = (float)(rand_() % 3000) + dir[0] * 0.9f + -1500.0f;
+        s->v[2] = (float)(rand_() % 3000) + dir[2] * 0.9f + -1500.0f;
         s->v[1] = (float)(rand_() % 2000 + 1000);
         s->a[0] = (float)(rand_() % 500) * 0.012566371f;
         s->a[2] = (float)(rand_() % 500) * 0.012566371f;
@@ -366,8 +371,6 @@ static int make_spark(int id, const struct track_cam *cam, struct track_object *
 int s2props_objects(const struct track_cam *cam, struct track_object *objs, int max)
 {
     int n = 0;
-    float f[3], r[3], u[3];
-    track_cam_axes(cam, f, r, u);
     const float far = track_far() + 1000.0f;            /* (an object further than the far plane and its own reach cannot be seen: the drawing would leave it out) */
     for(int i = 0; i < nobst && n < max; i++) {
         const struct prop *o = &obst[i];
