@@ -29,6 +29,9 @@ void s2fx_reset(void);
    hundredths (the game's T, which the dispersion goes by), followed the car the camera chases (its puffs are carried), -1 for none */
 void s2fx_update(struct s2car_state *const *cars, int n, int steps, uint32_t clock, int followed);
 
+/* The shadow of car `car` (-1: none) is left out of s2fx_objects() from now on: the views from inside the car take the car and its shadow off the draw list (STARTL.EXE 0x2b6b4) */
+void s2fx_hide_shadow(int car);
+
 /* The shadows and the puffs for track_draw_cam(), at most max objects, seen from cam; returns how many */
 int s2fx_objects(const struct track_cam *cam, struct s2car_state *const *cars, int n, struct track_object *objs, int max);
 
