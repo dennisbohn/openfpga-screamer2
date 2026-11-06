@@ -64,7 +64,7 @@ int s2anim_paths_load(struct s2anim_paths *ps, const uint8_t *p, uint32_t size, 
     if(size < 4) return 0;
     int32_t count = rd32(p);
     for(int32_t i = 0; i < count && at + 100 <= size; i++) {
-        int number = base + (slot_of ? slot_of(p + at) : map_slot(p + at));
+        const int slot = slot_of ? slot_of(p + at) : map_slot(p + at), number = slot < 0 ? -1 : base + slot;
         struct s2anim_path q = { { { 0, 0 }, { 0, 0 }, { 0, 0 } }, rdf(p + at + 0x28), rdf(p + at + 0x2C), 1 };
         at += 100;
         for(int k = 0; k < 3; k++) {
