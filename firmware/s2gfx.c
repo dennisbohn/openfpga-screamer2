@@ -488,6 +488,13 @@ void s2gfx_text_boxed(struct blit_list *l, int font_no, int colour, int space, i
 
 void s2gfx_game_sprite(struct blit_list *l, int n, int x, int y) { sprite_of(&game, l, n, x, y); }
 void s2gfx_game_sprite_centred(struct blit_list *l, int n, int y) { sprite_centred_of(&game, l, n, y); }
+int s2gfx_game_sprite_info(int n, int *x, int *w)
+{
+    if (!sprite_ok(&game, n)) return 0;
+    *x = game.img[n].x;
+    *w = game.img[n].w;
+    return 1;
+}
 int s2gfx_game_text(struct blit_list *l, int font_no, int colour, int space, int x, int y, const char *s) { return text_of(&game, l, font_no, colour, space, x, y, s); }
 void s2gfx_game_text_centred(struct blit_list *l, int font_no, int colour, int space, int y, const char *s) { text_centred_of(&game, l, font_no, colour, space, y, s); }
 

@@ -103,6 +103,8 @@ int s2gfx_banner(int track);
 int s2gfx_game_init(struct zip *z);
 void s2gfx_game_sprite(struct blit_list *l, int n, int x, int y);
 void s2gfx_game_sprite_centred(struct blit_list *l, int n, int y);
+/* the sprite's x offset and width (the original's table 0x124210, records of 0x14 bytes: x at +0, the width at +8): 1 if there is such a sprite */
+int s2gfx_game_sprite_info(int n, int *x, int *w);
 int s2gfx_game_text(struct blit_list *l, int font, int colour, int space, int x, int y, const char *s);
 void s2gfx_game_text_centred(struct blit_list *l, int font, int colour, int space, int y, const char *s);
 
