@@ -1081,7 +1081,7 @@ static void attack_race(struct zip *z, int *cars, int *overlay)
     race_laps = free_run ? 1 : 3;                                           /* (0x339e7: time attack three laps, the free run one that does not end) */
     attack_mode = free_run ? 2 : 1;
     for (;;) {
-        const struct s2gh_head *g = !free_run && s2save_get(S2S_GHOST) == 0 ? s2gh_ghost(n, s2save_get(S2S_DAMAGE)) : 0;
+        const struct s2gh_head *g = !free_run && s2save_get(S2S_GHOST) == 0 ? s2gh_ghost(n, race_damage_key()) : 0;
         race_ghost = g;
         if (g) race_grid[1] = (struct s2_pick){ g->team, g->car };
         load_cars = g ? 2 : 1;
@@ -1153,7 +1153,8 @@ static void attract_run(struct zip *z, int *cars)
         blit_fill(l, 0, 0, FB_W, FB_H, 0);
         s2gfx_end(black, 0x8000);
     }
-    apply_cfg();                                        /* (the settings that act in a race: DAMAGES, MUSIC) */
+    apply_cfg();                                        /* (the settings that act in a race: MUSIC; the attract race is without DAMAGES: 0x19aaa returns at once when the mode word has 0x80) */
+    s2car_damages = 0;
     race_tuned = 1;                                     /* the attract race's mode word (0x80) has no bit 1 either: the computers are tuned (0x14e20), car 0 too */
     for (int i = 0; i < RACE_CARS; i++) race_grid[i] = (struct s2_pick){ (uint8_t)(i + 1), (uint8_t)(i + 1) };    /* 0x3ca69: car i is team i, model i */
     race_level = 0;                                     /* 0x130d4c = 0 */
