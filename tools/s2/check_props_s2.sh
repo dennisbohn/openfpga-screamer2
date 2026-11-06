@@ -7,7 +7,8 @@
 #          through the firmware's code and the game's obstacle and spark records are compared with it (see the header of the C file), with a negative control
 # Usage: tools/s2/check_props_s2.sh model [steps = 6000] [tracks = "1 3 4 6"] [game folder]
 #        tools/s2/check_props_s2.sh rec <track> [game folder]            (the recording build/check/dosbox_props/props_t<track>.bin must exist)
-#        tools/s2/check_props_s2.sh pic <track> <camera>... [game folder]   pictures (see tools/s2/render_s2.sh's cameras, and 'p' there)
+#        tools/s2/check_props_s2.sh render <track> <frame>[-<frame>]...   the firmware's pictures of the recorded frames, with the props and without: build/s2/pp_with_<frame>.rgb and pp_nofx_<frame>.rgb
+#        (tools/s2/render_s2.sh's camera 'p' draws the obstacles after a race on the model)
 # Everything it writes stays in build/s2/. Exit code 0 if everything passed.
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -21,6 +22,7 @@ mkdir -p "$out"
 case $mode in
 model) steps=${1:-6000}; tracks=${2:-"1 3 4 6"}; game=${3:-${GAME_DIR:-C:/GOG Games/Screamer 2}} ;;
 rec) tracks=$1; game=${2:-${GAME_DIR:-C:/GOG Games/Screamer 2}} ;;
+render) tracks=$1; shift; ranges="$*"; game=${GAME_DIR:-C:/GOG Games/Screamer 2} ;;
 *) echo "usage: check_props_s2.sh model|rec ..."; exit 2 ;;
 esac
 for n in 1 2 3 4 5 6 7; do
@@ -44,8 +46,10 @@ static inline float opaquef(float x) { return x; }
 open(p, "w").write(t)
 PY
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
-LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c tb_gfx.c track_build.c smg.c s2env.c s2car.c s2params.c race.c s2ghost.c s2props.c"
+LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c tb_gfx.c track_build.c smg.c s2env.c s2car.c s2params.c s2ghost.c s2props.c"
 run=""
+san="-fsanitize=address,undefined -fno-sanitize=shift -fno-sanitize-recover"
+[ $mode = render ] && san=""        # (the picture is drawn through fixed mappings of the SDRAM: no sanitizer shadow there)
 case $mode in
 model) for n in $tracks; do run="$run ./check_props_s2 model /b/s2/car$n.bin $n $steps &&"; done ;;
 rec) recd="${PROPSREC:-$root/build/check/dosbox_props}"
@@ -55,7 +59,10 @@ rec) recd="${PROPSREC:-$root/build/check/dosbox_props}"
      [ $(( $(wc -c < "$recd/props_t$tracks.bin" | tr -d ' ') % fb )) -eq 0 ] || { echo "the recording's size is no whole number of frames of $fb bytes"; exit 1; }
      run="./check_props_s2 rec /b/s2/car$tracks.bin $tracks $bin $fb &&
           if SHIFT=3 ./check_props_s2 rec /b/s2/car$tracks.bin $tracks $bin $fb > /dev/null 2>&1; then echo 'NEGATIVE CONTROL NOT FOUND'; exit 1; else echo 'negative control (the cars three frames ahead of the obstacles) found: it fails'; fi &&" ;;
+render) recd="${PROPSREC:-$root/build/check/dosbox_props}"
+     fb=$((24 + 4 * 3264 + 60 * 160 + 2796 + 64 * 160))
+     run="./check_props_s2 render /b/s2/car$tracks.bin $tracks /b/check/$(basename "$recd")/props_t$tracks.bin $fb /b/s2/pp_ $ranges &&" ;;
 esac
-MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game --entrypoint sh verilator/verilator:v5.050 -c "
-    cd /b/s2/propssrc && gcc -O1 -g -w -fsanitize=address,undefined -fno-sanitize=shift -fno-sanitize-recover -o ../check_props_s2 check_props_s2.c $LIST -lm &&
+MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -e ALL -e COST -e COSTONLY -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game --entrypoint sh verilator/verilator:v5.050 -c "
+    cd /b/s2/propssrc && gcc -O1 -g -w $san -o ../check_props_s2 check_props_s2.c $LIST -lm &&
     cd /b/s2 && $run true"

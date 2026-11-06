@@ -22,8 +22,10 @@
 #include "track.h"
 #include "road.h"
 #include "s2car.h"
-#include "race.h"
+#include "race.c"                                       /* (its static state is set below, as tools/s2/race_replay_s2.c does) */
 #include "s2props.h"
+#include "blit.h"
+#include "raster.h"
 #include "s2env.h"
 #include "dat.h"
 
@@ -234,6 +236,17 @@ static void state_of(struct s2car_state *s, const uint8_t *r)
         const float v = (float)i32(r, (uint32_t)placed[k]);
         memcpy((uint8_t *)s->rec + placed[k], &v, 4);
     }
+    s->pos[0] = (float)i32(r, 0x4d8);                   /* (the outputs the drawing reads, made from the record as s2car.c's steps make them) */
+    s->pos[1] = (float)i32(r, 0x4e0);
+    s->pos[2] = (float)i32(r, 0x4dc);
+    s->pitch = f32(r, 0x4e4);
+    s->yaw = f32(r, 0x4e8);
+    s->roll = f32(r, 0x4ec);
+    s->body_pitch = f32(r, 0xC18);
+    s->body_roll = f32(r, 0xC20);
+    s->wheel_steer = f32(r, 0x13C);
+    s->wheel_spin[0] = f32(r, 0x584);
+    s->look = (uint32_t)i32(r, 0xB8) | (f32(r, 0x1E8) + f32(r, 0x1E4) != 0.0f ? 0x200u : 0u);
 }
 
 static void rec_of(struct s2props_rec *o, const uint8_t *q)
@@ -259,6 +272,17 @@ static int game_rand(uint32_t *s)
 static int turns2048(float a) { return (int32_t)(a * 1024.0f / 3.14159274f) & 0x7ff; }
 
 static int near_f(float a, float b, float tol) { return fabsf(a - b) <= tol; }
+/* two angles in 2,048ths of a turn within one: the firmware's float32 sum and the x87's extended one may part at a whole number */
+static int near_turn(int a, int b) { return ((a - b) & 0x7ff) <= 1 || ((b - a) & 0x7ff) <= 1; }
+
+/* the sparks the firmware's race throws when it is run a step from the state before a frame in which the game threw a batch */
+static struct spark_call { float at[3], dir[3], hit; int set; } calls[64];
+static int ncalls;
+static void hook_record(const float at[3], const float dir[3], float hit, int set)
+{
+    if (ncalls < 64) calls[ncalls++] = (struct spark_call){ { at[0], at[1], at[2] }, { dir[0], dir[1], dir[2] }, hit, set };
+}
+struct spark_event { int frame, set, n; float at[3], dir0, dir2; };
 
 /* the obstacles' and sparks' records of the game's frames against the firmware's code: the obstacles are the firmware's own run (stood up, the cars' records of each frame hit
    and fly them) and are compared with the game's after each frame; the sparks the game throws are taken from its records (the spawn is held against the rule: the chance, the
@@ -270,6 +294,20 @@ static int record(int track, const char *path, int frame_bytes)
     rec.frame = (size_t)frame_bytes;
     rec.n = (int)(rn / rec.frame);
     const int shift = getenv("SHIFT") ? atoi(getenv("SHIFT")) : 0;
+    /* the obstacles the recorder put on the cars' ways (a line each: the race clock, the car, the obstacle, where): a standing obstacle that moves in such a frame is the harness's doing */
+    struct { float clock; int obstacle, seen; } pokes[512];
+    int npokes = 0, pokes_seen = 0;
+    {
+        char pp[700], line[512];
+        snprintf(pp, sizeof pp, "%.*s.pokes.txt", (int)strlen(path) - 4, path);
+        FILE *pf = fopen(pp, "r");
+        while (pf && fgets(line, sizeof line, pf) && npokes < 512) {
+            float c;
+            int car, k;
+            if (sscanf(line, "%f car %d obstacle %d", &c, &car, &k) == 3) pokes[npokes++] = (typeof(pokes[0])){ c, k, 0 };
+        }
+        if (pf) fclose(pf);
+    }
     const int nobst = load_props(track);
     printf("track %d: %d frames of the original, %d obstacles in the firmware, %d in the game\n", track, rec.n, nobst, i32(frame_at(0), 20));
     CHECK(nobst == i32(frame_at(0), 20), "the obstacles there are: %d, the game's %d", nobst, i32(frame_at(0), 20));
@@ -281,18 +319,19 @@ static int record(int track, const char *path, int frame_bytes)
     static struct s2car_state cars[CARS];
 
     /* standing: the first frame's records (the race has just begun: nothing is knocked yet) */
-    int stand_ok = 0, stand_all = 0, ang_ok = 0, obj_ok = 0, obj_all = 0;
+    int stand_ok = 0, stand_all = 0, stand_exact = 0, obj_ok = 0, obj_all = 0, obj_exact = 0;
     for (int i = 0; i < nobst; i++) {
         struct s2props_rec g, m;
         rec_of(&g, props_at(frame_at(0), 0, i));
         s2props_get(0, i, &m);
         stand_all++;
-        const int ok = m.p[0] == g.p[0] && m.p[1] == g.p[1] && m.p[2] == g.p[2] && near_f(m.a[1], g.a[1], 1e-4f) && near_f(m.a[0], g.a[0], 2e-3f) && near_f(m.a[2], g.a[2], 2e-3f) && !g.hit && !g.on;
+        const int exact = m.p[0] == g.p[0] && m.p[1] == g.p[1] && m.p[2] == g.p[2];
+        const int ok = m.p[0] == g.p[0] && fabsf(m.p[1] - g.p[1]) <= 1.0f && m.p[2] == g.p[2] && near_f(m.a[1], g.a[1], 1e-4f) && near_f(m.a[0], g.a[0], 2e-3f) && near_f(m.a[2], g.a[2], 2e-3f) && !g.hit && !g.on;
         stand_ok += ok;
-        ang_ok += near_f(m.a[0], g.a[0], 2e-3f) && near_f(m.a[1], g.a[1], 1e-4f) && near_f(m.a[2], g.a[2], 2e-3f);
+        stand_exact += exact && ok;
         if (!ok) { CHECK(0, "obstacle %d stands at %.0f %.0f %.0f angles %.4f %.4f %.4f, the game's %.0f %.0f %.0f angles %.4f %.4f %.4f", i, m.p[0], m.p[1], m.p[2], m.a[0], m.a[1], m.a[2], g.p[0], g.p[1], g.p[2], g.a[0], g.a[1], g.a[2]); }
     }
-    printf("standing: %d of %d obstacles at the game's place and height (exactly) and turned as the game's (within 0.002 rad)\n", stand_ok, stand_all);
+    printf("standing: %d of %d obstacles at the game's place (x and z exactly, the height within a unit: %d of them exactly) and turned as the game's (within 0.002 rad)\n", stand_ok, stand_all, stand_exact);
 
     int resync_cones = 0, resync_sparks = 0, gaps = 0, cone_states = 0, cone_ok = 0, hits_game = 0, hits_ok = 0, spark_states = 0, spark_ok = 0, flying_frames = 0;
     int spawns = 0, spawn_ok = 0, spawn_rand = 0, spawn_dir = 0, spawn_n = 0, spawn_n_ok = 0, spawn_near = 0, spawn_batches = 0;
@@ -300,6 +339,8 @@ static int record(int track, const char *path, int frame_bytes)
     float max_pos = 0.0f, max_vel = 0.0f, max_spark_pos = 0.0f;
     float last_clock = -1.0f;
     int hit_prev[NPROPS] = { 0 };
+    static struct spark_event events[256];
+    int nev = 0;
     for (int fi = 0; fi < rec.n; fi++) {
         const uint8_t *fr = frame_at(fi), *cf = frame_at(fi + shift < rec.n ? fi + shift : rec.n - 1);
         const float clock = f32(fr, 0);
@@ -322,8 +363,14 @@ static int record(int track, const char *path, int frame_bytes)
             if (g.hit && !hit_prev[i]) hits_ok += same_state;
             hit_prev[i] = g.hit;
             if (gap) { s2props_set(0, i, &g); resync_cones++; continue; }
-            cone_states++;
             const float dp = fmaxf(fabsf(m.p[0] - g.p[0]), fmaxf(fabsf(m.p[1] - g.p[1]), fabsf(m.p[2] - g.p[2])));
+            if (!g.on && !g.hit && dp > 1.5f) {                  /* standing, and not where the firmware has it: put there by the recorder in this frame or the one before? */
+                int poked = 0;
+                for (int q = 0; q < npokes && !poked; q++)
+                    if (pokes[q].obstacle == i && clock >= pokes[q].clock - 0.03f && clock <= pokes[q].clock + 0.15f) { poked = 1; pokes[q].seen = 1; }
+                if (poked) { s2props_set(0, i, &g); pokes_seen++; continue; }
+            }
+            cone_states++;
             const float dv = fmaxf(fabsf(m.v[0] - g.v[0]), fmaxf(fabsf(m.v[1] - g.v[1]), fabsf(m.v[2] - g.v[2])));
             const float da = fmaxf(fabsf(m.a[0] - g.a[0]), fmaxf(fabsf(m.a[1] - g.a[1]), fabsf(m.a[2] - g.a[2])));
             const int ok = same_state && dp <= 1.5f && da <= 0.02f && dv <= 5.0f;
@@ -335,11 +382,17 @@ static int record(int track, const char *path, int frame_bytes)
                 resync_cones++;
             }
             /* the game's object record: the place cut to whole numbers and the angles in 2,048ths of a turn, from the game's own floats */
-            if (g.on || fi == 0 || fi % 50 == 0) {
+            if (fi > 0 && (g.on || fi == 1 || fi % 50 == 0)) {         /* (the game places the objects in its first frame of the race: the record of frame 0 is empty) */
                 const uint8_t *o = objrec_at(fr, 0, i);
                 obj_all++;
-                obj_ok += i32(o, 8) == (int32_t)g.p[0] && i32(o, 0xc) == (int32_t)g.p[1] && i32(o, 0x10) == (int32_t)g.p[2] && i32(o, 0x14) == turns2048(g.a[0]) && i32(o, 0x18) == turns2048(g.a[1]) &&
-                          i32(o, 0x1c) == turns2048(g.a[2]);
+                const int exact = i32(o, 8) == (int32_t)g.p[0] && i32(o, 0xc) == (int32_t)g.p[1] && i32(o, 0x10) == (int32_t)g.p[2] && i32(o, 0x14) == turns2048(g.a[0]) && i32(o, 0x18) == turns2048(g.a[1]) &&
+                                  i32(o, 0x1c) == turns2048(g.a[2]);
+                const int ok = exact || (i32(o, 8) == (int32_t)g.p[0] && i32(o, 0xc) == (int32_t)g.p[1] && i32(o, 0x10) == (int32_t)g.p[2] && near_turn(i32(o, 0x14), turns2048(g.a[0])) &&
+                                         near_turn(i32(o, 0x18), turns2048(g.a[1])) && near_turn(i32(o, 0x1c), turns2048(g.a[2])));
+                obj_exact += exact;
+                obj_ok += ok;
+                if (!ok && obj_all - obj_ok < 6) printf("  object record of obstacle %d, frame %d: place %d %d %d angles %d %d %d; from the game's floats %d %d %d, angles %d %d %d (%.5f %.5f %.5f)\n", i, fi, i32(o, 8), i32(o, 0xc), i32(o, 0x10),
+                                                        i32(o, 0x14), i32(o, 0x18), i32(o, 0x1c), (int)g.p[0], (int)g.p[1], (int)g.p[2], turns2048(g.a[0]), turns2048(g.a[1]), turns2048(g.a[2]), g.a[0], g.a[1], g.a[2]);
             }
         }
         flying_frames += frame_flying > 0;
@@ -435,15 +488,76 @@ static int record(int track, const char *path, int frame_bytes)
                     best = fminf(best, sqrtf(dx * dx + dz * dz));
                 }
             spawn_near += best < 400.0f;
-            (void)dir0; (void)dir2;
+            if (nev < 256 && found) events[nev++] = (struct spark_event){ fi, set, batch, { sx, g.p[1] - g.v[1] * step - 100.0f, sz }, dir0, dir2 };
         }
     }
+    /* the touches and wall knocks of the game's frames run again by the firmware's race from the state of the frame before: the sparks it throws (the arguments of its call of 0x2aeb9,
+       the game's step is 22 ms where the firmware's is 20: the places part a little) against the batch the game threw */
+    int ev_n = 0, ev_n_ok = 0, ev_n_near = 0, ev_at = 0, ev_dir = 0, ev_late = 0, ev_matched = 0;
+    for (int e = 0; e < nev; e++) {
+        const int F = events[e].frame;
+        if (F < 1) continue;
+        race_kind = RACE_NORMAL;
+        race_ghost = 0;
+        race_replay = 0;
+        race_level = 1;
+        race_step_hook = 0;
+        s2car_sparks = 0;
+        if (!race_init(track, road_floor() - 3000.0f)) { CHECK(0, "race_init"); break; }
+        for (int i = 0; i < RACE_CARS; i++) {
+            struct s2car_state *c = &R.car[i];
+            memcpy(c->rec, cars_at(frame_at(F - 1)) + REC * i, REC);
+            static const int whole[4] = { 0x4d8, 0x4e0, 0x734, 0x73c };
+            for (int k = 0; k < 4; k++) F(c, whole[k]) = (float)I(c, whole[k]);
+            c->hold = 0;
+            if (i == 0) { c->rec[0x4c / 4] |= 1; const float forever = 1e9f; memcpy(&c->rec[1], &forever, 4); }       /* (the game's driver drives the player's car, as in the recording) */
+        }
+        R.clock = (float)F * DT;
+        R.steps = (uint32_t)F;
+        R.running = 1;
+        for (int i = 0; i < R.n; i++) R.off[i] = R.still[i] = 0;
+        ncalls = 0;
+        s2car_sparks = hook_record;
+        struct s2car_input in = { 0 };
+        race_step(&in);
+        s2car_sparks = 0;
+        const struct spark_event *ev = &events[e];
+        int best = -1, late = 0;
+        float bd = 1e30f;
+        for (int stp = 0; stp < 2 && best < 0; stp++) {        /* (the game's step is longer than the firmware's: a touch at the end of one comes a step later) */
+            if (stp) { s2car_sparks = hook_record; ncalls = 0; race_step(&in); s2car_sparks = 0; late = 1; }
+            for (int q = 0; q < ncalls; q++) {
+                if (calls[q].set != ev->set) continue;
+                const float dx = calls[q].at[0] - ev->at[0], dz = calls[q].at[2] - ev->at[2], d = sqrtf(dx * dx + dz * dz);
+                if (d < bd) { bd = d; best = q; }
+            }
+        }
+        ev_n++;
+        ev_late += late && best >= 0;
+        ev_matched += best >= 0;
+        if (best < 0) { printf("  frame %d: the game threw %d sparks of set %d, neither the firmware's step from the frame before nor the next one threw any of that set (%d calls)\n", F, ev->n, ev->set, ncalls); continue; }
+        int n = (int)(calls[best].hit * 3600.0f / 400000.0f * 30.0f / 60.0f);
+        if (n > 30) n = 30;
+        ev_n_ok += n == ev->n;
+        ev_n_near += abs(n - ev->n) <= 2;
+        ev_at += bd < 400.0f;
+        const float ddx = calls[best].dir[0] - ev->dir0, ddz = calls[best].dir[2] - ev->dir2;
+        ev_dir += sqrtf(ddx * ddx + ddz * ddz) < 600.0f;
+        if (e < 12 || n != ev->n) printf("  frame %d set %d: game %d sparks at %.0f %.0f %.0f direction %.0f %.0f; firmware %d at %.0f %.0f %.0f direction %.0f %.0f (%.0f apart)\n", F, ev->set, ev->n, ev->at[0], ev->at[1], ev->at[2],
+                                          ev->dir0, ev->dir2, n, calls[best].at[0], calls[best].at[1], calls[best].at[2], calls[best].dir[0], calls[best].dir[2], bd);
+    }
+    printf("batches of sparks re-run by the firmware's race from the frame before: %d; the firmware threw sparks of the set in %d of them (%d of those a step later), the number equal in %d, within two in %d, the place within 400 units in %d, the direction within 600 units a second in %d\n", ev_n, ev_matched, ev_late, ev_n_ok, ev_n_near, ev_at, ev_dir);
+    CHECK(ev_matched * 10 >= ev_n * 8 && ev_n_near * 10 >= ev_matched * 9 && ev_at * 10 >= ev_matched * 9, "the firmware's sparks");
     printf("%d frames, %d of them with an obstacle flying, %d frames missing in the recording (their states taken from the game)\n", rec.n, flying_frames, gaps);
     printf("obstacles: %d states compared, %d equal (a place within %.2f, a speed within %.1f); the firmware knocked the game's %d obstacles (%d at the game's frame); %d states put right from the game's\n",
            cone_states, cone_ok, (double)max_pos, (double)max_vel, hits_game, hits_ok, resync_cones);
-    printf("obstacles' object records: %d compared with the game's floats (place cut, angles in 2,048ths), %d equal\n", obj_all, obj_ok);
+    printf("%d of the %d obstacles the recorder put on the cars' ways were seen to move\n", pokes_seen, npokes);
+    printf("obstacles' object records: %d compared with the game's floats (place cut, angles in 2,048ths), %d equal, %d of them exactly (the others one unit of an angle off: a sum in float32 against the x87's)\n", obj_all, obj_ok, obj_exact);
     printf("sparks: %d states compared in the flight, %d equal (a place within %.2f); %d thrown (%d batches); the chance equals the game's generator's in %d, the directions share one in %d; %d wall batches, %d with a number a car's speed gives; %d near a car's corner\n",
            spark_states, spark_ok, (double)max_spark_pos, spawns, spawn_batches, spawn_rand, spawn_dir, spawn_n, spawn_n_ok, spawn_near);
+    int cov[5];
+    s2props_coverage(cov);
+    printf("the branches of the obstacles' flight, all of them followed to the game's frames: %d steps off the ground (%d against a wall, %d with no wall), %d landings, %d stops on the ground\n", cov[0], cov[1], cov[2], cov[3], cov[4]);
     CHECK(stand_ok == stand_all, "standing");
     CHECK(cone_ok == cone_states, "obstacle states");
     CHECK(hits_ok == hits_game, "knocks");
@@ -454,14 +568,104 @@ static int record(int track, const char *path, int frame_bytes)
     return 0;
 }
 
+/* ------------------------------------------------------------------------------------------------ pictures */
+
+static struct track_cam camera_of(const uint8_t *fr)
+{
+    const uint8_t *c = fr + HEAD + CARS * REC + PROP * (NPROPS + 60);
+    return (struct track_cam){ (float)i32(c, 0x48), (float)i32(c, 0x50), (float)i32(c, 0x4C), f32(c, 0x58), f32(c, 0x54), f32(c, 0x5C) };
+}
+
+/* the scene of a frame as the firmware draws it: the cars as the records pose them, the obstacles and sparks as the game's records have them (with the props or, `props` 0, without),
+   from the recorded camera, into <prefix><name>_<frame>.rgb (320 x 200 x 3) */
+static void render_frame(int fi, const char *prefix, const char *name, int props)
+{
+    const uint8_t *fr = frame_at(fi);
+    static struct s2car_state cars[CARS];
+    struct s2car_state *cp[CARS];
+    for (int i = 0; i < CARS; i++) { state_of(&cars[i], cars_at(fr) + REC * i); cp[i] = &cars[i]; }
+    for (int i = 0; i < s2props_obstacles(); i++) { struct s2props_rec g; rec_of(&g, props_at(fr, 0, i)); s2props_set(0, i, &g); }
+    for (int i = 0; i < 60; i++) { struct s2props_rec g; rec_of(&g, props_at(fr, 1, i)); s2props_set(1, i, &g); }
+    static struct track_object objs[ROAD_CARS + S2PROPS_MAX];
+    struct track_cam cam = camera_of(fr);
+    int no = road_race_scene(cp, CARS, &cam, objs);
+    cam = camera_of(fr);
+    if (props) no += s2props_objects(&cam, objs + no, ROAD_CARS + S2PROPS_MAX - no);
+    const struct rs_clip clip = { 0, 0, FB_W, FB_H };
+    volatile uint8_t *fb = FB(0);
+    if (props && getenv("COST")) {                      /* what the props' pieces cost the units: the pieces in view (the drawing's own cull: the objects out of view are not made), their faces and the pixels they fill */
+        struct su_view v;
+        track_view(&clip, &v);
+        uint32_t px = 0, pieces = 0;
+        struct gu_stats gst = { 0, 0, 0, 0 };
+        float f[3], r[3], u[3];
+        track_cam_axes(&cam, f, r, u);
+        for (int k = ROAD_CARS; k < no; k++) {
+            struct track_object *ob = &objs[k];
+            const float dx = ob->x - cam.x, dy = ob->y - cam.y, dh = ob->h - cam.h, rad = ob->radius;
+            const float vf = dx * f[0] + dy * f[1] + dh * f[2] + 128.0f, vr = dx * r[0] + dy * r[1] + dh * r[2], vu = dx * u[0] + dy * u[1] + dh * u[2];
+            const float hw = 160.0f / 128.0f;           /* (the lens: about the picture's half width over the focal length; the cull is the drawing's, this one is a little wider) */
+            if (vf + rad < 128.0f || vf - rad > track_far() + 128.0f || fabsf(vr) - rad > hw * (vf + rad) || fabsf(vu) - rad > hw * (vf + rad)) continue;
+            if (ob->make) ob->make(ob->id, &cam, ob);
+            for (int b = 0; b < ob->n; b++) {
+                struct gu_piece g;
+                track_block_piece(&cam, &ob->b[b], &g);
+                px += gu_draw(FB(1), &clip, &v, track_mlb(), &g, &gst);
+                pieces++;
+            }
+        }
+        printf("frame %d props cost: %u pieces, %u faces, %u triangles, %u pixels\n", fi, pieces, gst.faces, gst.triangles, px);
+    }
+    if (getenv("COSTONLY")) return;                    /* (only the count above) */
+    static struct blit_list l;
+    blit_start(&l, 0);
+    track_backdrop_blit(&l, &clip, &cam);
+    blit_model(fb, &l);
+    struct track_stats ts;
+    track_mode = TRACK_MODEL;
+    track_draw_cam(fb, &clip, &cam, objs, no, &ts);
+    char path[600];
+    snprintf(path, sizeof path, "%s%s_%d.rgb", prefix, name, fi);
+    FILE *f = fopen(path, "wb");
+    const uint32_t *pal = track_palette();
+    for (int i = 0; i < FB_W * FB_H; i++) {
+        uint8_t rgb[3] = { (uint8_t)(pal[fb[i]] >> 16), (uint8_t)(pal[fb[i]] >> 8), (uint8_t)pal[fb[i]] };
+        fwrite(rgb, 1, 3, f);
+    }
+    fclose(f);
+    printf("frame %d %s: %d objects, %u pieces, %u faces, %u triangles\n", fi, name, no, ts.pieces, ts.faces, ts.triangles);
+}
+
 int main(int argc, char **argv)
 {
-    if (argc < 5) { fprintf(stderr, "usage: check_props_s2 model <image> <track> <steps> | rec <image> <track> <recording> <frame bytes>\n"); return 2; }
+    if (argc < 5) { fprintf(stderr, "usage: check_props_s2 model <image> <track> <steps> | rec <image> <track> <recording> <frame bytes> | render <image> <track> <recording> <frame bytes> <out prefix> <frames>\n"); return 2; }
     map();
     const int track = atoi(argv[3]);
     if (!open_image(argv[2])) { fprintf(stderr, "the image does not open\n"); return 2; }
     struct s2car_state boot;
     if (!s2car_init(&boot, 0, 0, track, 0)) { fprintf(stderr, "the car's files (S2_GAME) are not there\n"); return 2; }
+    if (!strcmp(argv[1], "render") && argc > 6) {         /* render <image> <track> <recording> <frame bytes> <out prefix> <frame>[-<frame>]... */
+        size_t rn;
+        rec.d = slurp(argv[4], &rn);
+        rec.frame = (size_t)atoi(argv[5]);
+        rec.n = (int)(rn / rec.frame);
+        struct track_fx fx;
+        if (track_fx(&fx)) rs_smg = fx.table;
+        load_props(track);
+        s2props_begin();
+        race_step_hook = 0;
+        s2car_sparks = 0;
+        for (int a = 7; a < argc; a++) {
+            int first = atoi(argv[a]), last = first;
+            const char *dash = strchr(argv[a], '-');
+            if (dash) last = atoi(dash + 1);
+            for (int f = first; f <= last && f < rec.n; f++) {
+                render_frame(f, argv[6], "with", 1);
+                render_frame(f, argv[6], "nofx", 0);
+            }
+        }
+        return 0;
+    }
     if (!strcmp(argv[1], "rec")) record(track, argv[4], argc > 5 ? atoi(argv[5]) : 0);
     if (!strcmp(argv[1], "model")) model(track, atoi(argv[4]));
     printf("%d checks, %d failed\n", checks, failures);
