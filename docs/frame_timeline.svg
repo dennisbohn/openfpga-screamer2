@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 770" width="1120" height="770" role="img" aria-label="Timeline of one frame over 20 ms: the CPU in sequence Player&#x27;s physics, sound 1.1 ms, Preparation (camera, objects, backdrop) 0.1 ms, Selection (visibility test, sorting) 1.5 ms, Pieces (matrices, hand-over to the hardware) 5.8 ms, Computers&#x27; physics and the race screen&#x27;s list (after the pieces) 3.8 ms, Race display and radar 0.2 ms, Waiting for the hardware 0.0 ms, Counters, log 0.0 ms; done after 12.4 ms. Busy: Geometry unit 7.4 ms, Setup unit 5.4 ms, Rasterizer 5.7 ms, Blitter 1.4 ms.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 770" width="1120" height="770" role="img" aria-label="Timeline of one frame over 20 ms: the CPU in sequence Player&#x27;s physics, sound 1.4 ms, Preparation (camera, objects, backdrop) 0.1 ms, Selection (visibility test, sorting) 1.6 ms, Pieces (matrices, hand-over to the hardware) 6.2 ms, Computers&#x27; physics and the race screen&#x27;s list (after the pieces) 3.8 ms, Race display and radar 0.2 ms, Waiting for the hardware 0.1 ms, Counters, log 0.0 ms; done after 13.4 ms. Busy: Geometry unit 8.2 ms, Setup unit 6.4 ms, Rasterizer 7.0 ms, Blitter 1.4 ms.">
 <title>Timeline of one frame</title>
 <style>
   svg {
@@ -53,7 +53,7 @@
 </style>
 <rect width="1120" height="770" fill="var(--surface)"/>
 <text x="40.0" y="36.0" class="h">Timeline of one frame</text>
-<text x="40.0" y="60.0" class="s">Simulation, track 4 race: player and three computers, race screen (HUD) on, simulation of main 1c91a1f, CPU clocks at 74.25 MHz (20 ms = 1,485,000 clocks for 50 frames per second) · 2026-11-05</text>
+<text x="40.0" y="60.0" class="s">Simulation, Simulation, track 4 race: player and three computers, race screen (HUD) on, wheel smoke, shadows and animated scenery on, simulation of main 21eac31, CPU clocks at 74.25 MHz (20 ms = 1,485,000 clocks for 50 frames per second), CPU clocks at 74.25 MHz (20 ms = 1,485,000 clocks for 50 frames per second) · 2026-11-06</text>
 <rect x="40.0" y="78.0" width="12.0" height="12.0" class="f-music"><title>Music (read command to the SD card)</title></rect>
 <text x="58.0" y="88.0" class="s">Music (read command to the SD card)</text>
 <rect x="325.0" y="78.0" width="12.0" height="12.0" class="f-phys"><title>Player&#x27;s physics, sound</title></rect>
@@ -97,115 +97,100 @@
 <line x1="1020.0" y1="206" x2="1020.0" y2="460" class="grid"/>
 <text x="1020.0" y="198.0" class="m" text-anchor="middle">20 ms</text>
 <text x="208.0" y="235.0" class="t" text-anchor="end">CPU</text>
-<rect x="220.0" y="214.0" width="42.4" height="34.0" class="f-phys"><title>Player&#x27;s physics, sound: 78,638 clocks (1.1 ms)</title></rect>
-<rect x="262.4" y="214.0" width="3.3" height="34.0" class="f-prep"><title>Preparation (camera, objects, backdrop): 6,096 clocks (0.1 ms)</title></rect>
-<rect x="265.6" y="214.0" width="60.4" height="34.0" class="f-cull"><title>Selection (visibility test, sorting): 112,096 clocks (1.5 ms)</title></rect>
-<rect x="326.0" y="214.0" width="231.9" height="34.0" class="f-pieces"><title>Pieces (matrices, hand-over to the hardware): 430,454 clocks (5.8 ms), of which writes to the hardware 25,492</title></rect>
-<rect x="557.9" y="214.0" width="150.7" height="34.0" class="f-others"><title>Computers&#x27; physics and the race screen&#x27;s list (after the pieces): 279,650 clocks (3.8 ms)</title></rect>
-<rect x="708.8" y="214.0" width="7.0" height="34.0" class="f-hud"><title>Race display and radar: 13,053 clocks (0.2 ms)</title></rect>
-<rect x="716.1" y="214.0" width="303.9" height="34.0" class="idle"><title>waiting for the frame change: 564,136 clocks (7.6 ms)</title></rect>
-<text x="868.0" y="235.0" class="m" text-anchor="middle">free</text>
-<text x="295.8" y="235.0" class="in" text-anchor="middle">Select</text>
-<text x="442.0" y="235.0" class="in" text-anchor="middle">Pieces</text>
-<text x="633.3" y="235.0" class="in" text-anchor="middle">Computers</text>
+<rect x="220.0" y="214.0" width="56.5" height="34.0" class="f-phys"><title>Player&#x27;s physics, sound: 104,871 clocks (1.4 ms)</title></rect>
+<rect x="276.5" y="214.0" width="3.1" height="34.0" class="f-prep"><title>Preparation (camera, objects, backdrop): 5,805 clocks (0.1 ms)</title></rect>
+<rect x="279.6" y="214.0" width="65.7" height="34.0" class="f-cull"><title>Selection (visibility test, sorting): 121,875 clocks (1.6 ms)</title></rect>
+<rect x="345.3" y="214.0" width="246.9" height="34.0" class="f-pieces"><title>Pieces (matrices, hand-over to the hardware): 458,299 clocks (6.2 ms), of which writes to the hardware 29,576</title></rect>
+<rect x="592.2" y="214.0" width="153.1" height="34.0" class="f-others"><title>Computers&#x27; physics and the race screen&#x27;s list (after the pieces): 284,236 clocks (3.8 ms)</title></rect>
+<rect x="745.3" y="214.0" width="3.8" height="34.0" class="f-wait"><title>Waiting for the hardware: 6,962 clocks (0.1 ms)</title></rect>
+<rect x="749.0" y="214.0" width="7.1" height="34.0" class="f-hud"><title>Race display and radar: 13,173 clocks (0.2 ms)</title></rect>
+<rect x="756.1" y="214.0" width="0.3" height="34.0" class="f-rest"><title>Counters, log: 615 clocks (0.0 ms)</title></rect>
+<rect x="756.5" y="214.0" width="263.5" height="34.0" class="idle"><title>waiting for the frame change: 489,164 clocks (6.6 ms)</title></rect>
+<text x="888.2" y="235.0" class="m" text-anchor="middle">free</text>
+<text x="248.2" y="235.0" class="in" text-anchor="middle">Player</text>
+<text x="312.5" y="235.0" class="in" text-anchor="middle">Select</text>
+<text x="468.7" y="235.0" class="in" text-anchor="middle">Pieces</text>
+<text x="668.7" y="235.0" class="in" text-anchor="middle">Computers</text>
 <text x="208.0" y="287.0" class="t" text-anchor="end">Geometry unit</text>
-<rect x="220.0" y="266.0" width="496.1" height="34.0" class="lane"><title>Geometry unit</title></rect>
-<rect x="326.0" y="271.6" width="6.2" height="28.4" class="f-unit"><title>Geometry unit: 9,587 of 11,469 clocks busy (84 %)</title></rect>
-<rect x="332.2" y="266.0" width="4.3" height="34.0" class="f-unit"><title>Geometry unit: 7,986 of 7,991 clocks busy (100 %)</title></rect>
-<rect x="336.5" y="266.0" width="4.2" height="34.0" class="f-unit"><title>Geometry unit: 7,865 of 7,870 clocks busy (100 %)</title></rect>
-<rect x="340.8" y="266.0" width="4.2" height="34.0" class="f-unit"><title>Geometry unit: 7,720 of 7,727 clocks busy (100 %)</title></rect>
-<rect x="344.9" y="266.0" width="4.1" height="34.0" class="f-unit"><title>Geometry unit: 7,685 of 7,687 clocks busy (100 %)</title></rect>
-<rect x="349.1" y="266.0" width="4.3" height="34.0" class="f-unit"><title>Geometry unit: 7,935 of 7,935 clocks busy (100 %)</title></rect>
-<rect x="353.3" y="266.0" width="4.2" height="34.0" class="f-unit"><title>Geometry unit: 7,864 of 7,867 clocks busy (100 %)</title></rect>
-<rect x="357.6" y="266.0" width="4.2" height="34.0" class="f-unit"><title>Geometry unit: 7,858 of 7,862 clocks busy (100 %)</title></rect>
-<rect x="361.8" y="266.0" width="4.4" height="34.0" class="f-unit"><title>Geometry unit: 8,085 of 8,091 clocks busy (100 %)</title></rect>
-<rect x="366.2" y="266.0" width="4.2" height="34.0" class="f-unit"><title>Geometry unit: 7,755 of 7,760 clocks busy (100 %)</title></rect>
-<rect x="370.4" y="266.0" width="4.0" height="34.0" class="f-unit"><title>Geometry unit: 7,394 of 7,400 clocks busy (100 %)</title></rect>
-<rect x="374.3" y="266.0" width="4.0" height="34.0" class="f-unit"><title>Geometry unit: 7,462 of 7,463 clocks busy (100 %)</title></rect>
-<rect x="378.4" y="266.0" width="4.0" height="34.0" class="f-unit"><title>Geometry unit: 7,379 of 7,381 clocks busy (100 %)</title></rect>
-<rect x="382.3" y="266.0" width="3.9" height="34.0" class="f-unit"><title>Geometry unit: 7,274 of 7,282 clocks busy (100 %)</title></rect>
-<rect x="386.3" y="266.0" width="4.4" height="34.0" class="f-unit"><title>Geometry unit: 8,134 of 8,138 clocks busy (100 %)</title></rect>
-<rect x="390.6" y="266.0" width="4.5" height="34.0" class="f-unit"><title>Geometry unit: 8,338 of 8,345 clocks busy (100 %)</title></rect>
-<rect x="395.1" y="266.0" width="4.2" height="34.0" class="f-unit"><title>Geometry unit: 7,787 of 7,792 clocks busy (100 %)</title></rect>
-<rect x="399.3" y="266.0" width="4.1" height="34.0" class="f-unit"><title>Geometry unit: 7,567 of 7,570 clocks busy (100 %)</title></rect>
-<rect x="403.4" y="266.0" width="4.1" height="34.0" class="f-unit"><title>Geometry unit: 7,565 of 7,573 clocks busy (100 %)</title></rect>
-<rect x="407.5" y="266.0" width="3.8" height="34.0" class="f-unit"><title>Geometry unit: 7,094 of 7,104 clocks busy (100 %)</title></rect>
-<rect x="411.3" y="266.0" width="4.3" height="34.0" class="f-unit"><title>Geometry unit: 7,927 of 7,936 clocks busy (100 %)</title></rect>
-<rect x="415.6" y="266.0" width="39.0" height="34.0" class="f-unit"><title>Geometry unit: 72,388 of 72,412 clocks busy (100 %)</title></rect>
-<rect x="454.6" y="266.0" width="32.1" height="34.0" class="f-unit"><title>Geometry unit: 59,652 of 59,673 clocks busy (100 %)</title></rect>
-<rect x="486.8" y="266.0" width="4.1" height="34.0" class="f-unit"><title>Geometry unit: 7,525 of 7,530 clocks busy (100 %)</title></rect>
-<rect x="490.8" y="266.0" width="39.4" height="34.0" class="f-unit"><title>Geometry unit: 73,039 of 73,056 clocks busy (100 %)</title></rect>
-<rect x="530.2" y="266.0" width="22.5" height="34.0" class="f-unit"><title>Geometry unit: 41,720 of 41,726 clocks busy (100 %)</title></rect>
-<rect x="552.6" y="266.0" width="4.0" height="34.0" class="f-unit"><title>Geometry unit: 7,454 of 7,454 clocks busy (100 %)</title></rect>
-<rect x="556.7" y="266.0" width="1.3" height="34.0" class="f-unit"><title>Geometry unit: 2,360 of 2,360 clocks busy (100 %)</title></rect>
-<rect x="557.9" y="284.9" width="150.7" height="15.1" class="f-unit"><title>Geometry unit: 124,041 of 279,650 clocks busy (44 %)</title></rect>
+<rect x="220.0" y="266.0" width="536.5" height="34.0" class="lane"><title>Geometry unit</title></rect>
+<rect x="345.3" y="270.1" width="8.3" height="29.9" class="f-unit"><title>Geometry unit: 13,526 of 15,374 clocks busy (88 %)</title></rect>
+<rect x="353.6" y="266.0" width="6.4" height="34.0" class="f-unit"><title>Geometry unit: 11,956 of 11,963 clocks busy (100 %)</title></rect>
+<rect x="360.0" y="266.0" width="6.0" height="34.0" class="f-unit"><title>Geometry unit: 11,178 of 11,186 clocks busy (100 %)</title></rect>
+<rect x="366.0" y="266.0" width="6.5" height="34.0" class="f-unit"><title>Geometry unit: 11,991 of 11,992 clocks busy (100 %)</title></rect>
+<rect x="372.5" y="266.0" width="6.2" height="34.0" class="f-unit"><title>Geometry unit: 11,554 of 11,558 clocks busy (100 %)</title></rect>
+<rect x="378.7" y="266.0" width="6.4" height="34.0" class="f-unit"><title>Geometry unit: 11,891 of 11,900 clocks busy (100 %)</title></rect>
+<rect x="385.1" y="266.0" width="6.1" height="34.0" class="f-unit"><title>Geometry unit: 11,284 of 11,294 clocks busy (100 %)</title></rect>
+<rect x="391.2" y="266.0" width="6.1" height="34.0" class="f-unit"><title>Geometry unit: 11,349 of 11,352 clocks busy (100 %)</title></rect>
+<rect x="397.3" y="266.0" width="5.8" height="34.0" class="f-unit"><title>Geometry unit: 10,793 of 10,799 clocks busy (100 %)</title></rect>
+<rect x="403.1" y="266.0" width="6.2" height="34.0" class="f-unit"><title>Geometry unit: 11,465 of 11,473 clocks busy (100 %)</title></rect>
+<rect x="409.3" y="266.0" width="6.7" height="34.0" class="f-unit"><title>Geometry unit: 12,466 of 12,475 clocks busy (100 %)</title></rect>
+<rect x="416.0" y="266.0" width="6.2" height="34.0" class="f-unit"><title>Geometry unit: 11,424 of 11,430 clocks busy (100 %)</title></rect>
+<rect x="422.2" y="266.0" width="6.3" height="34.0" class="f-unit"><title>Geometry unit: 11,597 of 11,609 clocks busy (100 %)</title></rect>
+<rect x="428.5" y="266.0" width="7.5" height="34.0" class="f-unit"><title>Geometry unit: 13,989 of 14,007 clocks busy (100 %)</title></rect>
+<rect x="436.0" y="266.0" width="38.8" height="34.0" class="f-unit"><title>Geometry unit: 71,955 of 71,975 clocks busy (100 %)</title></rect>
+<rect x="474.8" y="266.0" width="33.1" height="34.0" class="f-unit"><title>Geometry unit: 61,570 of 61,518 clocks busy (100 %)</title></rect>
+<rect x="507.9" y="266.2" width="8.8" height="33.8" class="f-unit"><title>Geometry unit: 16,285 of 16,365 clocks busy (100 %)</title></rect>
+<rect x="516.7" y="266.0" width="36.2" height="34.0" class="f-unit"><title>Geometry unit: 67,221 of 67,182 clocks busy (100 %)</title></rect>
+<rect x="552.9" y="266.2" width="6.9" height="33.8" class="f-unit"><title>Geometry unit: 12,735 of 12,797 clocks busy (100 %)</title></rect>
+<rect x="559.8" y="266.0" width="24.7" height="34.0" class="f-unit"><title>Geometry unit: 45,907 of 45,857 clocks busy (100 %)</title></rect>
+<rect x="584.5" y="266.2" width="6.8" height="33.8" class="f-unit"><title>Geometry unit: 12,524 of 12,585 clocks busy (100 %)</title></rect>
+<rect x="591.3" y="266.0" width="0.9" height="34.0" class="f-unit"><title>Geometry unit: 1,607 of 1,608 clocks busy (100 %)</title></rect>
+<rect x="592.2" y="281.8" width="153.1" height="18.2" class="f-unit"><title>Geometry unit: 152,315 of 284,236 clocks busy (54 %)</title></rect>
 <text x="208.0" y="339.0" class="t" text-anchor="end">Setup unit</text>
-<rect x="220.0" y="318.0" width="496.1" height="34.0" class="lane"><title>Setup unit</title></rect>
-<rect x="326.0" y="337.5" width="6.2" height="14.5" class="f-unit"><title>Setup unit: 4,876 of 11,469 clocks busy (43 %)</title></rect>
-<rect x="332.2" y="342.3" width="4.3" height="9.7" class="f-unit"><title>Setup unit: 2,286 of 7,991 clocks busy (29 %)</title></rect>
-<rect x="336.5" y="342.8" width="4.2" height="9.2" class="f-unit"><title>Setup unit: 2,119 of 7,870 clocks busy (27 %)</title></rect>
-<rect x="340.8" y="343.9" width="4.2" height="8.1" class="f-unit"><title>Setup unit: 1,842 of 7,727 clocks busy (24 %)</title></rect>
-<rect x="344.9" y="322.0" width="4.1" height="30.0" class="f-unit"><title>Setup unit: 6,779 of 7,687 clocks busy (88 %)</title></rect>
-<rect x="349.1" y="318.5" width="4.3" height="33.5" class="f-unit"><title>Setup unit: 7,815 of 7,935 clocks busy (98 %)</title></rect>
-<rect x="353.3" y="331.2" width="4.2" height="20.8" class="f-unit"><title>Setup unit: 4,818 of 7,867 clocks busy (61 %)</title></rect>
-<rect x="357.6" y="327.2" width="4.2" height="24.8" class="f-unit"><title>Setup unit: 5,724 of 7,862 clocks busy (73 %)</title></rect>
-<rect x="361.8" y="340.3" width="4.4" height="11.7" class="f-unit"><title>Setup unit: 2,784 of 8,091 clocks busy (34 %)</title></rect>
-<rect x="366.2" y="344.5" width="4.2" height="7.5" class="f-unit"><title>Setup unit: 1,710 of 7,760 clocks busy (22 %)</title></rect>
-<rect x="370.4" y="342.3" width="4.0" height="9.7" class="f-unit"><title>Setup unit: 2,110 of 7,400 clocks busy (29 %)</title></rect>
-<rect x="374.3" y="330.7" width="4.0" height="21.3" class="f-unit"><title>Setup unit: 4,666 of 7,463 clocks busy (63 %)</title></rect>
-<rect x="378.4" y="322.9" width="4.0" height="29.1" class="f-unit"><title>Setup unit: 6,321 of 7,381 clocks busy (86 %)</title></rect>
-<rect x="382.3" y="338.7" width="3.9" height="13.3" class="f-unit"><title>Setup unit: 2,859 of 7,282 clocks busy (39 %)</title></rect>
-<rect x="386.3" y="331.3" width="4.4" height="20.7" class="f-unit"><title>Setup unit: 4,946 of 8,138 clocks busy (61 %)</title></rect>
-<rect x="390.6" y="334.8" width="4.5" height="17.2" class="f-unit"><title>Setup unit: 4,227 of 8,345 clocks busy (51 %)</title></rect>
-<rect x="395.1" y="330.2" width="4.2" height="21.8" class="f-unit"><title>Setup unit: 4,986 of 7,792 clocks busy (64 %)</title></rect>
-<rect x="399.3" y="325.2" width="4.1" height="26.8" class="f-unit"><title>Setup unit: 5,971 of 7,570 clocks busy (79 %)</title></rect>
-<rect x="403.4" y="339.3" width="4.1" height="12.7" class="f-unit"><title>Setup unit: 2,837 of 7,573 clocks busy (37 %)</title></rect>
-<rect x="407.5" y="339.6" width="3.8" height="12.4" class="f-unit"><title>Setup unit: 2,587 of 7,104 clocks busy (36 %)</title></rect>
-<rect x="411.3" y="327.7" width="4.3" height="24.3" class="f-unit"><title>Setup unit: 5,666 of 7,936 clocks busy (71 %)</title></rect>
-<rect x="415.6" y="322.6" width="39.0" height="29.4" class="f-unit"><title>Setup unit: 62,629 of 72,412 clocks busy (86 %)</title></rect>
-<rect x="454.6" y="319.3" width="32.1" height="32.7" class="f-unit"><title>Setup unit: 57,451 of 59,673 clocks busy (96 %)</title></rect>
-<rect x="486.8" y="318.0" width="4.1" height="34.0" class="f-unit"><title>Setup unit: 7,530 of 7,530 clocks busy (100 %)</title></rect>
-<rect x="490.8" y="318.0" width="39.4" height="34.0" class="f-unit"><title>Setup unit: 72,960 of 73,056 clocks busy (100 %)</title></rect>
-<rect x="530.2" y="321.0" width="22.5" height="31.0" class="f-unit"><title>Setup unit: 38,078 of 41,726 clocks busy (91 %)</title></rect>
-<rect x="552.6" y="318.0" width="4.0" height="34.0" class="f-unit"><title>Setup unit: 7,454 of 7,454 clocks busy (100 %)</title></rect>
-<rect x="556.7" y="318.0" width="1.3" height="34.0" class="f-unit"><title>Setup unit: 2,360 of 2,360 clocks busy (100 %)</title></rect>
-<rect x="557.9" y="344.6" width="150.7" height="7.4" class="f-unit"><title>Setup unit: 61,148 of 279,650 clocks busy (22 %)</title></rect>
+<rect x="220.0" y="318.0" width="536.5" height="34.0" class="lane"><title>Setup unit</title></rect>
+<rect x="345.3" y="339.5" width="8.3" height="12.5" class="f-unit"><title>Setup unit: 5,639 of 15,374 clocks busy (37 %)</title></rect>
+<rect x="353.6" y="341.9" width="6.4" height="10.1" class="f-unit"><title>Setup unit: 3,550 of 11,963 clocks busy (30 %)</title></rect>
+<rect x="360.0" y="338.5" width="6.0" height="13.5" class="f-unit"><title>Setup unit: 4,437 of 11,186 clocks busy (40 %)</title></rect>
+<rect x="366.0" y="318.5" width="6.5" height="33.5" class="f-unit"><title>Setup unit: 11,805 of 11,992 clocks busy (98 %)</title></rect>
+<rect x="372.5" y="326.8" width="6.2" height="25.2" class="f-unit"><title>Setup unit: 8,578 of 11,558 clocks busy (74 %)</title></rect>
+<rect x="378.7" y="339.4" width="6.4" height="12.6" class="f-unit"><title>Setup unit: 4,395 of 11,900 clocks busy (37 %)</title></rect>
+<rect x="385.1" y="344.0" width="6.1" height="8.0" class="f-unit"><title>Setup unit: 2,663 of 11,294 clocks busy (24 %)</title></rect>
+<rect x="391.2" y="332.4" width="6.1" height="19.6" class="f-unit"><title>Setup unit: 6,535 of 11,352 clocks busy (58 %)</title></rect>
+<rect x="397.3" y="328.8" width="5.8" height="23.2" class="f-unit"><title>Setup unit: 7,376 of 10,799 clocks busy (68 %)</title></rect>
+<rect x="403.1" y="332.9" width="6.2" height="19.1" class="f-unit"><title>Setup unit: 6,441 of 11,473 clocks busy (56 %)</title></rect>
+<rect x="409.3" y="337.1" width="6.7" height="14.9" class="f-unit"><title>Setup unit: 5,461 of 12,475 clocks busy (44 %)</title></rect>
+<rect x="416.0" y="324.3" width="6.2" height="27.7" class="f-unit"><title>Setup unit: 9,308 of 11,430 clocks busy (81 %)</title></rect>
+<rect x="422.2" y="339.8" width="6.3" height="12.2" class="f-unit"><title>Setup unit: 4,156 of 11,609 clocks busy (36 %)</title></rect>
+<rect x="428.5" y="329.9" width="7.5" height="22.1" class="f-unit"><title>Setup unit: 9,115 of 14,007 clocks busy (65 %)</title></rect>
+<rect x="436.0" y="321.8" width="38.8" height="30.2" class="f-unit"><title>Setup unit: 63,891 of 71,975 clocks busy (89 %)</title></rect>
+<rect x="474.8" y="319.2" width="33.1" height="32.8" class="f-unit"><title>Setup unit: 59,394 of 61,518 clocks busy (97 %)</title></rect>
+<rect x="507.9" y="318.2" width="8.8" height="33.8" class="f-unit"><title>Setup unit: 16,289 of 16,365 clocks busy (100 %)</title></rect>
+<rect x="516.7" y="318.3" width="36.2" height="33.7" class="f-unit"><title>Setup unit: 66,494 of 67,182 clocks busy (99 %)</title></rect>
+<rect x="552.9" y="324.5" width="6.9" height="27.5" class="f-unit"><title>Setup unit: 10,363 of 12,797 clocks busy (81 %)</title></rect>
+<rect x="559.8" y="318.9" width="24.7" height="33.1" class="f-unit"><title>Setup unit: 44,644 of 45,857 clocks busy (97 %)</title></rect>
+<rect x="584.5" y="332.3" width="6.8" height="19.7" class="f-unit"><title>Setup unit: 7,291 of 12,585 clocks busy (58 %)</title></rect>
+<rect x="591.3" y="337.4" width="0.9" height="14.6" class="f-unit"><title>Setup unit: 691 of 1,608 clocks busy (43 %)</title></rect>
+<rect x="592.2" y="338.1" width="153.1" height="13.9" class="f-unit"><title>Setup unit: 115,823 of 284,236 clocks busy (41 %)</title></rect>
 <text x="208.0" y="391.0" class="t" text-anchor="end">Rasterizer</text>
-<rect x="220.0" y="370.0" width="496.1" height="34.0" class="lane"><title>Rasterizer</title></rect>
-<rect x="326.0" y="387.1" width="6.2" height="16.9" class="f-unit"><title>Rasterizer: 5,709 of 11,469 clocks busy (50 %)</title></rect>
-<rect x="332.2" y="399.6" width="4.3" height="4.4" class="f-unit"><title>Rasterizer: 1,045 of 7,991 clocks busy (13 %)</title></rect>
-<rect x="336.5" y="397.2" width="4.2" height="6.8" class="f-unit"><title>Rasterizer: 1,584 of 7,870 clocks busy (20 %)</title></rect>
-<rect x="340.8" y="394.3" width="4.2" height="9.7" class="f-unit"><title>Rasterizer: 2,213 of 7,727 clocks busy (29 %)</title></rect>
-<rect x="344.9" y="370.0" width="4.1" height="34.0" class="f-unit"><title>Rasterizer: 7,687 of 7,687 clocks busy (100 %)</title></rect>
-<rect x="349.1" y="370.0" width="4.3" height="34.0" class="f-unit"><title>Rasterizer: 7,935 of 7,935 clocks busy (100 %)</title></rect>
-<rect x="353.3" y="378.7" width="4.2" height="25.3" class="f-unit"><title>Rasterizer: 5,847 of 7,867 clocks busy (74 %)</title></rect>
-<rect x="357.6" y="376.7" width="4.2" height="27.3" class="f-unit"><title>Rasterizer: 6,320 of 7,862 clocks busy (80 %)</title></rect>
-<rect x="361.8" y="380.3" width="4.4" height="23.7" class="f-unit"><title>Rasterizer: 5,641 of 8,091 clocks busy (70 %)</title></rect>
-<rect x="366.2" y="398.3" width="4.2" height="5.7" class="f-unit"><title>Rasterizer: 1,295 of 7,760 clocks busy (17 %)</title></rect>
-<rect x="370.4" y="385.8" width="4.0" height="18.2" class="f-unit"><title>Rasterizer: 3,965 of 7,400 clocks busy (54 %)</title></rect>
-<rect x="374.3" y="377.4" width="4.0" height="26.6" class="f-unit"><title>Rasterizer: 5,838 of 7,463 clocks busy (78 %)</title></rect>
-<rect x="378.4" y="375.7" width="4.0" height="28.3" class="f-unit"><title>Rasterizer: 6,145 of 7,381 clocks busy (83 %)</title></rect>
-<rect x="382.3" y="384.6" width="3.9" height="19.4" class="f-unit"><title>Rasterizer: 4,165 of 7,282 clocks busy (57 %)</title></rect>
-<rect x="386.3" y="379.1" width="4.4" height="24.9" class="f-unit"><title>Rasterizer: 5,965 of 8,138 clocks busy (73 %)</title></rect>
-<rect x="390.6" y="378.1" width="4.5" height="25.9" class="f-unit"><title>Rasterizer: 6,360 of 8,345 clocks busy (76 %)</title></rect>
-<rect x="395.1" y="383.0" width="4.2" height="21.0" class="f-unit"><title>Rasterizer: 4,806 of 7,792 clocks busy (62 %)</title></rect>
-<rect x="399.3" y="377.5" width="4.1" height="26.5" class="f-unit"><title>Rasterizer: 5,891 of 7,570 clocks busy (78 %)</title></rect>
-<rect x="403.4" y="395.4" width="4.1" height="8.6" class="f-unit"><title>Rasterizer: 1,907 of 7,573 clocks busy (25 %)</title></rect>
-<rect x="407.5" y="386.2" width="3.8" height="17.8" class="f-unit"><title>Rasterizer: 3,723 of 7,104 clocks busy (52 %)</title></rect>
-<rect x="411.3" y="374.8" width="4.3" height="29.2" class="f-unit"><title>Rasterizer: 6,821 of 7,936 clocks busy (86 %)</title></rect>
-<rect x="415.6" y="373.6" width="39.0" height="30.4" class="f-unit"><title>Rasterizer: 64,675 of 72,412 clocks busy (89 %)</title></rect>
-<rect x="454.6" y="370.5" width="32.1" height="33.5" class="f-unit"><title>Rasterizer: 58,820 of 59,673 clocks busy (99 %)</title></rect>
-<rect x="486.8" y="370.0" width="4.1" height="34.0" class="f-unit"><title>Rasterizer: 7,530 of 7,530 clocks busy (100 %)</title></rect>
-<rect x="490.8" y="370.0" width="39.4" height="34.0" class="f-unit"><title>Rasterizer: 73,046 of 73,056 clocks busy (100 %)</title></rect>
-<rect x="530.2" y="371.8" width="22.5" height="32.2" class="f-unit"><title>Rasterizer: 39,506 of 41,726 clocks busy (95 %)</title></rect>
-<rect x="552.6" y="370.0" width="4.0" height="34.0" class="f-unit"><title>Rasterizer: 7,454 of 7,454 clocks busy (100 %)</title></rect>
-<rect x="556.7" y="370.0" width="1.3" height="34.0" class="f-unit"><title>Rasterizer: 2,360 of 2,360 clocks busy (100 %)</title></rect>
-<rect x="557.9" y="395.5" width="150.7" height="8.5" class="f-unit"><title>Rasterizer: 69,850 of 279,650 clocks busy (25 %)</title></rect>
+<rect x="220.0" y="370.0" width="536.5" height="34.0" class="lane"><title>Rasterizer</title></rect>
+<rect x="345.3" y="390.6" width="8.3" height="13.4" class="f-unit"><title>Rasterizer: 6,046 of 15,374 clocks busy (39 %)</title></rect>
+<rect x="353.6" y="397.1" width="6.4" height="6.9" class="f-unit"><title>Rasterizer: 2,419 of 11,963 clocks busy (20 %)</title></rect>
+<rect x="360.0" y="386.9" width="6.0" height="17.1" class="f-unit"><title>Rasterizer: 5,629 of 11,186 clocks busy (50 %)</title></rect>
+<rect x="366.0" y="370.0" width="6.5" height="34.0" class="f-unit"><title>Rasterizer: 11,992 of 11,992 clocks busy (100 %)</title></rect>
+<rect x="372.5" y="375.8" width="6.2" height="28.2" class="f-unit"><title>Rasterizer: 9,574 of 11,558 clocks busy (83 %)</title></rect>
+<rect x="378.7" y="382.6" width="6.4" height="21.4" class="f-unit"><title>Rasterizer: 7,503 of 11,900 clocks busy (63 %)</title></rect>
+<rect x="385.1" y="395.0" width="6.1" height="9.0" class="f-unit"><title>Rasterizer: 2,992 of 11,294 clocks busy (26 %)</title></rect>
+<rect x="391.2" y="377.7" width="6.1" height="26.3" class="f-unit"><title>Rasterizer: 8,794 of 11,352 clocks busy (77 %)</title></rect>
+<rect x="397.3" y="378.5" width="5.8" height="25.5" class="f-unit"><title>Rasterizer: 8,099 of 10,799 clocks busy (75 %)</title></rect>
+<rect x="403.1" y="381.1" width="6.2" height="22.9" class="f-unit"><title>Rasterizer: 7,715 of 11,473 clocks busy (67 %)</title></rect>
+<rect x="409.3" y="383.6" width="6.7" height="20.4" class="f-unit"><title>Rasterizer: 7,489 of 12,475 clocks busy (60 %)</title></rect>
+<rect x="416.0" y="376.9" width="6.2" height="27.1" class="f-unit"><title>Rasterizer: 9,109 of 11,430 clocks busy (80 %)</title></rect>
+<rect x="422.2" y="391.3" width="6.3" height="12.7" class="f-unit"><title>Rasterizer: 4,334 of 11,609 clocks busy (37 %)</title></rect>
+<rect x="428.5" y="378.3" width="7.5" height="25.7" class="f-unit"><title>Rasterizer: 10,581 of 14,007 clocks busy (76 %)</title></rect>
+<rect x="436.0" y="373.1" width="38.8" height="30.9" class="f-unit"><title>Rasterizer: 65,432 of 71,975 clocks busy (91 %)</title></rect>
+<rect x="474.8" y="370.4" width="33.1" height="33.6" class="f-unit"><title>Rasterizer: 60,794 of 61,518 clocks busy (99 %)</title></rect>
+<rect x="507.9" y="370.2" width="8.8" height="33.8" class="f-unit"><title>Rasterizer: 16,289 of 16,365 clocks busy (100 %)</title></rect>
+<rect x="516.7" y="370.2" width="36.2" height="33.8" class="f-unit"><title>Rasterizer: 66,776 of 67,182 clocks busy (99 %)</title></rect>
+<rect x="552.9" y="373.1" width="6.9" height="30.9" class="f-unit"><title>Rasterizer: 11,634 of 12,797 clocks busy (91 %)</title></rect>
+<rect x="559.8" y="370.5" width="24.7" height="33.5" class="f-unit"><title>Rasterizer: 45,196 of 45,857 clocks busy (99 %)</title></rect>
+<rect x="584.5" y="381.8" width="6.8" height="22.2" class="f-unit"><title>Rasterizer: 8,233 of 12,585 clocks busy (65 %)</title></rect>
+<rect x="591.3" y="392.2" width="0.9" height="11.8" class="f-unit"><title>Rasterizer: 556 of 1,608 clocks busy (35 %)</title></rect>
+<rect x="592.2" y="387.3" width="153.1" height="16.7" class="f-unit"><title>Rasterizer: 139,464 of 284,236 clocks busy (49 %)</title></rect>
 <text x="208.0" y="443.0" class="t" text-anchor="end">Blitter</text>
-<rect x="220.0" y="422.0" width="496.1" height="34.0" class="lane"><title>Blitter</title></rect>
-<rect x="262.4" y="438.0" width="3.3" height="18.0" class="f-unit"><title>Blitter: 3,223 of 6,096 clocks busy (53 %)</title></rect>
-<rect x="265.6" y="432.8" width="60.4" height="23.2" class="f-unit"><title>Blitter: 76,414 of 112,096 clocks busy (68 %)</title></rect>
-<rect x="557.9" y="453.2" width="150.7" height="2.8" class="f-unit"><title>Blitter: 22,743 of 279,650 clocks busy (8 %)</title></rect>
+<rect x="220.0" y="422.0" width="536.5" height="34.0" class="lane"><title>Blitter</title></rect>
+<rect x="276.5" y="437.8" width="3.1" height="18.2" class="f-unit"><title>Blitter: 3,103 of 5,805 clocks busy (53 %)</title></rect>
+<rect x="279.6" y="434.7" width="65.7" height="21.3" class="f-unit"><title>Blitter: 76,379 of 121,875 clocks busy (63 %)</title></rect>
+<rect x="592.2" y="453.3" width="153.1" height="2.7" class="f-unit"><title>Blitter: 22,392 of 284,236 clocks busy (8 %)</title></rect>
 <line x1="1020.0" y1="206" x2="1020.0" y2="464" class="limit"/>
 <text x="1020.0" y="478.0" class="m" text-anchor="middle">Frame change at 50 fps</text>
 <text x="40.0" y="504.0" class="t">The CPU in this frame</text>
@@ -215,60 +200,60 @@
 <text x="470.0" y="532.0" class="v" text-anchor="end">0.0 ms</text>
 <text x="520.0" y="532.0" class="v" text-anchor="end">0 %</text>
 <text x="40.0" y="552.0" class="s">Player&#x27;s physics, sound</text>
-<text x="400.0" y="552.0" class="v" text-anchor="end">78,638</text>
-<text x="470.0" y="552.0" class="v" text-anchor="end">1.1 ms</text>
-<text x="520.0" y="552.0" class="v" text-anchor="end">5 %</text>
+<text x="400.0" y="552.0" class="v" text-anchor="end">104,871</text>
+<text x="470.0" y="552.0" class="v" text-anchor="end">1.4 ms</text>
+<text x="520.0" y="552.0" class="v" text-anchor="end">7 %</text>
 <text x="40.0" y="572.0" class="s">Preparation (camera, objects, backdrop)</text>
-<text x="400.0" y="572.0" class="v" text-anchor="end">6,096</text>
+<text x="400.0" y="572.0" class="v" text-anchor="end">5,805</text>
 <text x="470.0" y="572.0" class="v" text-anchor="end">0.1 ms</text>
 <text x="520.0" y="572.0" class="v" text-anchor="end">0 %</text>
 <text x="40.0" y="592.0" class="s">Selection (visibility test, sorting)</text>
-<text x="400.0" y="592.0" class="v" text-anchor="end">112,096</text>
-<text x="470.0" y="592.0" class="v" text-anchor="end">1.5 ms</text>
+<text x="400.0" y="592.0" class="v" text-anchor="end">121,875</text>
+<text x="470.0" y="592.0" class="v" text-anchor="end">1.6 ms</text>
 <text x="520.0" y="592.0" class="v" text-anchor="end">8 %</text>
 <text x="40.0" y="612.0" class="s">Pieces (matrices, hand-over to the hardware)</text>
-<text x="400.0" y="612.0" class="v" text-anchor="end">430,454</text>
-<text x="470.0" y="612.0" class="v" text-anchor="end">5.8 ms</text>
-<text x="520.0" y="612.0" class="v" text-anchor="end">29 %</text>
+<text x="400.0" y="612.0" class="v" text-anchor="end">458,299</text>
+<text x="470.0" y="612.0" class="v" text-anchor="end">6.2 ms</text>
+<text x="520.0" y="612.0" class="v" text-anchor="end">31 %</text>
 <text x="40.0" y="632.0" class="s">Computers&#x27; physics and the race screen&#x27;s list (after the pieces)</text>
-<text x="400.0" y="632.0" class="v" text-anchor="end">279,650</text>
+<text x="400.0" y="632.0" class="v" text-anchor="end">284,236</text>
 <text x="470.0" y="632.0" class="v" text-anchor="end">3.8 ms</text>
 <text x="520.0" y="632.0" class="v" text-anchor="end">19 %</text>
 <text x="40.0" y="652.0" class="s">Race display and radar</text>
-<text x="400.0" y="652.0" class="v" text-anchor="end">13,053</text>
+<text x="400.0" y="652.0" class="v" text-anchor="end">13,173</text>
 <text x="470.0" y="652.0" class="v" text-anchor="end">0.2 ms</text>
 <text x="520.0" y="652.0" class="v" text-anchor="end">1 %</text>
 <text x="40.0" y="672.0" class="s">Waiting for the hardware</text>
-<text x="400.0" y="672.0" class="v" text-anchor="end">332</text>
-<text x="470.0" y="672.0" class="v" text-anchor="end">0.0 ms</text>
+<text x="400.0" y="672.0" class="v" text-anchor="end">6,962</text>
+<text x="470.0" y="672.0" class="v" text-anchor="end">0.1 ms</text>
 <text x="520.0" y="672.0" class="v" text-anchor="end">0 %</text>
 <text x="40.0" y="692.0" class="s">Counters, log</text>
-<text x="400.0" y="692.0" class="v" text-anchor="end">545</text>
+<text x="400.0" y="692.0" class="v" text-anchor="end">615</text>
 <text x="470.0" y="692.0" class="v" text-anchor="end">0.0 ms</text>
 <text x="520.0" y="692.0" class="v" text-anchor="end">0 %</text>
 <text x="40.0" y="712.0" class="s">free until the frame change</text>
-<text x="400.0" y="712.0" class="v" text-anchor="end">564,136</text>
-<text x="470.0" y="712.0" class="v" text-anchor="end">7.6 ms</text>
-<text x="520.0" y="712.0" class="v" text-anchor="end">38 %</text>
+<text x="400.0" y="712.0" class="v" text-anchor="end">489,164</text>
+<text x="470.0" y="712.0" class="v" text-anchor="end">6.6 ms</text>
+<text x="520.0" y="712.0" class="v" text-anchor="end">33 %</text>
 <text x="560.0" y="532.0" class="s">Geometry unit</text>
-<text x="940.0" y="532.0" class="v" text-anchor="end">552,440</text>
-<text x="1010.0" y="532.0" class="v" text-anchor="end">7.4 ms</text>
-<text x="1060.0" y="532.0" class="v" text-anchor="end">37 %</text>
+<text x="940.0" y="532.0" class="v" text-anchor="end">608,582</text>
+<text x="1010.0" y="532.0" class="v" text-anchor="end">8.2 ms</text>
+<text x="1060.0" y="532.0" class="v" text-anchor="end">41 %</text>
 <text x="560.0" y="552.0" class="s">Setup unit</text>
-<text x="940.0" y="552.0" class="v" text-anchor="end">397,539</text>
-<text x="1010.0" y="552.0" class="v" text-anchor="end">5.4 ms</text>
-<text x="1060.0" y="552.0" class="v" text-anchor="end">27 %</text>
+<text x="940.0" y="552.0" class="v" text-anchor="end">474,339</text>
+<text x="1010.0" y="552.0" class="v" text-anchor="end">6.4 ms</text>
+<text x="1060.0" y="552.0" class="v" text-anchor="end">32 %</text>
 <text x="560.0" y="572.0" class="s">Rasterizer</text>
-<text x="940.0" y="572.0" class="v" text-anchor="end">424,103</text>
-<text x="1010.0" y="572.0" class="v" text-anchor="end">5.7 ms</text>
-<text x="1060.0" y="572.0" class="v" text-anchor="end">29 %</text>
+<text x="940.0" y="572.0" class="v" text-anchor="end">516,650</text>
+<text x="1010.0" y="572.0" class="v" text-anchor="end">7.0 ms</text>
+<text x="1060.0" y="572.0" class="v" text-anchor="end">35 %</text>
 <text x="560.0" y="592.0" class="s">Blitter</text>
-<text x="940.0" y="592.0" class="v" text-anchor="end">102,380</text>
+<text x="940.0" y="592.0" class="v" text-anchor="end">101,874</text>
 <text x="1010.0" y="592.0" class="v" text-anchor="end">1.4 ms</text>
 <text x="1060.0" y="592.0" class="v" text-anchor="end">7 %</text>
 <text x="560.0" y="612.0" class="s">CPU: writes to the hardware (incl. waiting)</text>
-<text x="940.0" y="612.0" class="v" text-anchor="end">25,492</text>
-<text x="1010.0" y="612.0" class="v" text-anchor="end">0.3 ms</text>
+<text x="940.0" y="612.0" class="v" text-anchor="end">29,576</text>
+<text x="1010.0" y="612.0" class="v" text-anchor="end">0.4 ms</text>
 <text x="1060.0" y="612.0" class="v" text-anchor="end">2 %</text>
 <text x="40.0" y="746.0" class="m">Percent: share of the 20 ms of a frame. Measured with the firmware&#x27;s time marks (main.c, tl_mark) and the units&#x27; clock counters; drawn by tools/make_timeline_svg.py.</text>
 </svg>
