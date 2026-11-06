@@ -36,7 +36,7 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   Docs: docs/development.md, "The menu".
 - **Driving mode (a race):** a race from the menu puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
-  L / R gears), from the original's views (Select + X changes the view: INCAR, INSIDE with the cockpit, NEAR, BACK the chase camera; Select + Y the rear-view mirror; docs/screamer2/hud.md section 5), with speed, gear, lap, position and times on the screen. The computer cars
+  L / R gears), from the original's views (X changes the view as in Screamer 1: INCAR, INSIDE with the cockpit, NEAR, BACK the chase camera; Select the rear-view mirror; docs/screamer2/hud.md section 5), with speed, gear, lap, position and times on the screen. The computer cars
   each wear their own team's model and paint (by default teams 2 to 4's cars 2 to 4, the player's is team 1's car 1; the menu changes the player's and the computers get the other teams; the image holds exactly those four, `race_grid`, docs/development.md "Teams") and are driven by the game's own driver along its line (`firmware/race.c`); laps and places are counted on that line. The car is the game's own model in single precision (`firmware/s2car.c`, ported from
   OpenScreamer's routines; the car's numbers read from the game's files, `firmware/s2params.c`), checked against traces of
   the original's routines (docs/screamer2/driving.md): equal on level ground, in the first wall hit and in a jump, the

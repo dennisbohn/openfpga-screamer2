@@ -127,7 +127,7 @@ objects' angles are searched) and counts the pixels that differ (`tools/host/pag
 Menus row 6 (docs/screamer2/menus.md section 6): CHAMPIONSHIP in the options room (the second station) runs LEAGUE SELECTION (`firmware/s2leaguepages.c`) -> WELCOME TO LEAGUE n -> the league's first race -> LEAGUE REPORT -> the next
 race ... The rules are `firmware/s2league.c` (read from `STARTL.EXE`: leagues of 4, 5, 6 and 6 races on England, Egypt, California, Finland, Switzerland, Columbia in turn; the computers ROOKIE, NORMAL, PRO, NORMAL and in league 4 all on their teams' fifth cars; 10 / 6 / 3 / 0 points by place;
 the league is won by being first on points after the last race, which opens the next league, one more track (league 4: the seventh when all four teams' fifth cars are won) and in league 4 the team's fifth car), the flow is the viewer's (`league_run()`). The team, car and gearbox are the start menu's,
-the laps GAME SETTINGS' NUMBER OF LAPS. The race is the arcade's: a league race has the pause menu without RESTART (EXIT counts the player last), no Select + Start and no track switching, and ends on the end screen's CONTINUE (B or Start), which lists the cars that have done their laps with their times and points.
+the laps GAME SETTINGS' NUMBER OF LAPS. The race is the arcade's: a league race has the pause menu without RESTART (EXIT counts the player last), and ends on the end screen's CONTINUE (B or Start), which lists the cars that have done their laps with their times and points.
 
 | Button (championship pages) | |
 |---|---|
@@ -300,18 +300,17 @@ comes over the race ("End of the race and the two pages" below).
 | B / Y | gas / brake (1 or 0) |
 | A | handbrake (held) |
 | L / R | gear down / up on a manual gearbox (on the step the button goes down; the gearbox is chosen on the TRANSMISSION page or in GAME SETTINGS, there is no button for it in the race: d-pad up used to toggle it and was hit by mistake while steering, with the stick of a docked controller too) |
-| X | timing overlay on / off |
-| Select + X | the next view from the car (INCAR, INSIDE, NEAR, BACK in turn: the original's F1 .. F4; kept in the save for the next race) |
-| Select + Y | the rear-view mirror on / off (the original's M; off at every race's start; with Select held the d-pad does not steer and Y does not brake) |
-| Select + left / right | previous / next track (the track is loaded again, a new race) |
-| Select + Start | a new race from the grid |
+| X | the next view from the car, as Screamer 1's X changes its camera (INCAR, INSIDE, NEAR, BACK in turn: the original's F1 .. F4, "Vollbildschirm", "Am Steuer", "Wagendach", "Blick von hinten" in the manual; kept in the save for the next race; not after the finish) |
+| Select | the rear-view mirror on / off (the original's M; off at every race's start; not in a replay, where Select ends it) |
+| L and R together | the timing overlay on / off |
+| Start | the pause menu (RESUME, RESTART, EXIT) |
 | After the finish | the end screen: d-pad left / right choose RACE AGAIN or EXIT, B or Start take it (after the four seconds of CONGRATULATIONS) |
 | Start | the pause menu (RESUME, RESTART, EXIT; not once the player has finished), the original's Esc; B or Start take the item, A or Select resume |
 
 ### The views from the car
 
-The race starts in the view the player left the last one in (the save's `S2S_VIEW`: 2 INCAR, the original's default, 3 BACK the chase camera, 4 NEAR, 6 INSIDE with the cockpit) and the player changes it with Select + X; the rear-view
-mirror (Select + Y) is a second pass of the scene into 320 x 35 rows, squeezed to a 160 x 35 glass at (81, 14), with `MIRROR_L.PKC`'s frame over it. The cameras, the cockpits (`COCK1..8_L.PKC`, the dashboards' numbers `CRUSC.DTR`: gear lamp,
+The race starts in the view the player left the last one in (the save's `S2S_VIEW`: 2 INCAR, the original's default, 3 BACK the chase camera, 4 NEAR, 6 INSIDE with the cockpit) and the player changes it with X; the rear-view
+mirror (Select) is a second pass of the scene into 320 x 35 rows, squeezed to a 160 x 35 glass at (81, 14), with `MIRROR_L.PKC`'s frame over it. The cameras, the cockpits (`COCK1..8_L.PKC`, the dashboards' numbers `CRUSC.DTR`: gear lamp,
 speed and revs needles) and the mirror are read from `STARTL.EXE` and held against the running original: docs/screamer2/hud.md section 5 has the rules, the numbers and what was compared. In short: INCAR and INSIDE sit in the car (400 and 300
 above the body, the car and its shadow are not drawn), INSIDE draws the scene only above the dashboard (127 to 143 rows) and the dashboard's picture over the rest, NEAR is the camera of `CARS.DTR`'s POSIZIONE TELECAMERA with eased
 angles. The 3D hardware is used as it is: the mirror's pass is `track_draw_mirror()` (the camera's right-hand side reversed, the backdrop's panorama turned, the lens three pixels to the right, level of detail 1 at least); it draws into the top 35
@@ -598,7 +597,7 @@ at 42,400 of 65,535) against the test tone's 4.2k.
 The music and the track load: the load takes the data slot for 3 to 5 s (the ZIP's reads), the ring is read from a data slot too,
 and the ring holds 1.5 s: so the music stops when the race is left (`s2snd_stop()` in `leave()`, which waits for a running read of
 the ring) and starts again with the next race, which costs the 170 ms of its first fill while the loading screen is up. A
-restart of the race on the same track (Select + Start, the pause's RESTART, RACE AGAIN and REPLAY after the finish: the song is no longer faded out at the finish) keeps its song. A frame as slow as 1 s would still not run the ring dry.
+restart of the race on the same track (the pause's RESTART, RACE AGAIN and REPLAY after the finish: the song is no longer faded out at the finish) keeps its song. A frame as slow as 1 s would still not run the ring dry.
 
 What is open: the original's volume balance is not known (the CD drive's analogue mix is not in the program; the two thirds are
 Screamer 1's choice), the pan law of the effects is HMI's as Screamer 1's `sound.c` has it, the car against car knock is the

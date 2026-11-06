@@ -131,10 +131,9 @@ static void screen_text(int n, const char *l1, const char *l2, const char *l3, i
     con_text(fb, 1, 17, "       Start: drive  Select+B: menu", GREY, BLACK);
     con_text(fb, 1, 19, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
     con_text(fb, 1, 20, "       A handbrake  L/R gears", GREY, BLACK);
-    con_text(fb, 1, 21, "       X: timing  Select+X: view", GREY, BLACK);
-    con_text(fb, 1, 22, "       Select+Y: mirror  Select+<>: track", GREY, BLACK);
-    con_text(fb, 1, 23, "       Select + Start: restart", GREY, BLACK);
-    con_text(fb, 1, 24, "       Start: pause menu (exit there)", GREY, BLACK);
+    con_text(fb, 1, 21, "       X: view  Select: mirror", GREY, BLACK);
+    con_text(fb, 1, 22, "       L+R together: timing overlay", GREY, BLACK);
+    con_text(fb, 1, 23, "       Start: pause menu (restart, exit)", GREY, BLACK);
     VID_SWAP = 1;
 }
 
@@ -419,12 +418,12 @@ static const char *band_text(void)
 }
 
 /* the controls of the driving mode from the buttons, as Screamer 1 reads them (car_keys: B the gas, Y the brake,
-   the d-pad the steering, held; L and R the gears on the step they go down). Select held (sel) makes the d-pad a
-   track switch, so it does not steer, and Y the mirror's switch (with X the view's), so it does not brake. */
-static struct s2car_input car_input(uint32_t keys, int sel)
+   the d-pad the steering, held; L and R the gears on the step they go down; A the handbrake). X changes the view and Select the mirror, on the press, so
+   nothing else is held back by them. */
+static struct s2car_input car_input(uint32_t keys)
 {
-    return (struct s2car_input){ .throttle = (keys & KEY_B) ? 1.0f : 0.0f, .brake = (keys & KEY_Y) && !sel ? 1.0f : 0.0f,
-                                 .steer = sel ? 0.0f : ((keys & KEY_RIGHT) ? 1.0f : 0.0f) - ((keys & KEY_LEFT) ? 1.0f : 0.0f),
+    return (struct s2car_input){ .throttle = (keys & KEY_B) ? 1.0f : 0.0f, .brake = (keys & KEY_Y) ? 1.0f : 0.0f,
+                                 .steer = ((keys & KEY_RIGHT) ? 1.0f : 0.0f) - ((keys & KEY_LEFT) ? 1.0f : 0.0f),
                                  .handbrake = (keys & KEY_A) != 0 };
 }
 
@@ -466,6 +465,8 @@ static void others_slice(void)
    and drawn first, those of the picture after. */
 static uint8_t mirror_strip[S2CK_MIRROR_W * S2CK_MIRROR_ROWS] __attribute__((aligned(4)));
 
+/* the marks of the mirror pass in the frame's timeline (tl_mark, the log's "timeline" block; only frames with the mirror on have them): 20 the objects are made, 21 the backdrop is in, 22 the
+   pieces are handed over, 23 the rasterizer is done, 24 the glass is squeezed, 25 the strip is in the SDRAM */
 static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const struct track_object *car_objs, int ncar, uint32_t buffer, int overlap)
 {
     static struct track_object mobjs[TRACK_MAX_OBJS];
@@ -479,6 +480,7 @@ static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const 
     s2fx_hide_shadow(follow);
     nm += s2fx_objects(&mc, rc, n, mobjs + nm, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS - nm);
     nm += s2props_objects(&mc, mobjs + nm, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - nm);
+    tl_mark(20);
     const struct rs_clip mclip = { 0, 0, FB_W, S2CK_MIRROR_ROWS };
     struct su_view mv;
     track_view_mirror(&mclip, &mv);
@@ -487,6 +489,7 @@ static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const 
     track_backdrop_blit_mirror(&mback, &mclip, &mc);
     while (!(MEM_STATUS & MEM_WRITES_IDLE))                             /* (the panorama turned over, made the first time, is in the SDRAM for the blitter) */
         ;
+    tl_mark(21);
     BL_CLOCKS = 0;
     back_wait = 1;
     hw_blit(&mback);
@@ -497,14 +500,18 @@ static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const 
     struct track_stats mts;
     if (overlap) hw_idle = others_slice;
     track_draw_mirror(0, &mclip, &mc, mobjs, nm, &mts);
+    tl_mark(22);
     hw_idle = 0;
     while (overlap && (RS_DRAW & RS_BUSY) && race_others_slice())     /* (the computers' steps fill the wait for the last pixels) */
         ;
     while (RS_DRAW & RS_BUSY)
         ;
+    tl_mark(23);
     s2ck_glass((volatile uint32_t *)FB(buffer), mirror_strip);
+    tl_mark(24);
     while (!(MEM_STATUS & MEM_WRITES_IDLE))                             /* (the blitter reads the strip from the SDRAM) */
         ;
+    tl_mark(25);
 }
 
 /* the race's text over the picture: the start lights, laps, place and times (hud: s2hud.c draws those); when the player has finished, the
@@ -658,10 +665,6 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         if (attract_mode) {
             /* (no button but the one that ends it: the screen's step takes it below) */
         } else if (*drive) {
-            if (sel && (press & (KEY_LEFT | KEY_RIGHT)) && !league_mode && !attack_mode && !race_replaying()) {
-                leave(n, mode, &st_all);
-                return other_track(n, press);
-            }
             if (!ui_ready && sel && (press & KEY_B)) {  /* Select + B: back to the menu, where there is no pause menu */
                 leave(n, mode, &st_all);
                 return 0;
@@ -714,16 +717,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 if (!hk.finished) {                     /* (the keys of the views and of the car followed are taken while the player's car is racing, 0x132b4, 0x2d7c0) */
                     if (press & KEY_L) { s2cam_view(S2CAM_TRACKSIDE); follow(s2cam_get_follow()); }
                     if (press & KEY_R) { s2cam_view(S2CAM_BACK); follow(s2cam_get_follow()); }
-                    if (press & KEY_B) { s2cam_next_view(); follow(s2cam_get_follow()); }         /* the views from the car in turn, the original's F1 .. F4 (the player's own are not kept: a replay) */
+                    if (press & (KEY_B | KEY_X)) { s2cam_next_view(); follow(s2cam_get_follow()); }         /* the views from the car in turn, the original's F1 .. F4 (the player's own are not kept: a replay) */
                     if (press & KEY_UP) follow((s2cam_get_follow() + 1) % race_cars());
                 }
             } else if (press & KEY_START) {
-                if (sel) {                              /* Select + Start: the race again from the grid (the championship's race is run once) */
-                    if (!league_mode) {
-                        race_start(n, floor_z);
-                        fin_frames = 0;
-                    }
-                } else if (ui_ready && drawn && !fin_frames) {      /* Start: the pause menu (not once the player has finished; the championship's has no RESTART) */
+                if (ui_ready && drawn && !fin_frames) {      /* Start: the pause menu (not once the player has finished; the championship's has no RESTART) */
                     int choice = s2pause_run_items(!!(st & VID_FRONT), pal, !league_mode);
                     if (choice == S2PAUSE_EXIT) {
                         leave(n, mode, &st_all);
@@ -738,11 +736,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                     continue;
                 }
             }
-            if (press & KEY_X) {
-                if (sel && !race_replaying() && !cut_done) set_view(s2cam_next_view());           /* Select + X: the next view from the car (the original's F1 .. F4 in turn; not once the player has finished) */
-                else if (!sel) *overlay = !*overlay;
-            }
-            if ((press & KEY_Y) && sel && !race_replaying() && !cut_done && s2cam_get_view() != S2CAM_TRACKSIDE) mirror_on = !mirror_on;      /* Select + Y: the rear-view mirror (the original's M; not in a replay) */
+            if ((press & KEY_X) && !race_replaying() && !cut_done) set_view(s2cam_next_view());     /* X: the next view from the car, as Screamer 1's X changes its camera (the original's F1 .. F4 in turn: full screen, at the wheel, the roof, from behind; not once the player has finished) */
+            if ((press & KEY_SELECT) && !race_replaying() && !cut_done && s2cam_get_view() != S2CAM_TRACKSIDE) mirror_on = !mirror_on;      /* Select: the rear-view mirror on and off (the original's M; not in a replay, where Select ends it) */
+            if ((press & (KEY_L | KEY_R)) && (keys & KEY_L) && (keys & KEY_R)) *overlay = !*overlay;     /* L and R together: the timing overlay (the owner's measuring tool; nothing else uses both) */
             if (!race_replaying() && race_car(0)->manual != manual) {   /* nothing in a race changes the gearbox (the TRANSMISSION page and GAME SETTINGS choose it; d-pad up used to toggle it and was pressed by mistake while steering): if it differs it is a fault, logged once with the step and put back */
                 static int logged;
                 if (!logged++) {
@@ -794,7 +790,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
             uint32_t steps = sim || !drawn ? 1 : dvf > DRIVE_MAX_STEPS ? DRIVE_MAX_STEPS : dvf;
             for (uint32_t k = 0; k < steps; k++) {
-                struct s2car_input in = car_input(sim ? sim_keys(drawn) : keys, sel);
+                struct s2car_input in = car_input(sim ? sim_keys(drawn) : keys);
                 in.gear_up = k == 0 && (press & KEY_R);         /* a gear on the one step the button went down */
                 in.gear_down = k == 0 && (press & KEY_L);
                 race_step_player(&in);
