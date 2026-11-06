@@ -306,7 +306,6 @@ int s2arcade_page(int page, struct s2_menu_cfg *c)
     void *self = 0;
     switch (page) {
     case S2ARC_TITLE:                                       /* the team's cars as the CAR page will want them (a fifth one, if it is open, comes with them), and the take's paths */
-        if (c->car > cars_of(c->team)) c->car = 1;
         tt.cars = s2arcscene_load(cp.zip, c->team, cars_of(c->team));
         if (tt.cars) s2showroom_init(S2ARCSCENE_CARS, 0);
         pg.frame = title_frame;
