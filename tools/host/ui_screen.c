@@ -1092,6 +1092,9 @@ static void draw_banner(int track, uint8_t *out)
 /* the ARCADE title's cars: scene_screen.c */
 #include "scene_screen.c"
 
+/* the championship's desk scene: desk_screen.c */
+#include "desk_screen.c"
+
 /* the attract sequence and the idle timers: attract_screen.c */
 #include "attract_screen.c"
 
@@ -1121,12 +1124,14 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_league_pages(ref, prefix);
     check_league_end(ref, prefix);
     check_league_flow(prefix);
+    check_welcome_plates(prefix);
     check_pages3d(prefix);
     check_trackpages(prefix);
     check_custom(ref, prefix);
     check_room(ref, prefix);
     check_garage(ref, prefix);
     check_scene(ref, prefix);
+    check_desk(prefix);
     check_attract(ref, prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
