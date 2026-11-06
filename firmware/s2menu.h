@@ -56,8 +56,8 @@ void s2menu_defaults(struct s2_menu_cfg *c);
 void s2menu_load(struct s2_menu_cfg *c);
 void s2menu_store(const struct s2_menu_cfg *c);
 
-/* The grid of a race for the player's team and car: slot 0 the player's, the others the three other teams (in order, each with the
-   car of its own number: the default grid for team 1 car 1). */
+/* The grid of a race for the player's team and car: slot 0 the player's, slot k team (team + k) mod 4 and car (car + k) mod 4 counted from 0 (the original's, 0x33b0e, the
+   same in every kind of game; the default grid for team 1 car 1 is team n, car n; the bonus car, 4, gives the computers 1 2 3). */
 void s2menu_grid(const struct s2_menu_cfg *c, struct s2_pick grid[4]);
 
 /* The one short line a start leaves in the debug log: "menu: race T4 CONDOR 1 3L NORMAL AUTO" */
