@@ -28,6 +28,7 @@
 #include "s2save.h"
 #include "s2league.h"
 #include "s2leaguepages.h"
+#include "s2desk.h"
 #include "s2ghost.h"
 #include "s2cam.h"
 #include "s2trackpage.h"
@@ -1064,7 +1065,13 @@ static void league_run(struct zip *z, int *cars, int *overlay)
             int r = s2lp_report(&L);
             if (r == S2LP_FAIL) r = s2l_over(&L) ? S2LP_DONE : S2LP_NEXT;       /* (no picture: go on) */
             if (r == S2LP_LEAVE) return;
-            if (r == S2LP_DONE) break;
+            if (r == S2LP_DONE) {
+                if (s2l_won(&L)) {                                      /* a league won: the desk scene (0x44144), after league 4 a second one with the fifth car, which is the chosen one from then on */
+                    cfg.car = s2desk_won(league_at, cfg.team, cfg.car);
+                    s2menu_store(&cfg);
+                }
+                break;
+            }
         }
     }
 }
