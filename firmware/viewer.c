@@ -475,7 +475,7 @@ static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const 
     nm += s2props_objects(&mc, mobjs + nm, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - nm);
     const struct rs_clip mclip = { 0, 0, FB_W, S2CK_MIRROR_ROWS };
     struct su_view mv;
-    track_view(&mclip, &mv);
+    track_view_mirror(&mclip, &mv);
     draw_buf = buffer;
     blit_start(&mback, (int)buffer);
     track_backdrop_blit(&mback, &mclip, &mc);
