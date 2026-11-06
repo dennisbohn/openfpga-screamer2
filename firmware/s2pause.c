@@ -13,7 +13,8 @@
 #define DIM         15                  /* the dim items are font colour 15: the palette entries 241 .. 255, which the still never uses */
 #define BOX_X       0x50                /* the box darkened once more under the items (the original's numbers) */
 #define BOX_W       0xA0
-#define EASE_FRAMES 50                  /* the effects die away in a second (32767 a second of 0x7fff) */
+#define EASE        874                 /* the effects' level (0x8000 whole) falls by this a video frame: 0xaee60 takes the sound manager's master (0x5fff, the default effects volume, measured) down by
+                                           (int)(dt x 32767) a frame (0x4a231): 0.75 s to nothing */
 #define PAUSE_CLICKS 1                  /* the original's pause is silent (MENU.DTR is not loaded in a race); ours clicks, as its menu pages do */
 
 static struct {
@@ -36,7 +37,7 @@ static void pause_frame(void *self, uint32_t tick)
     (void)tick;
     music_frame();                      /* the song goes on: its ring is kept filled */
     if (p.effects > 0) {
-        p.effects -= 0x8000 / EASE_FRAMES;
+        p.effects -= EASE;
         if (p.effects < 0) p.effects = 0;
         s2sound_effects(p.effects);
     }

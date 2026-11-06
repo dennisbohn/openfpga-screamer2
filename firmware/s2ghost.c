@@ -66,7 +66,7 @@ const struct s2gh_head *s2gh_stored(int track)
     migrate(track);
     const struct s2gh_head *h = BLOCK(track);
     if (memcmp(h->magic, "S2AT", 4) || h->version != 2 || h->track != track || h->steps == 0 || h->steps > S2GH_MAX) return 0;
-    if (h->team < 1 || h->team > 4 || h->car < 1 || h->car > 5 || h->slot > 1 || h->damages > 1) return 0;
+    if (h->team < 1 || h->team > 4 || h->car < 1 || h->car > 5 || h->slot > 1 || h->damages > S2GH_DAMAGES) return 0;
     if (h->custom > 1 || !setup_ok(&h->setup) || (!h->custom && (h->setup.handling | h->setup.pressure | h->setup.tyres | h->setup.front | h->setup.rear | h->setup.brakes))) return 0;
     if (!(h->time > 0.0f && h->time < 3600.0f)) return 0;
     return h->crc == crc_of(h) ? h : 0;
@@ -75,7 +75,7 @@ const struct s2gh_head *s2gh_stored(int track)
 const struct s2gh_head *s2gh_ghost(int track, int damages)
 {
     const struct s2gh_head *h = s2gh_stored(track);
-    return h && h->sim == S2GH_SIM && h->damages == (damages != 0) ? h : 0;
+    return h && h->sim == S2GH_SIM && h->damages == damages ? h : 0;
 }
 
 /* ------------------------------------------------------------------------------------------------ the recording */
@@ -96,7 +96,7 @@ void s2gh_rec_begin(int track, int team, int car, int slot, int damages, int cus
     rec.team = team;
     rec.car = car;
     rec.slot = slot;
-    rec.damages = damages != 0;
+    rec.damages = damages < 0 ? 0 : damages > S2GH_DAMAGES ? S2GH_DAMAGES : damages;
     rec.steps = 0;
     rec.full = 0;
 }

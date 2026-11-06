@@ -405,12 +405,14 @@ static void ground_under_wheels(car_t *c, const struct corner_ground q[4])
 
 /* 0x19aaa: a knock: the side's count for the look and, once it is 1, a knock over 2000 puts the side's mark
    in the car's flags (+0xb8: what the drawn car's textures show), and with DAMAGES on (s2car_damages: the game has it off
-   until its menu says so) the corner's and the car's damage, and the corner's spring softer. The game scales the force the damage
-   goes by with the level's row of MISC.DTR's DAMAGES (pro 5, normal 2.5, rookie 1): `scale`, which a wall's knock leaves at 1 (the level ROOKIE's;
-   the player's car against the walls has been that at every level) and a car's touch (race.c) sets. */
+   until its menu says so) the corner's and the car's damage, and the corner's spring softer. The force the damage goes by is scaled
+   with the level's row of MISC.DTR's DAMAGES (pro 5, normal 2.5, rookie 1) for every knock, a wall's and a car's alike and the player's and the
+   computers' (0x19b7b: force x [0x11cce0 + 4 x [0x130d4c]], after the side's mark, which goes by the force as it came): s2car_damage_scale, which race_init()
+   sets from the level (1 until it does: the tools and the tests). */
 int s2car_damages = 1;
+float s2car_damage_scale = 1.0f;
 
-static void knock_scaled(car_t *c, int side, int corner, float share, float force, float scale)
+static void knock(car_t *c, int side, int corner, float share, float force)
 {
     if(!s2car_damages) return;
     static const uint32_t mark[4] = { 0x2000, 0x800, 0x4000, 0x1000 };       /* sides 0 .. 3 (the table at 0x19b58) */
@@ -420,7 +422,7 @@ static void knock_scaled(car_t *c, int side, int corner, float share, float forc
         RF(count) = 1.0f;
         if(force > 2000.0f) RI(0xb8) |= (int32_t)mark[side];
     }
-    force = force * scale;
+    force = force * s2car_damage_scale;
     int hurt = 0xc + 4 * corner;
     RF(hurt) = share * force / 50000.0f + RF(hurt);
     if(RF(hurt) > 2.0f) RF(hurt) = 2.0f;
@@ -429,8 +431,6 @@ static void knock_scaled(car_t *c, int side, int corner, float share, float forc
     if(RF(8) > 2.0f) RF(8) = 2.0f;
     RI(0x59c + corner * 0x70) = (int32_t)((1.0f - RF(hurt)) * 55.0f + RF(hurt) * 99.0f);
 }
-
-static void knock(car_t *c, int side, int corner, float share, float force) { knock_scaled(c, side, corner, share, force, 1.0f); }
 
 /* 0x20970: where two lines meet: the car's line (point p, direction d) and the wall's (q, e) on the ground */
 static int lines_meet(const float p[3], const float d[3], const float q[3], const float e[3], float *s, float *u)
@@ -1207,9 +1207,9 @@ void s2car_step_driven(struct s2car_state *s, void (*driver)(struct s2car_state 
     s2car_finish_driven(s, driver, ctx);
 }
 
-void s2car_knock(struct s2car_state *s, int side, int corner, float share, float force, float scale)
+void s2car_knock(struct s2car_state *s, int side, int corner, float share, float force)
 {
-    knock_scaled(s, side, corner, share, force, scale);
+    knock(s, side, corner, share, force);
 }
 
 int s2car_lines_meet(const float p[3], const float d[3], const float q[3], const float e[3], float *s, float *u)

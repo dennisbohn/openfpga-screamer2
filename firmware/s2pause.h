@@ -6,7 +6,7 @@
  * Buttons (the page runner's, s2page.h): d-pad up / down choose, B or Start take the chosen item, A or Select resume. Start opens the
  * menu, so Start twice is a resume.
  *
- * Sound: the race's effects ease out over a second and come back whole at the end; the music plays on (the original's CD does).
+ * Sound: the race's effects ease out in 0.75 s and come back whole at the end; the music plays on (the original's CD does).
  */
 #pragma once
 #include <stdint.h>

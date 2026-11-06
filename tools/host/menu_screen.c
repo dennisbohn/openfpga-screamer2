@@ -94,20 +94,30 @@ int main(int argc, char **argv)
     s2menu_load(&c);
     CHECK(c.track == 1 && c.team == 1 && c.car == 1 && s2_menu_laps[c.laps] == 3 && c.skill == 1 && !c.manual, "defaults");
 
-    /* the grid: the player's pick in slot 0, the three other teams in the others, no team twice; the default is race.c's */
+    /* the grid: the player's pick in slot 0, no team twice; the others are the original's (0x33b0e .. 0x33bc9: the loop `for k = 1 .. 3: entry k = (entry 0 + k) idiv 4's remainder` on the team
+       and on the car's number from 0, a car 4 being the bonus car), here written once more from that reading with the C remainder; the old rule (the other teams in order, each with the car of
+       its own number) is the negative control: it is the same for the default choice and not for the others */
+    int old_differs = 0;
     for (int team = 1; team <= S2M_TEAMS; team++)
         for (int car = 1; car <= S2M_CARS; car++) {
             struct s2_menu_cfg g = { .track = 1, .team = team, .car = car, .laps = 1, .skill = 1 };
-            struct s2_pick grid[4];
-            int seen = 0;
+            struct s2_pick grid[4], old[4];
+            int seen = 0, t0 = team - 1, m0 = car - 1, k2 = 1;
             s2menu_grid(&g, grid);
+            old[0] = (struct s2_pick){ (uint8_t)team, (uint8_t)car };
+            for (int t = 1; t <= S2M_TEAMS && k2 < 4; t++)
+                if (t != team) old[k2++] = (struct s2_pick){ (uint8_t)t, (uint8_t)t };
             CHECK(grid[0].team == team && grid[0].car == car, "grid slot 0 for %d/%d", team, car);
             for (int k = 0; k < 4; k++) {
                 CHECK(grid[k].team >= 1 && grid[k].team <= 4 && grid[k].car >= 1 && grid[k].car <= 5, "grid slot %d out of range", k);
                 seen |= 1 << grid[k].team;
+                if (k) CHECK(grid[k].team == (t0 + k) % 4 + 1 && grid[k].car == (m0 + k) % 4 + 1, "grid slot %d for %d/%d is %d/%d", k, team, car, grid[k].team, grid[k].car);
+                old_differs += k && (old[k].team != (t0 + k) % 4 + 1 || old[k].car != (m0 + k) % 4 + 1);
             }
             CHECK(seen == 0x1E, "grid for %d/%d lacks a team", team, car);
+            CHECK(!(team == 3 && car == 2) || (grid[1].team == 4 && grid[1].car == 3 && grid[2].team == 1 && grid[2].car == 4 && grid[3].team == 2 && grid[3].car == 1), "WASP's second car: the computers drive 4/3, 1/4, 2/1");
         }
+    CHECK(old_differs > 0 && old_differs < 60, "negative control: the old rule differs from the original's for %d of the 60 computers' cars (the default choice is the same in both)", old_differs);
     {
         struct s2_menu_cfg d;
         struct s2_pick grid[4];

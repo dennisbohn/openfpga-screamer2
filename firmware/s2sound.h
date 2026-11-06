@@ -8,9 +8,11 @@
  * manager has 64 slots of the same kinds.
  *
  * The music: CD_TRACKS of MISC.DTR names the CD track of each of the seven tracks; it starts with the
- * race (the grid, before the lights), goes on round and round, and fades out over 3 s once the player
- * has finished. Without GAME.GOG / GAME.DAT, or without SOUND.DAT in the ZIP, that part is silent
- * and nothing else is wrong. Everything is silent in the ride (no race).
+ * race (the grid, before the lights) and goes on round and round until the race is left: the original's
+ * CD never fades (no volume or stop call is made by the race or its end screens, STARTL.EXE 0x4d990 /
+ * 0x4d908), only the effects ease out on the end screens (s2sound_effects, s2end.h). Without
+ * GAME.GOG / GAME.DAT, or without SOUND.DAT in the ZIP, that part is silent and nothing else is wrong.
+ * Everything is silent in the ride (no race).
  */
 #pragma once
 #include <stdint.h>
@@ -29,8 +31,8 @@ void s2snd_race_start(int track);
 extern int s2snd_music_later;
 void s2snd_music(int track);
 /* Once a frame of the race, after the physics' steps and with the camera of the picture: the engines'
-   pitch and volume, the tyres, the knocks, the music's fade, and the music's ring kept filled
-   (music_frame()). Costs 0.1 to 0.2 ms. */
+   pitch and volume, the tyres, the knocks, and the music's ring kept filled (music_frame()). Costs 0.1 to 0.2
+   ms. */
 void s2snd_frame(const struct track_cam *cam);
 /* The race is left (another track, the ride): every voice and the music stop; a line into the log with the cost
    per frame. Nothing may run on the data slots (a track's load) while music plays, so this comes first. */
@@ -39,6 +41,8 @@ void s2snd_stop(void);
 /* The menu's sound `id` (MENU.DTR of SOUND.DAT, 0 .. 14: MENU1 .. MENU15, s2snd.h) on a voice of its own, at the sample's rate and the
    effects' master volume. Works in the menus and in the race. Silent without SOUND.DAT. */
 void s2sound_menu(int id);
-/* The race's effects (engines, tyres) at f of 0x8000 of their volume, f = 0x8000 giving the registers back as the race left them: the
-   pause eases them out and restores them at once (the original's, 0xaec90). Knocks are stopped. */
+/* The race's effects (engines, tyres, the scenery's sounds, the knocks that start) at f of 0x8000 of their volume from now on, f = 0x8000 giving the
+   registers back as the race left them. The original's sound manager has one master volume that 0xaee60 eases to a target by a step a frame: the pause
+   eases it to 0 at 32767 a second of 0x7fff and puts it back at once, the end screens ease it to 0 at 16383 a second once the choices are up (s2end.h). The
+   knocks playing when the level first goes down are stopped. */
 void s2sound_effects(int32_t f);

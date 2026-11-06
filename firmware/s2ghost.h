@@ -11,7 +11,7 @@
  *
  *    0  "S2AT"
  *    4  CRC-32 of bytes 8 .. 40 + steps
- *    8  version (2), track 1 .. 7, team 1 .. 4, car 1 .. 5 of the recorded car, slot 0 / 1 (the side it started on), damages (the GAME SETTINGS row)
+ *    8  version (2), track 1 .. 7, team 1 .. 4, car 1 .. 5 of the recorded car, slot 0 / 1 (the side it started on), damages (the key below)
  *   14  sim: the version of the physics the run was made with (S2GH_SIM; a run of another one is not raced: it would not end where it did)
  *   16  steps       20  total time (float, seconds)       24  best lap (float)       28  laps
  *   32  the car's set-up (a run is a function of the controls AND the set-up the car was made of, docs/screamer2/driving.md "The set-up"): 0 the standard one, 1 the six numbers that
@@ -20,7 +20,7 @@
  * A block of version 1 (32 bytes of head, no set-up: the standard one, steps from byte 32) is made over into version 2 when it is first looked at (s2gh_stored): the
  * controls move 8 bytes, the CRC-32 is made again; a run too long to move is no run (it was 51,401 steps or more: 17 minutes).
 
- * The block is a ghost to race if it is whole (marker, version, CRC-32), made with this physics and the same DAMAGES setting; a block that is whole
+ * The block is a ghost to race if it is whole (marker, version, CRC-32), made with this physics and the same DAMAGES setting and level; a block that is whole
  * but of another physics or setting still counts as the time to beat. Nothing here touches the hardware, so it is tested on the PC
  * (tools/s2/check_ghost_s2.sh).
  */
@@ -34,6 +34,8 @@
 #define S2GH_MAX        (S2GH_BLOCK - S2GH_HEAD)    /* steps in a kept run: 51,400 = 17 minutes */
 #define S2GH_TRACKS     7
 #define S2GH_SIM        1
+#define S2GH_DAMAGES    3                       /* the DAMAGES key of a run (race_damage_key()): 0 DAMAGES off, else 1 + the level's scale: 1 rookie (a knock's force x 1), 2 normal (x 2.5), 3 pro (x 5); the first
+                                           version of the head had 0 and 1, and its 1 is the rookie level's: walls were not scaled then, and at that level they are not */
 
 struct s2gh_head {
     char magic[4];
@@ -55,7 +57,7 @@ struct s2car_input s2gh_unpack(uint8_t b, int *manual);
 
 /* Track n's kept block (1 .. 7, in ATTACK.DAT's window) if it is a whole one, else 0. */
 const struct s2gh_head *s2gh_stored(int track);
-/* ... and a ghost to race: whole, made with this physics, the same DAMAGES setting (damages 0 / 1) */
+/* ... and a ghost to race: whole, made with this physics, the same DAMAGES key (0 .. S2GH_DAMAGES: the setting and the level, race_damage_key()) */
 const struct s2gh_head *s2gh_ghost(int track, int damages);
 /* The controls of a block, one byte a step */
 const uint8_t *s2gh_data(const struct s2gh_head *h);

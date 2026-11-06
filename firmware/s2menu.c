@@ -111,12 +111,12 @@ void s2menu_store(const struct s2_menu_cfg *c)
     s2save_set(S2S_TRANS, c->manual != 0);
 }
 
+/* The computers' cars follow the player's, in every kind of game (STARTL.EXE 0x33b0e .. 0x33bc9, before the kind of game is looked at; s2league.c's s2l_grid() is the same rule):
+   grid slot k is team (team + k) mod 4 and car (car + k) mod 4, counted from 0 (the bonus car, 4, makes the computers' 1 2 3). */
 void s2menu_grid(const struct s2_menu_cfg *c, struct s2_pick grid[4])
 {
-    grid[0] = (struct s2_pick){ (uint8_t)c->team, (uint8_t)c->car };
-    int k = 1;
-    for (int t = 1; t <= S2M_TEAMS && k < 4; t++)
-        if (t != c->team) grid[k++] = (struct s2_pick){ (uint8_t)t, (uint8_t)t };
+    for (int k = 0; k < 4; k++)
+        grid[k] = (struct s2_pick){ (uint8_t)((c->team - 1 + k) % S2M_TEAMS + 1), (uint8_t)(k ? (c->car - 1 + k) % 4 + 1 : c->car) };
 }
 
 /* ------------------------------------------------------------------------------------------------ the menu */

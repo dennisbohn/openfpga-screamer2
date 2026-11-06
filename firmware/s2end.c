@@ -7,6 +7,7 @@
 #include "s2page.h"
 #include "s2save.h"
 #include "s2league.h"
+#include "s2sound.h"
 #include "console.h"
 #include "dlog.h"
 #include "hw.h"
@@ -22,10 +23,13 @@
 #define SCROLL_START    450             /* the list starts to move half a second after the choices come */
 #define ROWS        S2S_ROWS
 #define VIEW        6                   /* rows drawn: five in view and the one coming in */
+#define FX_EASE     437                 /* the effects' level (0x8000 whole) falls by this a video frame once the choices are up: 0xaee60 takes the sound manager's master (0x5fff at the
+                                           start, measured) down by (int)(dt x 16383) a frame, 16383 a second: 2/3 of it a second, gone in 1.5 s (docs/screamer2/menus.md) */
 
 static struct {
     int started;
     uint32_t last_vf, clock, blink;     /* the clocks in hundredths of a second */
+    int32_t fx;                         /* the race's effects at this of 0x8000 (s2sound_effects) */
     int choice;                         /* 0 RACE AGAIN, 1 EXIT; with a replay 0 REPLAY, 1 RACE AGAIN, 2 EXIT (the championship's: 0 REPLAY, 1 CONTINUE) */
     int kind;                           /* the lists' kind of game: S2S_KIND_ARCADE, S2S_KIND_LEAGUE, S2S_KIND_ATTACK */
     int recorded, rank;                 /* the times are in the lists; the row the total time took, -1 if none */
@@ -162,6 +166,7 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
         const float frac = E.frac;
         memset(&E, 0, sizeof E);
         E.started = 1;
+        E.fx = 0x8000;
         E.last_vf = vf;
         E.blink = BLINK_BIT;
         E.rank = -1;
@@ -179,6 +184,10 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
     E.clock += 2 * dvf;
     E.blink += 2 * dvf;
     int result = S2END_NONE;
+    if (E.clock >= CONGRATS_END && E.fx > 0) {          /* the choices are up: the sound of the race eases out (the first four seconds it goes on whole) */
+        E.fx -= (int32_t)dvf * FX_EASE;
+        s2sound_effects(E.fx);
+    }
     struct blit_list *l = s2gfx_begin_on(buffer);
     if (E.clock < CONGRATS_END) {
         congratulations(l, in);

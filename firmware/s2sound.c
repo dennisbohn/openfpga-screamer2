@@ -28,7 +28,6 @@
 #define ALL_VOICES  0xFFFFFFFFu
 #define DOPPLER     (50.0f / 30.0f)             /* the game's shift is per frame of its own (30 a second); ours are 50 */
 #define KNOCK_GAP   3                           /* frames between two knocks, unless the second is harder (the game's frames are 1/17 to 1/30 s apart) */
-#define FADE_FRAMES 150                         /* the music fades out over 3 s once the player has finished */
 #define MIN_RATE    200                         /* Hz: an engine at rest still turns the sample */
 
 union word { int32_t i; uint32_t u; float f; };
@@ -49,12 +48,19 @@ static struct { int id; float last; uint32_t step, reg; } scene[ANIMS];   /* the
 static int ground_before;                       /* the player's wheels on the ground a frame before */
 static uint32_t knock_age, knock_rank, knock_next;
 static uint32_t last_vf, frames;
-static int32_t fade;                            /* the music's volume, 0x8000 whole */
-static int fading, faded, cost_logged;
+static uint32_t fx_level = 0x8000;              /* the race's effects at this of 0x8000 (s2sound_effects: the pause's and the end screen's ease) */
+static int cost_logged;
 static uint64_t sum_fx, sum_music;
 static uint32_t max_fx, max_music;
 
 static void log_cost(void);
+
+/* a voice's register (left and right volume, a byte each) at the effects' level */
+static uint32_t at_level(uint32_t reg)
+{
+    if (fx_level == 0x8000) return reg;
+    return (reg & 255) * fx_level >> 15 | ((reg >> 8 & 255) * fx_level >> 15) << 8;
+}
 
 static void play_sample(int v, const struct s2snd_sample *s, uint32_t step, uint32_t reg)
 {
@@ -66,9 +72,10 @@ static void play_sample(int v, const struct s2snd_sample *s, uint32_t step, uint
     AU_PLAY = 1u << v;
 }
 
+/* a voice of the race: its register is the effects' level times the sample's */
 static void play(int v, int id, uint32_t step, uint32_t reg)
 {
-    play_sample(v, &smp[id], step, reg);
+    play_sample(v, &smp[id], step, at_level(reg));
 }
 
 void s2snd_init(struct zip *z)
@@ -121,9 +128,8 @@ void s2snd_race_start(int track)
     ground_before = 4;
     knock_age = 100;
     knock_rank = knock_next = 0;
-    frames = 0;
-    fading = faded = 0;                         /* cost_logged stays: the cost line once per power-up (the log is 4 KB) */
-    fade = 0x8000;
+    frames = 0;                                 /* (cost_logged stays: the cost line once per power-up, the log is 4 KB) */
+    fx_level = 0x8000;
     sum_fx = sum_music = 0;
     max_fx = max_music = 0;
     if (!s2snd_music_later) s2snd_music(track);
@@ -163,7 +169,7 @@ static void engine(int i, const struct track_cam *cam, float cs, float sn)
         play(V_ENGINE + i, id, step, reg);
     } else {
         if (step != eng[i].step) AU_STEP(V_ENGINE + i) = step;
-        if (reg != eng[i].reg) AU_VOL(V_ENGINE + i) = reg;
+        if (reg != eng[i].reg) AU_VOL(V_ENGINE + i) = at_level(reg);
     }
     eng[i].step = step;
     eng[i].reg = reg;
@@ -185,7 +191,7 @@ static void tyres(const struct s2car_state *c)
         tyre.id = id;
         play(V_TYRE, id, s2snd_step(smp[id].rate), reg);
     } else if (reg != tyre.reg) {
-        AU_VOL(V_TYRE) = reg;
+        AU_VOL(V_TYRE) = at_level(reg);
     }
     tyre.reg = reg;
 }
@@ -224,10 +230,10 @@ static void scenery(const struct track_cam *cam, float cs, float sn)
         uint32_t step = s2snd_step(h.rate), reg = s2snd_vol_reg(h.vol, h.pan);
         if (scene[i].id != id) {
             scene[i].id = id;
-            play_sample(V_ANIM + i, s, step, reg);
+            play_sample(V_ANIM + i, s, step, at_level(reg));
         } else {
             if (step != scene[i].step) AU_STEP(V_ANIM + i) = step;
-            if (reg != scene[i].reg) AU_VOL(V_ANIM + i) = reg;
+            if (reg != scene[i].reg) AU_VOL(V_ANIM + i) = at_level(reg);
         }
         scene[i].step = step;
         scene[i].reg = reg;
@@ -262,21 +268,6 @@ void s2snd_frame(const struct track_cam *cam)
         if (s2props_hit_take()) knock(S2SND_CRASH + 1, 5u);     /* the player's car knocked an obstacle (0x2a639 starts sample 0x10, the middle one of the crashes') */
         ground_before = p->on_ground;
     }
-    struct race_hud h;
-    race_get_hud(&h);
-    if (h.finished && !fading && !faded) fading = 1;        /* the player has done his laps: the music goes */
-    if (fading) {
-        fade -= (int32_t)dvf * (0x8000 / FADE_FRAMES);
-        if (fade <= 0) {
-            fade = 0;
-            fading = 0;
-            faded = 1;
-            music_fade(0);
-            music_stop();
-        } else {
-            music_fade(fade);
-        }
-    }
     uint32_t t1 = rdcycle();
     music_frame();
     uint32_t t2 = rdcycle();
@@ -297,22 +288,15 @@ void s2sound_menu(int id)
 
 void s2sound_effects(int32_t f)
 {
-    uint32_t k = f < 0 ? 0 : f > 0x8000 ? 0x8000 : (uint32_t)f;
+    const uint32_t k = f < 0 ? 0 : f > 0x8000 ? 0x8000 : (uint32_t)f, before = fx_level;
+    fx_level = k;                                           /* (the writes of the frames that follow are at this level too) */
     if (!active) return;
-    if (k == 0x8000) {                                      /* whole: the registers the race left */
-        for (int i = 0; i < RACE_CARS; i++)
-            if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = eng[i].reg;
-        if (tyre.id >= 0) AU_VOL(V_TYRE) = tyre.reg;
-        for (int i = 0; i < ANIMS; i++)
-            if (scene[i].id >= 0) AU_VOL(V_ANIM + i) = scene[i].reg;
-        return;
-    }
+    if (before == 0x8000 && k < 0x8000) AU_STOP = 0xFu << V_KNOCK;     /* (a knock is over in a moment: the ones playing go at the first step down, the later ones start at the level) */
     for (int i = 0; i < RACE_CARS; i++)
-        if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = (eng[i].reg & 255) * k >> 15 | ((eng[i].reg >> 8 & 255) * k >> 15) << 8;
-    if (tyre.id >= 0) AU_VOL(V_TYRE) = (tyre.reg & 255) * k >> 15 | ((tyre.reg >> 8 & 255) * k >> 15) << 8;
+        if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = at_level(eng[i].reg);
+    if (tyre.id >= 0) AU_VOL(V_TYRE) = at_level(tyre.reg);
     for (int i = 0; i < ANIMS; i++)
-        if (scene[i].id >= 0) AU_VOL(V_ANIM + i) = (scene[i].reg & 255) * k >> 15 | ((scene[i].reg >> 8 & 255) * k >> 15) << 8;
-    AU_STOP = 0xFu << V_KNOCK;                              /* (a knock is over in a moment; it would sound again at the resume) */
+        if (scene[i].id >= 0) AU_VOL(V_ANIM + i) = at_level(scene[i].reg);
 }
 
 /* what a frame of the sound cost: mean / worst cycles of the effects and of the music's ring (music_frame) */

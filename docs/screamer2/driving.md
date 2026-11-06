@@ -247,7 +247,7 @@ against the original" below says how it was checked). The game does not test the
 tyres, the walls and the ground and the step on the ground (`s2car_move()`), its solver sweeps the cars' outlines (the four wheel corners 1.4 times as far from
 their mean, the last step's against this step's, every corner of one car against every edge of the other) for the first touch of the step. A touch is a share
 of the step. Both cars are flagged (`+0x4c` bit 8, `+0x30` = 1), put back to where they were at that share (place, turns, corners, the wheels' places and
-springs), knocked (0x19aaa: the side's mark, with DAMAGES on the corner's and the car's damage, the force scaled by the level's row of `MISC.DTR`'s `DAMAGES`, pro 5,
+springs), knocked (0x19aaa: the side's mark, with DAMAGES on the corner's and the car's damage, the force scaled by the level's row of `MISC.DTR`'s `DAMAGES` (as for a wall's knock: below), pro 5,
 normal 2.5, rookie 1) and each car's four corners get a push: the speed of the corner against the edge's at the point, along the line from the car's middle
 to the point in full and across it weighted by the corner's angle from that line (up to 0.3), so the closing speed does not simply change owners. The
 rest of the step is then run for the two cars alone, with what is left of its length (`s2car_move_again()`; not at all when that is 0.005 s or less, the
@@ -290,6 +290,14 @@ is the mark of side 2, so a car that was not braking showed the scraped left fla
 picture went whole when the player braked, and the brake (`0x200`, picture 1) was never asked for: the lights never lit (a car in the viewer
 showed the scraped flank as well). The damage marks are set by `knock()` with the damage on (the GAME SETTINGS row DAMAGES, off at the first start as in the game: `s2car_damages`, which the viewer sets
 from the save when a race is set up; off, a knock marks and hurts nothing, as the game's 0x19aaa returns at once); a car against a car knocks as a wall does ("Cars touching").
+
+**The damage goes by the level, a wall's knock too** (2026-11-06). 0x19aaa multiplies the force by the level's row of `DAMAGES` (pro 5, normal 2.5, rookie 1: `[0x11cce0 + 4 x [0x130d4c]]`, the level being 2 less the ARCADE ENEMIES SKILL index) for **every** knock, after
+the side's count and mark (which go by the force as it came, with a mark for a force over 2000 once the count is 1), and returns at once when DAMAGES is off or the attract race is on (mode word bit 0x80). `s2car.c` had scaled only a car's touch (`race.c` passed
+the row) and left a wall's knock of the player's car and of the computers at 1, the rookie level's, so with DAMAGES on a pro-level car's walls hurt it 5 times, a normal-level car's 2.5 times too little. `s2car_damage_scale` (`race_init()` sets it from the level) is the one
+scale of `knock()` now, `s2car_knock()` has no scale parameter; `tools/s2/check_damage_s2.sh` holds the formulas of 0x19aaa one by one at the three scales and a wall run of the same keys at each (the car's damage 0.240, 0.569, 0.963 on England; the commit before gave 0.240 at all three:
+the negative control). The attract race has DAMAGES off (the viewer sets `s2car_damages` 0 there). **A time attack run now depends on the level** (its damage re-simulated at another level would end elsewhere): the ghost's head byte `damages` is the key
+`race_damage_key()` (0 off, 1 rookie, 2 normal, 3 pro; the first head's 1 is the rookie level's, which is unchanged), and a run kept at one key is not raced at another (it stays the time to beat). With DAMAGES off (the default) nothing changed. `check_car.sh` and the
+replay, ghost and attract checks are unchanged (their runs have the scale at 1 or DAMAGES off); the player's walls in the reference traces were never compared with DAMAGES on at another level.
 
 ### Checks of the race
 
@@ -456,7 +464,7 @@ in each of the 68 intervals; the frame time is the same, 10.3 ms mean and 11.4 w
 - Not done: the road kind's effects on the look, the dust, the camera's other views.
 - The race (section above): the split times and
   "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie, `race_level`) and the number of laps (`race_laps`) and the player's team and car
-  (`race_grid`) are set by the start menu (`firmware/s2menu.c`, docs/development.md "Start menu"); the computers' cars are the other three
-  teams' cars of their own numbers; the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text.
+  (`race_grid`) are set by the start menu (`firmware/s2menu.c`, docs/development.md "Start menu"); the computers' cars follow the player's team and car as the original's grid does
+  (`s2menu_grid()`: team and car + k mod 4, menus.md "The arcade grid"); the end screen is built (menus.md).
 - Not compared with a recording of the original's computer cars: the lap times above are the model's own (the original ran at 17
   pictures a second with whole-number places; its cars were slower).

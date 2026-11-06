@@ -35,6 +35,9 @@ extern struct s2_pick race_grid[RACE_CARS];
    race_init(). */
 extern int race_laps;
 extern int race_level;
+/* The DAMAGES setting and the level as the one number a time attack run is kept with (s2ghost.h S2GH_DAMAGES): 0 the setting is off, else 1 rookie, 2 normal, 3 pro. A knock's damage goes by
+   the level's row of DAMAGES (s2car_damage_scale), so a run is a function of its controls AND this number. */
+int race_damage_key(void);
 
 /* The kind of race (set before race_init()): the arcade's and the championship's are RACE_NORMAL, four cars on the game's grid. Time attack
    (RACE_ATTACK, STARTL.EXE mode word bit 4, 0x339e7: three laps, no computers) races the player's car, and the ghost's car if race_ghost is set, side by side on
