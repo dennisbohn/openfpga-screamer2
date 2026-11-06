@@ -106,7 +106,7 @@ what an independent look would add is the original running.
 ## 5. The views from the car (2026-11-06)
 
 Read from `STARTL.EXE` (`tools/dis.sh -f`), held against the running original (`tools/s2/dosbox_cockpit.py`: the camera record and the player's car in every frame of a race with the
-game's own keys, and 12 raw screenshots; `tools/s2/check_cockpit_s2.sh`). Code: `firmware/s2cockpit.c` (the cameras and the dashboards' numbers, no hardware), `s2dash.c` (the cockpit
+game's own keys, and 12 raw screenshots, twice: England with the first team's second car (dashboard model 1) and track 4 with the third team's bonus car (model 6); `tools/s2/check_cockpit_s2.sh`). Code: `firmware/s2cockpit.c` (the cameras and the dashboards' numbers, no hardware), `s2dash.c` (the cockpit
 pictures as blitter boxes and the instruments), `s2cam.c` (the view and the car followed), `s2hud.c`, `viewer.c`, and `track.c`'s `track_draw_mirror`.
 
 **What the original does.**
@@ -158,12 +158,14 @@ The CPU adds, outside the model, the glass's read-back (35 rows x 40 words of 2 
 **+2 to +3.5 ms on a frame, with the mirror on, against the 6.7 ms the T4 race has free** (11.8 mean, 13.3 worst of 20); the mirror is off at every race's start and costs a test of one flag when it is off. The 128 KB panorama
 turned is made once the first time the mirror is on (about 10 ms, one late frame). **Not timed on the Pocket or in the simulation** (`tools/s2/sim_race.sh` is the main session's); the counts are the PC's.
 
-**Compared with the running original** (`python -I tools/s2/dosbox_cockpit.py 1`: England, the first team's second car, 1,300 frames of the race and 12 raw screenshots; the DOSBox this script starts, under the lock folder):
-- the camera records: INCAR 274 frames equal to the unit (0.00 in x, z, height, heading, pitch, roll), INSIDE 273 frames equal and its rows equal to the table's, the mirror's own record 257 frames equal with its 35 rows, NEAR 387 frames
-  within 1.2 units and 0.0016 rad over the whole recording (the easing, 0.0003 rad in a step: the original's easing table is built for the frame rate it measures, base^(50 / pictures a second): DOSBox's step is 1.1 times 20 ms,
-  so the exponent is 1.1, fitted from the recording and set in the test; the Pocket's 50 pictures a second give 1, which is what `s2ck_ease_power` is); the body block's height (record `+0x218`) is -1 for this car and the mesh's block `MV_mauto` has it;
-- the screenshots: the INSIDE cockpit picture, the gear lamp and both needles as the rules give them: the needles pixel for pixel (58, 68 and 65 of 65 pixels, speed 0, 164 and 159 km/h), the lamp's 130 of 130, the picture 99.86 to 99.93 % (the rest is the race screen's own elements over it); the
-  mirror's frame in the shots with the mirror on 99.1 % (its top row is under the race screen's bar of the cars); the frame's opening is exactly 160 x 35 at (81, 14), the box the glass fills;
+**Compared with the running original** (`python -I tools/s2/dosbox_cockpit.py 1` and `... 4 26 2 4`: 1,300 frames of a race and 12 raw screenshots each, the first recording England with the first team's second car, the second track 4 with the
+third team's bonus car; the DOSBox this script starts, under the lock folder):
+- the camera records, England / track 4: INCAR 274 / 276 frames equal to the unit (0.00 in x, z, height, heading, pitch, roll), INSIDE 273 / 272 frames equal and its rows equal to the table's (133 / 133), the mirror's own record 257 / 257 frames equal
+  with its 35 rows, NEAR 387 / 385 frames within 1.2 / 1.3 units and 0.0016 / 0.0014 rad over the whole recording (the easing, 0.0003 rad in a step: the original's easing table is built for the frame rate it measures, base^(50 / pictures a second):
+  DOSBox's step is 1.1 times 20 ms, so the exponent is 1.1, fitted from the recording and set in the test; the Pocket's 50 pictures a second give 1, which is what `s2ck_ease_power` is); the body block's height (record `+0x218`) is -1 and 0 for the two
+  cars and the mesh's block `MV_mauto` has it (the other 18 cars' by the same rule, not recorded);
+- the screenshots: the INSIDE cockpit picture, the gear lamp and both needles as the rules give them: the needles pixel for pixel (England 58, 68 and 65 of 65 pixels at speed 0, 164 and 159 km/h; track 4 60, 67 and 63), the lamps' 130 of 130 and 99 of 99, the
+  pictures 99.85 to 99.93 % (the rest is the race screen's own elements over it); the mirror's frame in the shots with the mirror on 98.9 to 99.1 % (its top row is under the race screen's bar of the cars); the frame's opening is exactly 160 x 35 at (81, 14), the box the glass fills;
 - the keys do what the code says: F1 .. F4 switch the view the next picture, M puts the mirror on and off, the mirror was off at the start;
 - the firmware's own drawing of the 2D parts equals the same reading: the nine pictures' boxes (the pixels they draw: 22,648 to 27,084 a cockpit, 1,257 the frame), the 8 table rows and 40 lamp places, 336 needle positions (320 exact, 16 a pixel
   off at a rounding edge, none worse) in `tools/s2/check_cockpit_s2.sh`, with a negative control that fails.
