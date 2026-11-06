@@ -53,7 +53,8 @@ patch_hw "$src"
 git -C "$root" archive "$base" firmware | tar -x -C "$bsrc"
 cp "$bsrc"/firmware/*.c "$bsrc"/firmware/*.h "$bsrc/"
 rm -rf "$bsrc/firmware"
-cp "$root/tools/s2/check_ghost_s2.c" "$root/tools/s2/normal_hash.c" "$bsrc/"
+cp "$root/tools/s2/normal_hash.c" "$bsrc/"
+git -C "$root" show "$base:tools/s2/check_ghost_s2.c" > "$bsrc/check_ghost_s2.c"       # (the base's own: s2gh_rec_begin has taken the set-up since)
 patch_hw "$bsrc"
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
 LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c s2ghost.c race.c s2cam.c"

@@ -133,7 +133,7 @@ static uint32_t hash_car(const struct s2car_state *c)
 static uint32_t world[2][MAXSTEPS], props_state[2][MAXSTEPS];
 static struct s2props_rec snap[2][200];
 
-static void race_setup(int track)
+static void props_race_setup(int track)
 {
     race_kind = RACE_NORMAL;
     race_ghost = 0;
@@ -159,7 +159,7 @@ static int model(int track, int steps)
     int n = load_props(track);
     printf("track %d: %d obstacles\n", track, n);
     for (int run = 0; run < 3; run++) {                  /* 0: without the props, 1: with, 2: with again (the props' own state is the same: nothing is left over from a race before) */
-        race_setup(track);
+        props_race_setup(track);
         if (run) {
             s2props_begin();
             int no_ground = 0;
