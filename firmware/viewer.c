@@ -182,6 +182,7 @@ struct viewer_image loaded;      /* what the image holds, so that time attack do
 
 static int load_track(struct zip *z, int n, const char **what)
 {
+    music_stop();                       /* a race begins: the menu's song stops (0x386bd, before the load; the races' songs begin with the race, s2snd_race_start) */
     loaded.valid = 0;
     static struct s2_files f;
     static char gfx_name[24], data_name[24], env_name[24];

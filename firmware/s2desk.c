@@ -29,6 +29,7 @@
 #include "s2gfx.h"
 #include "s2page.h"
 #include "s2sound.h"
+#include "s2menumusic.h"
 #include "car.h"
 #include "track.h"
 #include "track_build.h"
@@ -413,6 +414,7 @@ int s2desk_run(struct zip *z, const struct s2room_mem *m, int scene, int team, i
     loaded.valid = 0;                                           /* (the window's image is the scene's from now on) */
     s2room_forget();
     if (!desk_load(z, m, scene, team, car)) return 0;
+    s2mm_song();                                                /* (0x3bd29: the menu's song from its start once the scene is loaded; it was stopped at the scene's start, 0x3bc46) */
     struct desk *p = &D;
     memset(p, 0, sizeof *p);
     p->fresh = 1;
