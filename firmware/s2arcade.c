@@ -40,7 +40,7 @@
  *                           colour 1, the chosen one in font 3 colour 3 while bit 0x20 of that clock is clear): the championship's RACE and CUSTOMIZE in halves of the screen; time attack's
  *                           3 LAPS and FREE RUN in halves, for a Custom with CUSTOMIZE in thirds (106 wide from x 0, 106, 212); LEFT / RIGHT choose (sound 8, not round), ENTER takes it
  *                           (c->free_run; CUSTOMIZE: the page fades out as for the race and the CAR CUSTOMIZATION page follows, then the car page again in state 1 with the same car and set-up).
- *                           The plate, the speed and the drive are as above (a stand-in: the original has them in all states and 10 pixels lower).
+ *                           Every way out fades the page out over 13 frames (0.08 a frame, 0x3e056), ESC from the cars too (to the TRACK page). The plate, the speed and the drive are as above (a stand-in: the original has them in all states and 10 pixels lower).
  *   TRANSMISSION (state 1): the same picture and cars, sprite 39 "select TRANSMISSION" at (28, 15), the badge, AUTOMATIC at (18, 155) and MANUAL at
  *                           (159, 155): sprites 40 / 42 dim, 41 / 43 lit; the chosen one is lit while (clock & 0x20) == 0, the other is
  *                           always dim. LEFT / RIGHT choose (sound 0, the clock set back); ENTER: sound 3, fade, the race; ESC: back to the CAR state
@@ -56,6 +56,7 @@
 #include "dlog.h"
 
 #define FADE_FRAMES     25
+#define SETS_FADE       13                          /* the CAR page of the championship and time attack fades out at 0.08 a frame (STARTL.EXE 0x3e056: dt x 4), on every way out, ESC too */
 #define SOUND_CURSOR    0                   /* MENU.DTR ids (MENU1 .. MENU15 are 0 .. 14) */
 #define SOUND_TITLE     1
 #define SOUND_TRACK     2
@@ -65,6 +66,7 @@
 #define SOUND_SETS_MOVE     8
 #define SOUND_SETS_CARS     11
 #define S2ARC_CUSTOM    2                           /* what the page ends with when CUSTOMIZE was taken (the page fades out, s2custom.h follows, then the page again) */
+#define S2ARC_OUT       3                           /* ... and when ESC left it from the cars (it fades out too, then the result is S2ARC_BACK) */
 
 enum {
     SPR_FRAME = 0, SPR_ARROW_LEFT = 1, SPR_ARROW_RIGHT = 2, SPR_THUMB = 5, SPR_THUMB_DIM = 12,
@@ -248,7 +250,7 @@ static int sets_key(struct car_page *p, uint32_t press)
     struct s2_menu_cfg *c = p->cfg;
     const int five = bonus(c);
     if (press & S2PAGE_ESC) {
-        if (!p->state) return S2ARC_BACK;
+        if (!p->state) return S2ARC_OUT;
         p->state = five ? 0 : p->state - 1;
         return 0;
     }
@@ -407,12 +409,13 @@ static int car_visit(int page, struct s2_menu_cfg *c, int state, int choice)
     if (c->car > cars_of(c->team)) c->car = 1;
     cp.n = cars_of(c->team);
     cp.sets = page == S2ARC_ATTACK || page == S2ARC_LEAGUE;
+    if (cp.sets) pg.fade_out = SETS_FADE;
     cp.league = page == S2ARC_LEAGUE;
     if (cp.sets) c->free_run = 0;
     if (cp.sets && (c->setup < 0 || c->setup > 4)) c->setup = 0;
     cp.state = cp.standalone = page == S2ARC_TRANS;
     if (cp.sets) cp.state = state, cp.choice = choice;
-    s2gfx_dark_table(pal, cp.dark, 256);
+    if (cp.sets) s2gfx_dark_table(pal, cp.dark, 256);       /* (about 70 ms on the Pocket's CPU, with the cars' load before the page is shown; the arcade's page has no box) */
     if (!s2showroom_load(cp.zip, c->team, cp.n)) {
         dlog_str("arcade: the team's cars could not be read: the CAR page without them\n");
         cp.n = 0;
@@ -424,7 +427,8 @@ static int car_visit(int page, struct s2_menu_cfg *c, int state, int choice)
     pg.frame = car_frame;
     pg.key = car_key;
     pg.draw = car_draw;
-    return s2page_run(&pg, &cp);
+    const int r = s2page_run(&pg, &cp);
+    return r == S2ARC_OUT ? S2ARC_BACK : r;
 }
 
 int s2arcade_page(int page, struct s2_menu_cfg *c)

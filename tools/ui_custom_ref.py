@@ -52,8 +52,9 @@ class Ref:
         ref, s = self, self.spr
 
         class M:
-            """state 0 the cars, 1 the list, 2 the choice; st: kind (0 the championship, 1 time attack), car (1 .. 5), setup, free_run, clicks"""
-            fade_out = 25
+            """state 0 the cars, 1 the list, 2 the choice; st: kind (0 the championship, 1 time attack), car (1 .. 5), setup, free_run, clicks. Every way out fades the page out
+            over 13 frames (STARTL.EXE 0x3e056), ESC from the cars too: the result 3 here, the page's result is then -1"""
+            fade_out = 13
 
             def __init__(m, state=0):
                 m.state, m.choice, m.t0 = state, 0, 0
@@ -67,7 +68,7 @@ class Ref:
             def key(m, tick, keys):
                 if "A" in keys:
                     if m.state == 0:
-                        return -1
+                        return 3
                     m.state = 0 if m.bonus() else m.state - 1
                     return 0
                 if "B" in keys:
@@ -283,8 +284,11 @@ class Ref:
                 st["six"] = CUSTOMS[st["setup"] - 1]
                 _, end = run_model(self.custom_page(st), end)
                 result, end = run_model(lambda: Car(1), end)
-        for g in want:
-            assert g <= end - 2 and g in trace, f"{name}: frame {g} is not seen before the end ({end} calls)"
+            result = -1 if result == 3 else result
+        frames = [f for f in frames if int(f) <= end - 2]                   # (a frame after the page's end is not seen: the lists were made for longer fades)
+        assert len(frames) >= 2, f"{name}: no frame is seen before the end ({end} calls)"
+        for g in (int(f) for f in frames):
+            assert g in trace, f"{name}: frame {g} was not drawn"
             px, fade = trace[g]
             base = os.path.join(self.out, f"cu_{name}_{g}")
             open(base + ".ov", "wb").write(px)
