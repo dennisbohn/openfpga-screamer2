@@ -1,22 +1,29 @@
-"""The championship's desk scene and WELCOME's flying plates against the running original (docs/screamer2/menus.md "The desk scene", "WELCOME's plates").
+"""The championship's desk scene and WELCOME's flying plates against the running original (docs/screamer2/menus.md "The championship's desk scene and WELCOME's plates").
 
-Usage: python -I tools/s2/dosbox_desk.py welcome [team]            WELCOME TO LEAGUE 1: every frame of the plates, raw screenshots
-       python -I tools/s2/dosbox_desk.py desk [team] [league ...]   the desk scene of the given leagues (0 .. 3 and 4, the second visit of the fourth: the prize car's)
-                                                                    (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2"; the window of the DOSBox it starts must stay in front)
+Usage: python -I tools/s2/dosbox_desk.py welcome [team]                    WELCOME TO LEAGUE 1: every frame of the plates, raw screenshots (about 1 minute in front)
+       python -I tools/s2/dosbox_desk.py report [team [league [J ...]]]    a league race of one lap, the LEAGUE REPORT set to "won", ENTER: the desk scene of `league` in hand (0 .. 3, or 4: the
+                                                                           second visit after league 4, scene 4 with the fifth car); about 6 minutes in front
+       python -I tools/s2/dosbox_desk.py desk [team] [league ...]          the same by a poke of the selection's next page: it crashed the game in every try (see below)
+       (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2"; the window of the DOSBox it starts must stay in front; take the lock folder first)
 
 Starts STARTL.EXE in the game folder's own DOSBox on a private copy of the game folder (tools/s2/dosbox_arcade.py make_private: build/dosgame, the data copied, never linked, the
-owner's folder is only read; team `team` (1 .. 4, default 1) named MIL, the team's second car chosen), types its way through TEAM SELECTION, the name and the OPTIONS ROOM to
-CHAMPIONSHIP and ENTER: LEAGUE SELECTION (STARTL.EXE 0x4337d; the room leads there at once, there is no scene between them, 0x39116). `welcome` then takes ENTER on league 1 and records
-WELCOME (0x39569) until its plates have flown; `desk` pokes the page variables of the selection (the league in hand 0x128a10, the next page 0x132494 = the desk scene 0x3bc38, the
-done flag 0x1324a0) for each league, which is what the LEAGUE REPORT's last ENTER does after a win (0x44144), and records the scene.
+owner's folder is only read; team `team` (1 .. 4, default 1) named MIL, the team's second car chosen, all four leagues open), gets to the options room by ENTER (as long as its table
+of stations is not in memory), RIGHT to CHAMPIONSHIP and ENTER: LEAGUE SELECTION (STARTL.EXE 0x4337d; the room leads there at once, there is no scene between them, 0x390e4, and a raw
+screenshot shows it). `welcome` then takes ENTER on league 1 and records WELCOME (0x39569) while its plates fly and the TRACK page follows. `report` goes on through WELCOME, the TRACK
+page, the CAR page and its set-ups to the loading screen and the race, hands the player's car to the game's own driver (dosram.py), takes CONTINUE on the end screen and, on the LEAGUE
+REPORT, sets its state word 0x1324c4 to 1 (won: the page shows CONGRATULATIONS) and, for league 4, the league in hand (0x128a10) and the team's chosen car (0x128a9c) to the fifth, and
+presses ENTER: the page leaves for the desk scene (0x3bc38) as it does after a win (0x44144). `desk` sets the next page of LEAGUE SELECTION to 0x3bc38 instead; the game stops at the
+first illegal access of the engine's object release (0x4bb79, DOSBox's log), whether the done word is poked or only the next page after ENTER, even after a desk scene was reached the
+other way: the engine's state at the desk scene's start is the report's, not the selection's.
 
-Every change of what the page keeps in memory is a line of build/check/dosbox_desk/frames.jsonl (never committed): the camera record (0x131ea4: angles a0 a1 a2 in 2048ths, then the place
-x, y up, z), the frame time (0x133350), the page's hundredths (0x4cfd6, two a frame from 0: the frame number), the page's flags (0x132494 .. 0x1324b0), the animation clock (0x1347a0),
-the scene's variables (0x1192d0 ..: objects, camera paths, the two durations of SPLINES.TXT, the scene number, the wheels' phase) or the plates' records (0x131290, 0x4c bytes a plate,
-the table 0x130fa8) and the 0x40-byte records of the objects the page draws (the engine's table 0x11da14, 0x1c bytes an object, the record pointer at +0xc). Raw screenshots (Ctrl+F5,
-320 x 200 palette indices) are taken every ~1 s from the 3rd second on, the time of each is a line of the recording. tools/host/desk_match.c (tools/desk.sh) reads both.
+Every change of what the page keeps in memory is a line of build/check/dosbox_welcome/frames.jsonl or build/check/dosbox_desk/frames.jsonl (never committed): the camera record
+(0x131ea4: angles a0 a1 a2 in 2048ths, then the place x, y up, z), the frame time (0x133350), the page's hundredths (0x4cfd6: real time, not frames), the page's flags (0x132494 ..
+0x1324b0), the animation clock (0x1347a0), the scene's variables (0x1192d0 ..: objects, camera paths, the two numbers of SPLINES.TXT, the scene number, the wheels' phase) or the plates'
+records (0x131290, 0x4c bytes a plate, the table 0x130fa8) and the 0x40-byte records of the objects the page draws (the engine's table 0x11da14, 0x1c bytes an object, the record pointer
+at +0xc). Raw screenshots (Ctrl+F5, 320 x 200 palette indices) are taken every 0.7 to 1.2 s from the 3rd second on, the time of each is a line of the recording. tools/desk.sh and
+tools/plates.sh read both (tools/desk_shots.py, tools/host/desk_match.c, plates_match.c).
 
-Only the DOSBox this script started is keyed and read and written (found by its configuration file); another one running (the owner playing) is never touched. Take the lock folder first.
+Only the DOSBox this script started is keyed and read and written (found by its configuration file); another one running (the owner playing) is never touched.
 """
 import json
 import os
