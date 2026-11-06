@@ -5,6 +5,7 @@
 #include "s2gfx.h"
 #include "s2save.h"
 #include "console.h"
+#include "music.h"
 #include "dlog.h"
 #include "hw.h"
 #include <string.h>
@@ -137,6 +138,7 @@ void s2load_fade(void)
     if (!up) return;
     for (int32_t f = 0x8000 - 0x8000 / FADE_FRAMES; f > 0; f -= 0x8000 / FADE_FRAMES) {
         struct blit_list *l = s2gfx_begin();
+        music_frame();                  /* (the race's song begins here: its first reads are in flight, music.h) */
         draw_loading(l);
         s2gfx_end(pal, f);
     }
