@@ -123,7 +123,7 @@ static void screen_text(int n, const char *l1, const char *l2, const char *l3, i
     con_text(fb, 1, 17, "       Start: drive  Select+B: menu", GREY, BLACK);
     con_text(fb, 1, 19, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
     con_text(fb, 1, 20, "       A handbrake  L/R gears", GREY, BLACK);
-    con_text(fb, 1, 21, "       up: auto/manual  X: timing", GREY, BLACK);
+    con_text(fb, 1, 21, "       X: timing", GREY, BLACK);
     con_text(fb, 1, 22, "       Select + left/right: track", GREY, BLACK);
     con_text(fb, 1, 23, "       Select + Start: restart", GREY, BLACK);
     con_text(fb, 1, 24, "       Start: pause menu (exit there)", GREY, BLACK);
@@ -322,8 +322,8 @@ static void leave(int n, int cars, const struct stats *s)
     if (s->n >= 50) log_stats(n, cars, s);
 }
 
-/* the race of the driving mode (race.h): the player's car is car 0; the gearbox the player chose stays through new
-   races and tracks */
+/* the race of the driving mode (race.h): the player's car is car 0; the gearbox the player chose (cfg.manual, from the
+   TRANSMISSION page or GAME SETTINGS) stays through new races and tracks; nothing in a race changes it */
 static int manual;
 
 /* a new race on track n: the four cars on the grid, the countdown from 3 s; 0 if the line or a car could not be set up */
@@ -656,7 +656,15 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 }
             }
             if (press & KEY_X) *overlay = !*overlay;
-            if (press & KEY_UP && !race_replaying() && !fin_frames) race_car(0)->manual = manual = !manual;     /* (only while racing: the end screen has no use for the button, and the choice would carry into the race again) */
+            if (!race_replaying() && race_car(0)->manual != manual) {   /* nothing in a race changes the gearbox (the TRANSMISSION page and GAME SETTINGS choose it; d-pad up used to toggle it and was pressed by mistake while steering): if it differs it is a fault, logged once with the step and put back */
+                static int logged;
+                if (!logged++) {
+                    dlog_str("race: the gearbox changed by itself at step ");
+                    dlog_dec((int32_t)race_steps());
+                    dlog_str("\n");
+                }
+                race_car(0)->manual = manual;
+            }
         } else {
             if (press & (KEY_LEFT | KEY_RIGHT)) {
                 leave(n, mode, &st_all);
@@ -1110,7 +1118,6 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
                 while ((next = visit(n, &cars, &overlay, &drive)) < 0)
                     ;                                   /* the cars or the mode changed: the same visit again */
                 cfg.track = next ? next : n;
-                cfg.manual = manual;                    /* (d-pad up in the race) */
                 s2menu_store(&cfg);
                 if (!next) break;
                 n = next;

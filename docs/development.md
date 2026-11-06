@@ -217,7 +217,7 @@ the cars. The four cars (`firmware/s2car.c`) each wear their own team's model an
 (CONDOR), the computers' are team 2's car 2, team 3's car 3 and team 4's car 4; the start menu sets the player's team and car and the
 computers get the other three teams ("Teams" below). The screen is the original's race screen in the chase camera (docs/screamer2/hud.md, `firmware/s2hud.c`):
 the lap, the place, this lap's and the total time, the track's best times, the bar of the four cars, the dial with speed, gear and rev needle, the start lights, the
-checkpoint gap, BEST LAP!, WRONG WAY, the bends' arrows, the 1ST mark over a leading computer; the gearbox (AUTO / MAN) has no place on it (d-pad up toggles it). While the
+checkpoint gap, BEST LAP!, WRONG WAY, the bends' arrows, the 1ST mark over a leading computer; the gearbox (AUTO / MAN) has no place on it (the TRANSMISSION page and GAME SETTINGS choose it; nothing in the race changes it). While the
 timing overlay (below) is on, the elements near its two lines move down 16 rows. After his last lap the player's car is the game's driver's (it slows to a stop), the race screen keeps only its dial, and the original's end screen
 comes over the race ("End of the race and the two pages" below).
 
@@ -226,8 +226,7 @@ comes over the race ("End of the race and the two pages" below).
 | d-pad left / right | steering (-1 / 0 / +1: there is no analog value; a docked controller's stick works as the d-pad) |
 | B / Y | gas / brake (1 or 0) |
 | A | handbrake (held) |
-| L / R | gear down / up (on the step the button goes down; the gearbox is automatic until d-pad up makes it manual) |
-| d-pad up | automatic / manual gearbox |
+| L / R | gear down / up on a manual gearbox (on the step the button goes down; the gearbox is chosen on the TRANSMISSION page or in GAME SETTINGS, there is no button for it in the race: d-pad up used to toggle it and was hit by mistake while steering, with the stick of a docked controller too) |
 | X | timing overlay on / off (B is the gas here; Screamer 1's X, the camera, has no use yet) |
 | Select + left / right | previous / next track (the track is loaded again, a new race) |
 | Select + Start | a new race from the grid |
