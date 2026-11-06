@@ -156,6 +156,8 @@ float track_far(void);
 
 /* The projection for clip (for the setup unit's registers) */
 void track_view(const struct rs_clip *clip, struct su_view *v);
+/* The same for the rear-view mirror's pass (track_draw_mirror): the lens's middle three pixels further right, so that the pass turned over about the picture's middle is the game's */
+void track_view_mirror(const struct rs_clip *clip, struct su_view *v);
 
 /* A camera: place, heading as the car's (forward = (sin yaw, -cos yaw)), pitch (+ looks up)
    and roll (+ tips the camera's right-hand side up) */
@@ -225,7 +227,9 @@ void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const stru
                     struct track_object *objs, int nobj, struct track_stats *st);
 
 /* The rear-view mirror's pass (STARTL.EXE 0x756b0): the scene seen from cam (the camera of s2ck_camera(.., S2CK_MIRROR, ..), looking backwards) in the glass's reversed sense (right and
-   left exchanged, the geometry unit's mirror bit toggled for every piece), every block at level of detail 1 or lower. Otherwise track_draw_cam(). */
+   left exchanged, backdrop included: track_backdrop_blit() in the pass turns its panorama), every block at level of detail 1 or lower. Otherwise track_draw_cam(). The pixels equal the
+   ordinary pass's turned over about the picture's middle (x to 319 - x) but at the texture's sampling (tools/s2/check_mirror_s2.sh: 88 to 97 %); the caller sets the projection by
+   track_view_mirror(). */
 void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
                        struct track_object *objs, int nobj, struct track_stats *st);
 

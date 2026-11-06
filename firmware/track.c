@@ -499,8 +499,9 @@ int track_class_key(const uint8_t *obj)
     return obj ? -(int)(int16_t)rd32(obj + 0xC4) : 0;
 }
 
-/* The rear-view mirror's pass (track_draw_mirror): the picture is the glass's, turned over (the camera's right-hand side reversed, so every face is seen the other way round: the
-   geometry unit's mirror bit is toggled for every piece), and the level of detail is at least 1 (STARTL.EXE 0x756b0 sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
+/* The rear-view mirror's pass (track_draw_mirror): the picture is the glass's, turned over (the camera's right-hand side reversed: the geometry unit's test of a face is the eye's side
+   of its plane, which no reflection changes, and the rasterizer takes either way round on screen), the backdrop turned too, and the level of detail is at least 1 (STARTL.EXE 0x756b0
+   sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
 static int mirror_pass;
 
 /* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and
@@ -642,6 +643,19 @@ int track_ground_colour(void)
  * in the ground colour. Upright whatever the camera's roll: the game's leaning version
  * (0x83b44) is never called.
  */
+/* The backdrop's panorama with every row read from the other end (the rear-view mirror's pass), made when it is first asked for with this track's panorama: 128 KB, one pass over it */
+static uint8_t *backdrop_turned(const uint8_t *pano)
+{
+    static uint8_t turned[512 * 256] __attribute__((aligned(4)));
+    static const uint8_t *made_for;
+    if(made_for != pano) {
+        for(int y = 0; y < 256; y++)
+            for(int x = 0; x < 512; x++) turned[y * 512 + x] = pano[y * 512 + 511 - x];
+        made_for = pano;
+    }
+    return turned;
+}
+
 void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam)
 {
     int w = clip->x1 - clip->x0, h = clip->y1 - clip->y0, eye = EYE_LINE(h);
@@ -649,10 +663,15 @@ void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const 
     int top = eye + 22 - 256 + ((-54152 * s) >> 7) / -54152;
     int heading = (int)lrintf((cam->yaw + 1.5707964f) * (1024.0f / 3.14159265f));
     int col = ((2047 - heading) >> 1) & 511;
+    const uint8_t *pano = track_backdrop();
+    if(mirror_pass) {                                           /* the glass shows the picture turned over, the panorama's rows read from the other end: column x of the window is column 319 - x of the ordinary one */
+        pano = backdrop_turned(pano);
+        col = (192 - col) & 511;
+    }
     int rows = 256 + (top < 0 ? top : 0);
     if(top + 256 > h) rows -= top + 256 - h;
     if(rows > 0)
-        blit_copy(l, track_backdrop() + (top < 0 ? -top : top) * 512 + col, w, rows, 512, clip->x0, clip->y0,
+        blit_copy(l, pano + (top < 0 ? -top : top) * 512 + col, w, rows, 512, clip->x0, clip->y0,
                   BLIT_COPY | BLIT_OPAQUE, 0);
     else
         rows = 0;
@@ -936,6 +955,12 @@ int track_block_ok(int k)
     return o < e && crc32(file_start + o, file_start + e) == (uint32_t)rd32(file_start + 0x90 + 4 * k);
 }
 
+void track_view_mirror(const struct rs_clip *clip, struct su_view *v)
+{
+    track_view(clip, v);
+    v->cx += 48;                                /* the game draws the pass backwards and turns the picture over about its middle (the pixel x goes to 319 - x); the rasterizer's pixel x is the lens's x + 1, so the reflected lens's middle is at 162, three pixels right of the ordinary one (measured: tools/s2/check_mirror_s2.sh) */
+}
+
 void track_view(const struct rs_clip *clip, struct su_view *v)
 {
     v->cx = (clip->x0 + clip->x1) * 8 - 16; /* the centre in 1/16 pixel: column 159 on the screen,
@@ -1026,7 +1051,7 @@ static void block_piece(const float c[3], const float f[3], const float r[3], co
     for(int j = 0; j < 3; j++) e[j] = m[j] * (c[0] - o[0]) + m[3 + j] * (c[1] - o[1]) + m[6 + j] * (c[2] - o[2]);
     face_eye(blk, e[0], e[1], e[2], g);
     g->blk = blk;
-    g->mirror = mirror_pass;
+    g->mirror = 0;
     g->refl = 0;
 }
 
@@ -1078,7 +1103,7 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
         block_piece(c, f, r, u, m, o, blk, g);
         g->obj = obj;
         g->phase = piece_phase;
-        g->mirror = moving ^ mirror_pass;
+        g->mirror = moving;
         float w[3];
         for(int i = 0; i < 3; i++)
             w[i] = o[i] + m[3 * i] * rd16(blk + 4) + m[3 * i + 1] * rd16(blk + 6) + m[3 * i + 2] * rd16(blk + 8) - c[i];
@@ -1088,7 +1113,7 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
             int32_t off = rd32(obj + 0x18 + 4 * (b + 13 * lvl));
             if(!off) continue;
             block_piece(c, f, r, u, m, o, obj + off, g);
-            g->mirror = moving ^ mirror_pass;
+            g->mirror = moving;
         }
         int i = n;
         while(i > 0 && key[ord[i - 1]] > key[b]) { ord[i] = ord[i - 1]; i--; }
@@ -1284,7 +1309,8 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
 
     struct su_view view;
     struct gu_stats gst = { 0, 0, 0, 0 };
-    track_view(clip, &view);
+    if(mirror_pass) track_view_mirror(clip, &view);
+    else track_view(clip, &view);
     uint32_t t_out = 0;
     for(int n = 0; n < nv; n++) {
         const int vi = vis[n] & 0xFFFF;
@@ -1331,7 +1357,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         }
         struct gu_piece g;
         g.phase = piece_phase;
-        g.mirror = mirror_pass;
+        g.mirror = 0;
         g.refl = 0;
         g.blk = block_of(pc->obj, &g.obj);
         float ca = sin2048((uint32_t)pc->t + 512), sa = sin2048((uint32_t)pc->t);
