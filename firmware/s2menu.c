@@ -142,10 +142,16 @@ static int arcade(struct s2_menu_cfg *c)
 
 int s2menu_run(struct s2_menu_cfg *c)
 {
-    static int started;
+    static int started, team_first;
     if (!started) {                                         /* the first start with a new save: TEAM SELECTION and ENTER YOUR NAME, as the original's every start */
         started = 1;
-        if (!s2save_get(S2S_PROFILE) && s2_page_team(c) == S2P3D_DONE) s2menu_store(c);
+        team_first = !s2save_get(S2S_PROFILE);
+    }
+    if (team_first) {                                       /* (and again after the attract sequence that interrupted it: the original comes back to that page) */
+        const int r = s2_page_team(c);
+        if (r == S2P3D_IDLE) return S2M_ATTRACT;
+        team_first = 0;
+        if (r == S2P3D_DONE) s2menu_store(c);
     }
     for (;;) {                                              /* the options room is the menu: it ends with a choice, ESC or a failure */
         switch (s2menu_room(c)) {
@@ -166,10 +172,14 @@ int s2menu_run(struct s2_menu_cfg *c)
         case S2ROOM_MULTI:
             s2_page_multi();
             break;
+        case S2ROOM_IDLE:                                   /* 30 s without a button: the attract sequence, then the room again */
+            s2menu_store(c);
+            return S2M_ATTRACT;
         case S2ROOM_BACK:                                   /* ESC: TEAM SELECTION (the name after it), then the room again, also after YES to leaving the program (the core is left from the Pocket's menu) */
             s2menu_store(c);
-            s2_page_team(c);
+            team_first = s2_page_team(c) == S2P3D_IDLE;     /* (30 s there is the sequence too, and it comes back to this page) */
             s2menu_load(c);
+            if (team_first) return S2M_ATTRACT;
             break;
         default:                                            /* the room could not be shown: the arcade pages instead */
             dlog_str("menu: the options room could not be shown, the arcade pages instead\n");

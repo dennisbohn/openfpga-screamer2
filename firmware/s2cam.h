@@ -37,6 +37,11 @@ void s2cam_follow(int car, int ncars);
 int s2cam_get_follow(void);
 void s2cam_next_car(int ncars);                 /* F11 */
 
+/* The attract race (race.h, race_attract): every whole ten seconds of the race's clock the cameras are told to go on to the next car (the camera record's +0xae8, 0x2d804): the car
+   followed changes the next time the camera changes to another trackside camera, round the cars of the race, and a camera is chosen for the new car at once. Called once a frame
+   with the race's clock and the frame's time in seconds (the original's own test: the whole seconds of clock and of clock - step reach a multiple of ten); a replay never calls it. */
+void s2cam_attract_tick(float clock, float step);
+
 /* The camera of this frame in *cam: `dt` seconds have passed since the last (the drifting and the circling cameras go by it). The chase camera view 3 is the followed car's
    own (s2car_state.cam, kept by its steps; all zero until it has one worked out: the viewer sets cam_on on the car followed). */
 void s2cam_frame(const struct s2car_state *const *cars, int n, float dt, struct track_cam *cam);

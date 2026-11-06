@@ -393,9 +393,11 @@ void s2gfx_end(const uint32_t *pal, int32_t fade)
     VID_SWAP = 1;
 }
 
-/* an image w wide, cut to the rows [y0, y1) */
+/* an image w wide, cut to the rows [y0, y1); one wholly right of or left of the screen is not sent (the blitter's x is 10 bits wide, signed:
+   a sprite sliding in from x 1000 would come in at the left edge, wrapped); the blitter cuts what hangs over an edge itself */
 static void copy_clipped(struct blit_list *l, const uint8_t *src, int w, int h, int x, int y, int kind, int colour, int y0, int y1)
 {
+    if (x >= FB_W || x + w <= 0) return;
     if (y < y0) {
         src += (y0 - y) * w;
         h -= y0 - y;
@@ -486,6 +488,13 @@ void s2gfx_text_boxed(struct blit_list *l, int font_no, int colour, int space, i
 
 void s2gfx_game_sprite(struct blit_list *l, int n, int x, int y) { sprite_of(&game, l, n, x, y); }
 void s2gfx_game_sprite_centred(struct blit_list *l, int n, int y) { sprite_centred_of(&game, l, n, y); }
+int s2gfx_game_sprite_info(int n, int *x, int *w)
+{
+    if (!sprite_ok(&game, n)) return 0;
+    *x = game.img[n].x;
+    *w = game.img[n].w;
+    return 1;
+}
 int s2gfx_game_text(struct blit_list *l, int font_no, int colour, int space, int x, int y, const char *s) { return text_of(&game, l, font_no, colour, space, x, y, s); }
 void s2gfx_game_text_centred(struct blit_list *l, int font_no, int colour, int space, int y, const char *s) { text_centred_of(&game, l, font_no, colour, space, y, s); }
 

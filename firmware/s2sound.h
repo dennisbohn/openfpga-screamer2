@@ -24,6 +24,10 @@ void s2snd_init(struct zip *z);
 /* A race starts on track 1 .. 7 (race_init worked): the voices stop, the music of the track starts unless it plays
    already, and the sounds begin with the next s2snd_frame() */
 void s2snd_race_start(int track);
+/* The track's song (CD_TRACKS of MISC.DTR) from its start, unless it plays already: what s2snd_race_start() does last. The attract race sets s2snd_music_later before s2snd_race_start()
+   so that its song begins when its picture comes out of white (STARTL.EXE 0x38207: the song is let go at the third stage of the screen, 0x4d928) and calls this then. */
+extern int s2snd_music_later;
+void s2snd_music(int track);
 /* Once a frame of the race, after the physics' steps and with the camera of the picture: the engines'
    pitch and volume, the tyres, the knocks, the music's fade, and the music's ring kept filled
    (music_frame()). Costs 0.1 to 0.2 ms. */

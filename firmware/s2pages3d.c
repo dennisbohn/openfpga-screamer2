@@ -23,6 +23,7 @@
 #include "s2page.h"
 #include "s2sound.h"
 #include "s2save.h"
+#include "s2attract.h"
 #include "dlog.h"
 #include "hw.h"
 #include <math.h>
@@ -53,6 +54,7 @@ static struct page {
     uint32_t before;                        /* the buttons held in the last frame */
     uint32_t clock;                         /* the original's blink clock (0x4cfd6): hundredths, from the start of the page */
     int leaving, fade_frames, result;
+    float idle;                             /* seconds left of the 30 on TEAM SELECTION without a button (0x40236) */
     uint32_t pal_work[256];
     int fresh;
     const uint8_t *mlb, *badge_mesh[BADGES], *letter_mesh;
@@ -150,6 +152,8 @@ static int team_key(void *self, uint32_t press)
     uint32_t keys = in_keys(), edge = keys & ~p->before;
     p->before = keys;
     if (p->leaving) return p->fade_frames > FADE_FRAMES ? p->result : 0;
+    if (keys) s2att_idle_reset(&p->idle);   /* (0x405ed ..: a key resets the timer in every state; it runs down in the team state only, 0x4083c) */
+    else if (p->state == 0 && s2att_idle_step(&p->idle)) return S2P3D_IDLE;     /* (0x4085d: the fade is set to 1.0 at once: a cut to black, no fade out) */
     uint32_t enter = S2PAGE_ENTER, esc = S2PAGE_ESC;
     if (edge & esc) {
         if (p->state == 1) {
@@ -362,6 +366,7 @@ int s2_page_team(struct s2_menu_cfg *c)
     p->cur = p->name[0] >= 'A' && p->name[0] <= 'Z' ? p->name[0] - 'A' : 0;
     p->prev = p->cur;
     p->fresh = 1;
+    s2att_idle_reset(&p->idle);
     setup(p);
     memcpy(p->pal_work, pal, sizeof pal);
     struct s2_page pg = { s2gfx_pic(0), p->pal_work, 0, 0, team_frame, team_key, team_draw };
