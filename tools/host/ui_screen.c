@@ -982,9 +982,14 @@ static void check_menu_hook(const char *prefix)
     CHECK(s2save_get(S2S_PROFILE) == 0, "a new save has no profile");
     answers[0] = S2ROOM_CHAMP;
     answered = asked = 0;
+    static char idle_script[2000];                                  /* TEAM SELECTION left alone for 30 s on the first start: the attract sequence (attract_screen.c), and the page comes again */
+    put_keys(idle_script, sizeof idle_script, "");
+    begin_run(idle_script, prefix);
+    int r0 = s2menu_run(&c);
+    CHECK(r0 == S2M_ATTRACT && asked == 0 && s2save_get(S2S_PROFILE) == 0, "a new save's TEAM SELECTION left alone: the menu ended with %d (the room asked %d times)", r0, asked);
     put_keys(script, sizeof script, "5:B 40:B");
     begin_run(script, prefix);
-    int r0 = s2menu_run(&c);
+    r0 = s2menu_run(&c);
     CHECK(r0 == S2M_CHAMP && s2save_get(S2S_PROFILE) == 1 && c.team == 1 && !strcmp(s2save_name(), "MIL") && asked == 1, "first start: the menu ended with %d, profile %d", r0, s2save_get(S2S_PROFILE));
     /* ESC in the room is TEAM SELECTION: ESC asks EXIT SCREAMER 2?, YES (ENTER) leaves it with nothing changed, the room comes again (CHAMPIONSHIP) */
     answers[0] = S2ROOM_BACK;
@@ -1034,6 +1039,9 @@ static void draw_banner(int track, uint8_t *out)
 /* the options room: room_screen.c */
 #include "room_screen.c"
 
+/* the attract sequence and the idle timers: attract_screen.c */
+#include "attract_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -1062,6 +1070,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_pages3d(prefix);
     check_trackpages(prefix);
     check_room(ref, prefix);
+    check_attract(ref, prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
     int stored_banners = s2gfx_banner(1) != 0x13;

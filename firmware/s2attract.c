@@ -183,7 +183,7 @@ static uint32_t faded(uint32_t c, float level, int t)
     uint32_t b;
     memcpy(&b, &k, 4);
     const int e = (int)(b >> 23 & 255);
-    const int64_t m = e ? (int64_t)(b & 0x7FFFFFu | 0x800000u) : 0;     /* k = m / 2^s */
+    const int64_t m = e ? (int64_t)((b & 0x7FFFFFu) | 0x800000u) : 0;     /* k = m / 2^s */
     const int s = 150 - e;
     uint32_t out = 0;
     for (int sh = 16; sh >= 0; sh -= 8) {
