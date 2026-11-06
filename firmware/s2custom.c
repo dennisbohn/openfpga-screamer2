@@ -141,11 +141,9 @@ static int custom_key(void *self, uint32_t press)
     return 0;
 }
 
-static void custom_draw(void *self, struct blit_list *l, uint32_t tick)
+/* the 2D parts over the room (the tests draw them alone) */
+static void custom_overlay(struct page *p, struct blit_list *l)
 {
-    struct page *p = self;
-    (void)tick;
-    s2garage_cust_draw(l, p->item);                                    /* the room, the car and the camera at the item's station (the list is empty again for the sprites) */
     s2gfx_sprite(l, SPR_PANEL, 250, 30);
     s2gfx_sprite(l, SPR_BUTTONS, 250, 128);
     s2gfx_text_centred(l, S2G_FONT_TITLE, S2G_WHITE, 2, 0, s2gfx_line("CAR CUSTOMIZATION", 0, "CAR CUSTOMIZATION"));
@@ -174,6 +172,14 @@ static void custom_draw(void *self, struct blit_list *l, uint32_t tick)
     if (p->minus < 0.0f) p->minus = 0.0f;
     p->plus -= DT * 15.0f;
     if (p->plus < 0.0f) p->plus = 0.0f;
+}
+
+static void custom_draw(void *self, struct blit_list *l, uint32_t tick)
+{
+    struct page *p = self;
+    (void)tick;
+    s2garage_cust_draw(l, p->item);                                    /* the room, the car and the camera at the item's station (the list is empty again for the sprites) */
+    custom_overlay(p, l);
 }
 
 int s2custom_page(struct s2_menu_cfg *c, int slot)

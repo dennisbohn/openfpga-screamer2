@@ -19,6 +19,7 @@ mkdir -p "$out/ref"
 rm -f "$out"/*.rgb "$out"/*.png
 "$py" -I "$root/tools/ui_reference.py" "$game" "$out/ref" || exit 1
 "$py" -I "$root/tools/ui_room_ref.py" "$game" "$out/ref" || exit 1
+"$py" -I "$root/tools/ui_garage_ref.py" "$game" "$out/ref" || exit 1
 "$py" -I "$root/tools/ui_scene_ref.py" "$game" "$out/ref" || exit 1
 "$py" -I "$root/tools/attract_reference.py" "$game" "$out/ref" || exit 1
 
@@ -27,7 +28,7 @@ src="$root/build/host/menu"
 rm -rf "$src"
 mkdir -p "$src/host"
 cp "$root"/firmware/*.c "$root"/firmware/*.h "$src/"
-cp "$root/tools/host/menu_screen.c" "$root/tools/host/ui_screen.c" "$root/tools/host/pages3d_screen.c" "$root/tools/host/league_screen.c" "$root/tools/host/trackpage_screen.c" "$root/tools/host/room_screen.c" "$root/tools/host/scene_screen.c" "$root/tools/host/attract_screen.c" "$root/tools/host/custom_screen.c" "$src/host/"
+cp "$root/tools/host/menu_screen.c" "$root/tools/host/ui_screen.c" "$root/tools/host/pages3d_screen.c" "$root/tools/host/league_screen.c" "$root/tools/host/trackpage_screen.c" "$root/tools/host/room_screen.c" "$root/tools/host/scene_screen.c" "$root/tools/host/attract_screen.c" "$root/tools/host/custom_screen.c" "$root/tools/host/garage_screen.c" "$src/host/"
 "$py" -I - "$src/hw.h" <<'PY'
 import sys
 p = sys.argv[1]

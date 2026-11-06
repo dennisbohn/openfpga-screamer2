@@ -1044,6 +1044,9 @@ static void draw_banner(int track, uint8_t *out)
 /* the options room: room_screen.c */
 #include "room_screen.c"
 
+/* the cameras of the CAR page and the CAR CUSTOMIZATION page in the team's room: garage_screen.c (the room's built as room_screen.c does) */
+#include "garage_screen.c"
+
 /* the ARCADE title's cars: scene_screen.c */
 #include "scene_screen.c"
 
@@ -1079,6 +1082,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_trackpages(prefix);
     check_custom(ref, prefix);
     check_room(ref, prefix);
+    check_garage(ref, prefix);
     check_scene(ref, prefix);
     check_attract(ref, prefix);
     check_sounds(z, ref);

@@ -1,6 +1,6 @@
 """The team room scenes of the CAR page and the CAR CUSTOMIZATION page against the running original (docs/screamer2/menus.md "The garage").
 
-Usage: python -I tools/s2/dosbox_garage.py [car|custom|all]          (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2")
+Usage: python -I tools/s2/dosbox_garage.py [car|cars|custom|all]          (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2")
 
 Starts STARTL.EXE in the game folder's own DOSBox (the one this script starts, found by its configuration file; no other DOSBox is ever keyed or read) on a private copy of the
 game folder (tools/s2/dosbox_arcade.py make_private: build/dosgame inside the work tree, copied, never linked; team 1 CONDOR named MIL, its second car chosen, every team's
@@ -93,10 +93,22 @@ da.HOOKS["G"] = record
 
 def script(which):
     """the keys and shots of the recording (seconds from its start, which is the ENTER on TRACK SELECTION); the original's keys: ENTER 0x1c, ESC 0x01, up 0x48, left 0x4b, right 0x4d, down 0x50.
-    As few events as will do (each one needs the window in front: a key the guard refuses is not sent): `car` is the CAR page alone (the camera's orbit was recorded for 20 s in a
+    As few events as will do (each one needs the window in front: a key the guard refuses is not sent): `cars` the cars changed round all five with the bonus car's page, `car` is the CAR page alone (the camera's orbit was recorded for 20 s in a
     first run: the model matches 934 of 990 rows, the rest are torn reads), `custom` goes through it to the CAR CUSTOMIZATION page, `all` both."""
     ev = [("k1c", 0.3)]                          # TRACK SELECTION -> the CAR page (the room, the cars: it loads for a moment)
     t = 5.0
+    if which == "cars":                          # the cars changed (the swing starts again at 0.125), round the five and past the end, the bonus car's page, ESC
+        ev.append(("sstart", t))
+        t += 1.5
+        for i, (d, name) in enumerate((("ke4d", "r1"), ("ke4d", "r2"), ("ke4d", "r3"), ("ke4d", "r4"), ("ke4d", "wrap"), ("ke4b", "l_wrap"), ("ke4b", "l4"))):
+            ev.append((d, t))
+            for j, dt in enumerate((0.1, 0.5, 1.2) if i in (0, 4, 5) else (0.6,)):
+                ev.append(("s%s_%d" % (name, j), t + dt))
+            t += 2.0
+        ev += [("k1c", t), ("sbonus_enter0", t + 0.4), ("sbonus_enter1", t + 1.2)]       # the bonus car (the fifth): time attack goes to the choice at once
+        t += 2.0
+        ev += [("ke4d", t), ("sbonus_free", t + 0.5), ("k01", t + 1.0), ("sbonus_esc", t + 1.5), ("k01", t + 2.5), ("sleave0", t + 2.52), ("sleave1", t + 2.6), ("sleave2", t + 2.7)]
+        return ev, t + 5
     many = which != "custom"
     if many:
         for i in range(3):                       # the page settled, the camera going round the chosen car
@@ -144,7 +156,7 @@ def script(which):
 
 
 def main():
-    which = next((a for a in sys.argv[1:] if a in ("car", "custom", "all")), "custom")
+    which = next((a for a in sys.argv[1:] if a in ("car", "cars", "custom", "all")), "custom")
     da.work = os.path.join(da.root, "build", "check", "dosbox_garage")
     import atexit
     atexit.register(da.drop_junctions)

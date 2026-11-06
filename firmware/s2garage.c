@@ -71,6 +71,24 @@ static void ease_angles(float look_pitch, float look_head, int row)
 
 /* ------------------------------------------------------------------------------------------------ the CAR page */
 
+/* The sine of x (|x| < 1000) in double precision, by the series round the nearest multiple of pi/2 (error under 1e-16): the engine's x87 sine resolves what a single-precision one does
+   not, and the cut height 360 + 180 sin(4 pi p) is an integer to the digit where p is 0.125: sin of that float x 4 pi (1.5707963705) is 1 - 1e-15, 539.9999999999998 cut is 539, a single
+   precision sine says 1 and 540. The library's double sine would bring its argument reduction's tables (9 KB). */
+static double sin_d(double x)
+{
+    const double half_pi = 1.5707963267948966;
+    const int q = (int)(x * (1.0 / half_pi) + (x < 0.0 ? -0.5 : 0.5));
+    const double r = x - (double)q * half_pi, r2 = r * r;
+    const double s = r * (1.0 - r2 * (1.0 / 6.0) * (1.0 - r2 * (1.0 / 20.0) * (1.0 - r2 * (1.0 / 42.0) * (1.0 - r2 * (1.0 / 72.0) * (1.0 - r2 * (1.0 / 110.0) * (1.0 - r2 * (1.0 / 156.0) * (1.0 - r2 * (1.0 / 210.0) * (1.0 - r2 * (1.0 / 272.0)))))))));
+    const double c = 1.0 - r2 * (1.0 / 2.0) * (1.0 - r2 * (1.0 / 12.0) * (1.0 - r2 * (1.0 / 30.0) * (1.0 - r2 * (1.0 / 56.0) * (1.0 - r2 * (1.0 / 90.0) * (1.0 - r2 * (1.0 / 132.0) * (1.0 - r2 * (1.0 / 182.0) * (1.0 - r2 * (1.0 / 240.0))))))));
+    switch (q & 3) {
+    case 0: return s;
+    case 1: return c;
+    case 2: return -s;
+    }
+    return -c;
+}
+
 void s2garage_car_begin(int c)
 {
     chosen = c;
@@ -103,9 +121,9 @@ void s2garage_car_choose(int c)
 void s2garage_car_step(int state)
 {
     const int32_t *a = s2room_record(1, chosen, 1);
-    const int height = state ? HEIGHT_FIXED : (int)((double)sinf((float)((double)cam.phase * (double)12.566371f)) * HEIGHT_SWING + HEIGHT_MID);
+    const int height = state ? HEIGHT_FIXED : (int)(sin_d((double)cam.phase * (double)12.566371f) * HEIGHT_SWING + HEIGHT_MID);
     const float angle = (float)((double)cam.sway * (double)6.2831855f);            /* (0x10388: the vector turned about the vertical, sin and cos kept as floats, the sums cut) */
-    const float s = sinf(angle), c = cosf(angle);
+    const float s = (float)sin_d((double)angle), c = (float)sin_d((double)angle + 1.5707963267948966);
     const int32_t target[3] = { a[0] + (int32_t)((double)RADIUS * (double)c), a[1] + height, a[2] + (int32_t)(0.0 * (double)c - (double)RADIUS * (double)s) };
     s2room_ease_place(cam.pos, target, ROW_CAR);
     float pitch, head;

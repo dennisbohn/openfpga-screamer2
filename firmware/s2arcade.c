@@ -395,15 +395,20 @@ static void choice_draw(const struct car_page *p, struct blit_list *l)
     }
 }
 
-static void car_draw(void *self, struct blit_list *l, uint32_t tick)
+/* the 3D part: the room and the team's cars, or the picture and the carousel; the list's box darkened (the CPU does it before the text goes over it) */
+static void car_scene(struct car_page *p, struct blit_list *l)
 {
-    struct car_page *p = self;
+    const int list = p->sets && p->state && !bonus(p->cfg);
+    if (p->room) s2garage_car_draw(l, p->state, list ? p->dark : 0, 100, 84, 120, 68);
+    else if (list) s2showroom_draw_dark(l, p->dark, 100, 84, 120, 68);                       /* (the picture is blitted, the cars drawn; the list is empty again for the sprites) */
+    else s2showroom_draw(l);
+}
+
+/* the 2D parts over it (the tests draw them alone) */
+static void car_overlay(const struct car_page *p, struct blit_list *l)
+{
     const struct s2_menu_cfg *c = p->cfg;
     const int list = p->sets && p->state && !bonus(c);
-    (void)tick;
-    if (p->room) s2garage_car_draw(l, p->state, list ? p->dark : 0, 100, 84, 120, 68);       /* the room and the team's cars, the list's box darkened (the CPU does it before the text goes over it) */
-    else if (list) s2showroom_draw_dark(l, p->dark, 100, 84, 120, 68);                       /* the picture and the cars, the box darkened */
-    else s2showroom_draw(l);                                                                /* the picture is blitted, the cars drawn; the list is empty again for the sprites */
     if (p->sets) {                                          /* the pages of the championship and of time attack: the title as text, no badge (0x3d969) */
         s2gfx_text_centred(l, S2G_FONT_TITLE, S2G_WHITE, 2, 4, s2gfx_line("CAR SELECTION", 0, "CAR SELECTION"));
     } else {
@@ -426,6 +431,13 @@ static void car_draw(void *self, struct blit_list *l, uint32_t tick)
         s2gfx_sprite(l, SPR_AUTO + (!manual && lit), 18, 155);
         s2gfx_sprite(l, SPR_MANUAL + (manual && lit), 159, 155);
     }
+}
+
+static void car_draw(void *self, struct blit_list *l, uint32_t tick)
+{
+    (void)tick;
+    car_scene(self, l);
+    car_overlay(self, l);
 }
 
 static const char *const picture[S2ARC_PAGES] = { "ARCADE_L.BKK", "BKG_1L.BKK", "BKG_2L.BKK", "BKG_2L.BKK", "BKG_2L.BKK", "BKG_2L.BKK" };
