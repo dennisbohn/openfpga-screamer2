@@ -504,6 +504,13 @@ int track_class_key(const uint8_t *obj)
    sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
 static int mirror_pass;
 
+/* How far the mirror's pass sees, in percent of the track's far plane: the glass is 160 x 35 pixels, what is far behind the car is a pixel or two, and the pass hands over
+   pieces as the main pass does. Measured in the simulation of track 4 (docs/screamer2/hud.md section 5): the whole far plane cost the mirror 7.8 ms (6.5 of them choosing and handing
+   over the pieces; the race 20.6 ms a frame, 198 of 220 late), 50 % 4.3 ms (18.0 ms, 8 late), 35 % 3.5 ms (16.9 ms, 1 late); the race without the mirror takes 11.8 ms */
+#ifndef MIRROR_FAR_PCT
+#define MIRROR_FAR_PCT  35
+#endif
+
 /* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and
    other moving objects; docs/screamer2/performance.md, section 6): the distance of the block's middle
    from the camera, rounded to nearest (even). Placed: key = -(dist >> 1), level 0 above -3000 (dist <
@@ -1435,7 +1442,12 @@ void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const s
     cam_frame(cam, f, r, u);
     for(int k = 0; k < 3; k++) r[k] = -r[k];
     mirror_pass = 1;
+    const float far_keep = far_z, reach_keep = reach2;
+    far_z = far_keep * ((float)MIRROR_FAR_PCT / 100.0f);
+    reach2 = (far_z + REACH_PLUS) * (far_z + REACH_PLUS);
     draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
+    far_z = far_keep;
+    reach2 = reach_keep;
     mirror_pass = 0;
 }
 

@@ -157,8 +157,13 @@ three units, perf counters, the race on every track with the game's driver drivi
 | CPU of the pass by the cost model of `perf_race.py` (cull 25,000 + 126 a cell + 150 a placement tested + 110 a piece in view; 920 cycles a static piece, 6,300 a car's block) | 2.5 ms | 2.0 | 2.7 | 2.9 | 2.0 | 2.3 | 1.5 |
 
 The CPU adds, outside the model, the glass's read-back (35 rows x 40 words of 2 loads and a store, about 35,000 cycles = 0.5 ms, estimated from the code) and the shadows' and puffs' objects made again (about 0.1 ms):
-**+2 to +3.5 ms on a frame, with the mirror on, against the 6.7 ms the T4 race has free** (11.8 mean, 13.3 worst of 20); the mirror is off at every race's start and costs a test of one flag when it is off. The 128 KB panorama
-turned is made once the first time the mirror is on (about 10 ms, one late frame). **Not timed on the Pocket or in the simulation** (`tools/s2/sim_race.sh` is the main session's); the counts are the PC's.
+**Measured in the simulation of track 4 (2026-11-06, `tools/fw.sh EXTRA_CFLAGS="-DS2_SIM_MIRROR=1" TAG=mirror`, the mirror on from the start, view INCAR; marks 20 to 25 in the frame's timeline):** the counted
++2 to +3.5 ms were too low by a factor of three, because the pass runs one thing after the other (the strip is read out before the scene may overwrite its rows) and its CPU part is as big as the main pass's per piece.
+With the track's whole far plane the mirror took **7.8 ms**: 1.4 ms to the objects (with the player's step), 6.5 ms choosing and handing over the pieces (126 of the main pass's 157; the units 4.0 / 3.0 / 3.4 ms busy), 0.8 ms
+waiting for the rasterizer, 0.5 ms for the glass; the race took 20.6 ms a frame (worst 32.8), 198 of 220 frames late, 47.3 a second. The pass now sees only **35 %** of the far plane (`MIRROR_FAR_PCT` in `track.c`: the glass is
+160 x 35 pixels, and what is far behind the car is a pixel or two): **3.5 ms** (2.99 of them the pieces, 1.65 ms of the rasterizer), the race 16.9 ms a frame (worst 29.2, the first frame with the panorama made), 1 of 220 late, 50 a
+second; at 50 % it was 4.3 ms, 18.0 ms and 8 late. The race without the mirror takes 11.8 ms. The mirror is off at every race's start and costs a test of one flag when it is off. The 128 KB panorama turned is made once the
+first time the mirror is on (about 10 ms, one late frame). Not timed on the Pocket.
 
 **Compared with the running original** (`python -I tools/s2/dosbox_cockpit.py 1` and `... 4 26 2 4`: 1,300 frames of a race and 12 raw screenshots each, the first recording England with the first team's second car, the second track 4 with the
 third team's bonus car; the DOSBox this script starts, under the lock folder):
