@@ -5,10 +5,15 @@
  *   check_props_s2 model <image> <track> <steps>
  *       the arcade's race on the model, the game's driver driving all four cars (as in the recording of the running original, tools/s2/dosbox_props_s2.py), with the
  *       obstacles and the sparks run from the race (race_step_hook, s2car_sparks), and again without them: every car's whole record after every step is the same but
- *       for the word +0xc88 (the obstacles a car has knocked), also with the steps of a frame taken two at a time. Prints where the obstacles stand and what happened.
+ *       for the word +0xc88 (the obstacles a car has knocked). Prints where the obstacles stand and what happened.
  *   check_props_s2 rec <image> <track> <recording> <frame bytes>
- *       the recording of the running original: the cars' records go through the firmware's code frame by frame and the obstacles' and the sparks' records of the game
- *       are compared with the firmware's (see the end of this file)
+ *       the recording of the running original: the cars' records of every frame go through the firmware's code, and after each frame the firmware's obstacles (stood up,
+ *       knocked and flown by those cars) and sparks (flown from the game's throw) are compared with the game's records; the sparks' throws are held against the game's rule
+ *       (its generator, the number, the place) and run again by the firmware's race a step from the state before (see the end of record()); SHIFT=n: the cars n frames ahead
+ *       of the obstacles, the negative control, which must fail
+ *   check_props_s2 render <image> <track> <recording> <frame bytes> <out prefix> <frame>[-<frame>]...
+ *       the scene of recorded frames drawn by the firmware's engine from the recorded camera, cars, obstacles and sparks: <out prefix>with_<frame>.rgb, and nofx_<frame>.rgb
+ *       without the props; COST=1: also the props' pieces, faces, triangles and pixels (COSTONLY=1: only that, no pictures)
  *
  * Exit status 1 if any check fails.
  */
@@ -125,7 +130,8 @@ static uint32_t hash_car(const struct s2car_state *c)
 }
 
 #define MAXSTEPS 30000
-static uint32_t world[2][MAXSTEPS];
+static uint32_t world[2][MAXSTEPS], props_state[2][MAXSTEPS];
+static struct s2props_rec snap[2][200];
 
 static void race_setup(int track)
 {
@@ -152,7 +158,7 @@ static int model(int track, int steps)
     CHECK(steps <= MAXSTEPS, "steps");
     int n = load_props(track);
     printf("track %d: %d obstacles\n", track, n);
-    for (int run = 0; run < 2; run++) {                  /* 0: without the props, 1: with */
+    for (int run = 0; run < 3; run++) {                  /* 0: without the props, 1: with, 2: with again (the props' own state is the same: nothing is left over from a race before) */
         race_setup(track);
         if (run) {
             s2props_begin();
@@ -177,8 +183,17 @@ static int model(int track, int steps)
                 h ^= hash_car(race_car(i));
                 h *= 16777619u;
             }
-            world[run][k] = h;
-            if (!run) continue;
+            if (!run) { world[0][k] = h; continue; }
+            if (run == 1) world[1][k] = h;
+            uint32_t ph = 2166136261u;                  /* the props' whole state after the step */
+            for (int i = 0; i < s2props_obstacles() + S2PROPS_SPARKS; i++) {
+                struct s2props_rec r;
+                s2props_get(i >= s2props_obstacles(), i >= s2props_obstacles() ? i - s2props_obstacles() : i, &r);
+                for (unsigned q = 0; q < sizeof r / 4; q++) { ph ^= ((const uint32_t *)&r)[q]; ph *= 16777619u; }
+            }
+            props_state[run - 1][k] = ph;
+            if (k == 0) for (int i = 0; i < s2props_obstacles() + S2PROPS_SPARKS && i < 200; i++) s2props_get(i >= s2props_obstacles(), i >= s2props_obstacles() ? i - s2props_obstacles() : i, &snap[run - 1][i]);
+            if (run == 2) continue;
             int fl = 0, hit = 0;
             for (int i = 0; i < s2props_obstacles(); i++) {
                 struct s2props_rec r;
@@ -198,11 +213,15 @@ static int model(int track, int steps)
                 was_on[i] = r.on;
             }
         }
-        if (run)
+        if (run == 1)
             printf("track %d: %d steps (%.0f s): %d obstacles knocked (first at step %d, %.1f s; %d flying at once at the most), %d sparks thrown; the cars' counts %d %d %d %d\n",
                    track, steps, steps * 0.02, knocked, first_knock, first_knock * 0.02, flying_max, sparks_seen,
                    (int)race_car(0)->rec[0xc88 / 4], (int)race_car(1)->rec[0xc88 / 4], (int)race_car(2)->rec[0xc88 / 4], (int)race_car(3)->rec[0xc88 / 4]);
     }
+    int same_props = 1;
+    for (int k = 0; k < steps && same_props; k++)
+        if (props_state[0][k] != props_state[1][k]) { same_props = 0; CHECK(0, "track %d step %d: the props' state is not the same in a second race", track, k); if (k == 0) for (int i = 0; i < s2props_obstacles() + S2PROPS_SPARKS && i < 200; i++) if (memcmp(&snap[0][i], &snap[1][i], sizeof snap[0][i])) { printf("  record %d: %.1f %.1f %.1f / %.1f %.1f %.1f on %d hit %d life %.3f; then %.1f %.1f %.1f / %.1f %.1f %.1f on %d hit %d life %.3f\n", i, snap[0][i].p[0], snap[0][i].p[1], snap[0][i].p[2], snap[0][i].a[0], snap[0][i].a[1], snap[0][i].a[2], snap[0][i].on, snap[0][i].hit, snap[0][i].life, snap[1][i].p[0], snap[1][i].p[1], snap[1][i].p[2], snap[1][i].a[0], snap[1][i].a[1], snap[1][i].a[2], snap[1][i].on, snap[1][i].hit, snap[1][i].life); break; } }
+    printf("track %d: the obstacles' and sparks' whole state after every step of a second race %s the first's\n", track, same_props ? "equals" : "is NOT");
     int same = 1;
     for (int k = 0; k < steps && same; k++)
         if (world[0][k] != world[1][k]) { same = 0; CHECK(0, "track %d step %d: the race differs with the props on", track, k); }
