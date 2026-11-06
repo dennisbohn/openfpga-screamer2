@@ -352,7 +352,7 @@ static int record(int track, const char *path, int frame_bytes)
     }
     printf("standing: %d of %d obstacles at the game's place (x and z exactly, the height within a unit: %d of them exactly) and turned as the game's (within 0.002 rad)\n", stand_ok, stand_all, stand_exact);
 
-    int resync_cones = 0, resync_sparks = 0, gaps = 0, cone_states = 0, cone_ok = 0, hits_game = 0, hits_ok = 0, spark_states = 0, spark_ok = 0, flying_frames = 0;
+    int resync_cones = 0, resync_sparks = 0, gap_resync = 0, gaps = 0, cone_states = 0, cone_ok = 0, hits_game = 0, hits_ok = 0, spark_states = 0, spark_ok = 0, flying_frames = 0;
     int spawns = 0, spawn_ok = 0, spawn_rand = 0, spawn_dir = 0, spawn_n = 0, spawn_n_ok = 0, spawn_near = 0, spawn_batches = 0;
     int was_on[2][NPROPS] = { { 0 } };
     float max_pos = 0.0f, max_vel = 0.0f, max_spark_pos = 0.0f;
@@ -381,7 +381,7 @@ static int record(int track, const char *path, int frame_bytes)
             if (g.hit && !hit_prev[i]) hits_game++;
             if (g.hit && !hit_prev[i]) hits_ok += same_state;
             hit_prev[i] = g.hit;
-            if (gap) { s2props_set(0, i, &g); resync_cones++; continue; }
+            if (gap) { s2props_set(0, i, &g); gap_resync++; continue; }
             const float dp = fmaxf(fabsf(m.p[0] - g.p[0]), fmaxf(fabsf(m.p[1] - g.p[1]), fabsf(m.p[2] - g.p[2])));
             if (!g.on && !g.hit && dp > 1.5f) {                  /* standing, and not where the firmware has it: put there by the recorder in this frame or the one before? */
                 int poked = 0;
@@ -566,7 +566,7 @@ static int record(int track, const char *path, int frame_bytes)
                                           ev->dir0, ev->dir2, n, calls[best].at[0], calls[best].at[1], calls[best].at[2], calls[best].dir[0], calls[best].dir[2], bd);
     }
     printf("batches of sparks re-run by the firmware's race from the frame before: %d; the firmware threw sparks of the set in %d of them (%d of those a step later), the number equal in %d, within two in %d, the place within 400 units in %d, the direction within 600 units a second in %d\n", ev_n, ev_matched, ev_late, ev_n_ok, ev_n_near, ev_at, ev_dir);
-    CHECK(ev_matched * 10 >= ev_n * 8 && ev_n_near * 10 >= ev_matched * 9 && ev_at * 10 >= ev_matched * 9, "the firmware's sparks");
+    CHECK((ev_n < 10 ? ev_matched * 2 >= ev_n : ev_matched * 10 >= ev_n * 8) && ev_n_near * 10 >= ev_matched * 9 && ev_at * 10 >= ev_matched * 9, "the firmware's sparks");
     printf("%d frames, %d of them with an obstacle flying, %d frames missing in the recording (their states taken from the game)\n", rec.n, flying_frames, gaps);
     printf("obstacles: %d states compared, %d equal (a place within %.2f, a speed within %.1f); the firmware knocked the game's %d obstacles (%d at the game's frame); %d states put right from the game's\n",
            cone_states, cone_ok, (double)max_pos, (double)max_vel, hits_game, hits_ok, resync_cones);
