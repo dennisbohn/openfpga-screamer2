@@ -13,8 +13,9 @@
  *       its number of tracks (LEAGUE 1, 4 TRACKS ...) at y 160 and 172; the other cup (x 18 or 175, y 35, 134 x 156) darkened once; the arrows (sprites 3 and 4, at
  *       (10, 172) and (298, 172)) where there are more leagues to the left or right, while (clock & 0x7f) < 0x40; the title (font 0) at y 2.
  *       LEFT / RIGHT move without wrapping (sound 0, the clock set back); ENTER: on an open league sound 6, fade, on; ESC: back to the options room at once.
- *   WELCOME TO LEAGUE n (0x39569): LEAG_nL.BKK, the top 42 rows darkened once, WELCOME TO (STRINGS.TXT 49) at y 2 and the league's name at y 20 in font 1.
- *       ENTER: fade, on; ESC: back to the selection at once. No sounds.
+ *   WELCOME TO LEAGUE n (0x39569): LEAG_nL.BKK, the league's track plates flying over it (s2plates.h), the top 42 rows darkened once, WELCOME TO (STRINGS.TXT 49) at y 2 and
+ *       the league's name at y 20 in font 1. The page ends by itself when the last plate has flown out (6.4 s for league 1, 8.5 s for league 4's six: the TRACK page follows
+ *       after the same 25-frame fade as for ENTER, 0x3976a); ENTER: fade, on; ESC: back to the selection at once. No sounds.
  *   LEAGUE REPORT (0x43ade): LEAG_nL.BKK, the title LEAGUE REPORT (font 0) at y 4, the four cars by points (the most first, equal points in the order of the cars: the
  *       player first) in rows 24 apart from y 56: the team's mark (MENUL.SPR 0x51 + team) at x 104 and "n.  NAME  points" centred in font 1 (fixed pitch, one space less
  *       from 10 points up; the name the player's or CPU), then, while races are left, RACES COMPLETED: n at y 152 and RACES TO GO: m at 164 in font 2; ACCELERATE TO
@@ -28,6 +29,7 @@
 #include "s2leaguepages.h"
 #include "s2gfx.h"
 #include "s2page.h"
+#include "s2plates.h"
 #include "s2sound.h"
 #include "s2save.h"
 #include "console.h"
@@ -145,17 +147,27 @@ int s2lp_select(int *league)
 
 /* ------------------------------------------------------------------------------------------------ WELCOME TO LEAGUE n */
 
+static int plates_on, plates_over;      /* the page's plates are loaded and flying; the flight is over (the page ends by itself) */
+
+static void welcome_frame(void *self, uint32_t tick)
+{
+    (void)self;
+    (void)tick;
+    if (plates_on && s2plates_step()) plates_over = 1;
+}
+
 static int welcome_key(void *self, uint32_t press)
 {
     (void)self;
     if (press & S2PAGE_ESC) return S2LP_BACK;
-    return (press & S2PAGE_ENTER) ? S2LP_GO : 0;
+    return (press & S2PAGE_ENTER) || plates_over ? S2LP_GO : 0;
 }
 
 static void welcome_draw(void *self, struct blit_list *l, uint32_t tick)
 {
     const int league = *(int *)self;
     (void)tick;
+    if (plates_on) s2plates_draw(l);                                    /* (over the picture, under the band) */
     darken(l, 0, 0, 320, 42);
     s2gfx_text_centred(l, S2G_FONT_MEDIUM, WHITE, 2, 2, s2gfx_line("WELCOME TO", 0, "WELCOME TO"));
     s2gfx_text_centred(l, S2G_FONT_MEDIUM, WHITE, 2, 20, s2gfx_line("LEAGUE 1", 2 * league, "LEAGUE"));
@@ -164,7 +176,10 @@ static void welcome_draw(void *self, struct blit_list *l, uint32_t tick)
 int s2lp_welcome(int league)
 {
     if (league < 0 || league >= S2L_LEAGUES || !picture(league_picture(league))) return S2LP_FAIL;
-    const struct s2_page page = { s2gfx_pic(0), pal, 0, FADE_OUT, 0, welcome_key, welcome_draw };
+    plates_over = 0;
+    plates_on = s2plates_load(s2gfx_zip());                             /* (without them the page waits for ENTER, as it did before the plates were built) */
+    if (plates_on) s2plates_begin(s2l_def[league].races);
+    const struct s2_page page = { s2gfx_pic(0), pal, 0, FADE_OUT, welcome_frame, welcome_key, welcome_draw };
     return s2page_run(&page, &league);
 }
 
