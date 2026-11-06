@@ -145,6 +145,8 @@ uint32_t back_clocks, back_cycles;      /* the blitter's clocks for it, the CPU'
    and the CPU's cycles writing to them, each as its counter holds it (cleared during the
    frame; a mark follows every clear). Two buffers: the last whole frame is logged. */
 #define TL_MAX 48
+#define TL_STRIDE 12                  /* a mark every TL_STRIDE pieces: the debug log has 3,840 bytes for everything and a mark takes 36 of them (more than 8 pieces
+                                           between marks since the effects and the scenery: 254 pieces a frame made the timeline fill the log and cut the lines after it) */
 static struct tl_mark { uint32_t t, gu, su, rs, bl, wait, tag; } tl[2][TL_MAX];
 static uint32_t tl_n[2], tl_cur, tl_t0, tl_pieces;
 uint32_t tl_scene;                      /* hw_piece marks the pieces while this is set (frame.h) */
@@ -233,7 +235,7 @@ static void push_piece(const struct gu_piece *g)
     if (tl_scene) {
         if (tl_pieces++ == 0)
             tl_mark(TL_CULL);
-        else if (tl_pieces % 8 == 1)
+        else if (tl_pieces % TL_STRIDE == 1)
             tl_mark(TL_PIECES);
     }
     uint32_t t0 = rdcycle();
