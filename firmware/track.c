@@ -504,11 +504,12 @@ int track_class_key(const uint8_t *obj)
    sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
 static int mirror_pass;
 
-/* How far the mirror's pass sees, in percent of the track's far plane: the glass is 160 x 35 pixels, what is far behind the car is a pixel or two, and the pass hands over
-   pieces as the main pass does. Measured in the simulation of track 4 (docs/screamer2/hud.md section 5): the whole far plane cost the mirror 7.8 ms (6.5 of them choosing and handing
-   over the pieces; the race 20.6 ms a frame, 198 of 220 late), 50 % 4.3 ms (18.0 ms, 8 late), 35 % 3.5 ms (16.9 ms, 1 late); the race without the mirror takes 11.8 ms */
+/* How far the mirror's pass sees, in percent of the track's far plane: the glass is 160 x 35 pixels, and the pass hands over pieces as the main pass does. Measured in the simulation of
+   track 4 (docs/screamer2/hud.md section 5), the mirror's cost: the whole far plane 7.8 ms (the race 20.6 ms a frame, 198 of 220 late), 70 % no different to look at, 50 % 4.3 ms (18.0 ms,
+   8 late; the bridges' decks stay, a few far houses at the side go), 35 % 3.5 ms but the bridges after the tunnel were gone (the owner saw it); the race without the mirror takes 11.8 ms
+   (13.5 in INCAR). Leaving out what is too small to be seen instead saved nothing (7.6 ms): the pieces far behind the car are big blocks of the city */
 #ifndef MIRROR_FAR_PCT
-#define MIRROR_FAR_PCT  35
+#define MIRROR_FAR_PCT  50
 #endif
 
 /* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and
