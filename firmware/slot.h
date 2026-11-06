@@ -8,6 +8,11 @@
 
 #define SLOT_REST       0xFFFFFFFFu         /* slot_read: the rest of the file */
 
+/* Called by slot_read, slot_size and slot_set_size before they use the data slot, with the bytes the call reads (0 for the
+   others, SLOT_REST for the rest of a file), if it is set: the music (music.c) keeps its reads of the ring and the blocking
+   calls from meeting, and holds a song a long read would starve. */
+extern void (*slot_hook)(uint32_t len);
+
 /* Read len bytes (a multiple of 4, or SLOT_REST for the rest of the file: the APF sizes
    it, the last word filled up) of data slot id from byte offset into the memory at addr
    (a bridge address, the same as the CPU's for the SDRAM). Waits until the APF is done;

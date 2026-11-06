@@ -1,6 +1,8 @@
 #include "slot.h"
 #include "hw.h"
 
+void (*slot_hook)(uint32_t len);
+
 void slot_start(uint32_t id, uint32_t offset, uint32_t addr, uint32_t len)
 {
     DS_ID = id;
@@ -22,6 +24,7 @@ int slot_result(void)
 
 int slot_read(uint32_t id, uint32_t offset, uint32_t addr, uint32_t len)
 {
+    if (slot_hook) slot_hook(len);
     slot_start(id, offset, addr, len);
     uint32_t t0 = rdcycle();
     while (slot_busy())
@@ -32,6 +35,7 @@ int slot_read(uint32_t id, uint32_t offset, uint32_t addr, uint32_t len)
 
 void slot_set_size(uint32_t id, uint32_t size)
 {
+    if (slot_hook) slot_hook(0);
     DS_ID = id;
     DS_SIZE = size;                 /* the look-up writes it into the slot's size word */
     while (DS_CTRL & DS_SIZING)
@@ -40,6 +44,7 @@ void slot_set_size(uint32_t id, uint32_t size)
 
 uint32_t slot_size(uint32_t id)
 {
+    if (slot_hook) slot_hook(0);
     DS_ID = id;                     /* starts the look-up in the slot table, a few hundred clocks */
     while (DS_CTRL & DS_SIZING)
         ;
