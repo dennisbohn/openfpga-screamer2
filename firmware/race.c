@@ -226,6 +226,11 @@ static struct {
 struct s2_pick race_grid[RACE_CARS] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } };
 int race_replay;
 static int rec_manual0;                                 /* the gearbox the player's car was set up with in the race being recorded (its first gear depends on it) */
+int race_custom;
+struct s2car_setup race_setup;
+int race_tuned;
+static int rec_custom;                                  /* ... and the set-up it was made of: a race is a function of the player's controls AND his set-up */
+static struct s2car_setup rec_setup;
 int race_laps = RACE_LAPS;
 int race_level = 1;
 int race_kind = RACE_NORMAL;
@@ -929,7 +934,15 @@ int race_init(int track, float floor_z)
     R.slot = R.kind == RACE_ATTACK ? (R.ghost ? 1 - R.ghost->slot : 1) : 0;     /* (0x339e7: car i of n takes place n - 1 - i; the player the other side than the kept run) */
     if(R.replay) R.car[0].manual = rec_manual0;
     else if(R.kind == RACE_NORMAL) rec_manual0 = R.car[0].manual;
+    const int custom = R.replay ? rec_custom : race_custom;                     /* the player's set-up (a replay: the one the recorded race was made with) */
+    const struct s2car_setup setup = R.replay ? rec_setup : race_setup;
+    if(!R.replay && R.kind == RACE_NORMAL) rec_custom = race_custom, rec_setup = race_setup;
     for(int i = 0; i < ncars; i++) {
+        struct s2car_state *c = &R.car[i];
+        const int ghost = i == 1 && R.kind == RACE_ATTACK && R.ghost && R.ghost->custom;
+        c->custom = i == 0 ? custom : ghost;                                    /* the player's, the ghost's (the kept run's), the computers' standard one (`tuned` makes it over) */
+        c->setup = i == 0 ? setup : ghost ? R.ghost->setup : (struct s2car_setup){ 0 };
+        c->tuned = R.kind == RACE_NORMAL && i > 0 && race_tuned;
         R.team[i] = race_grid[i].team - 1;              /* the player's team and car, then the computers' (the physics counts from 0) */
         R.model[i] = race_grid[i].car - 1;
         if(R.kind != RACE_NORMAL || i > 0) R.car[i].manual = 0;     /* (the first gear of a car depends on it: the ghost must start as the car it was recorded from, and a
@@ -963,7 +976,7 @@ int race_init(int track, float floor_z)
         FR.list_left = 0.0f;
         FR.msg_left = 0.0f;
     }
-    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages, 0, 0);
+    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages, custom, &setup);
     return 1;
 }
 

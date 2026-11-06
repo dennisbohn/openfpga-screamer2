@@ -58,6 +58,14 @@ int race_replay_ok(void);
 int race_replaying(void);
 void race_replay_stop(void);
 
+/* The set-ups of the cars (s2car.h; docs/screamer2/driving.md, "The set-up"), set before race_init(): the player's car (and the free run's) is made of race_setup when race_custom is 1,
+   of the standard set-up (the arcade's, 2 2 -1 2 2 2) when it is 0; the computers' cars of the standard one too, and where race_tuned is 1 (the championship's: the original's mode word
+   has no bit 1, 0x14e20) as the original tunes them (s2car_state.tuned). Time attack's ghost is made of the set-up of its kept run (s2ghost.h), a replay of the one of the race it runs
+   again (the player's controls AND his set-up make the race). */
+extern int race_custom;
+extern struct s2car_setup race_setup;
+extern int race_tuned;
+
 /* RACE_ATTACK: the side (0 / 1) the player's car took on the first row (the other is the ghost's: the player takes the one the kept run did not start on) */
 int race_slot(void);
 
