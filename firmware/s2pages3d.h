@@ -4,7 +4,7 @@
  *
  *   TEAM SELECTION   the four teams' badges (GFX/LOGO1.DAT A1LOG-00 .. A4LOG-00.3DX, material library LOGO.MLB) turn, the chosen one in front at half
  *                    a turn a second (20 of 2048 a frame), the others at an eighth, on slots left, above and right behind it; LEFT / RIGHT choose (the badges
- *                    glide to their new slots), ENTER goes on to the name, ESC asks EXIT SCREAMER 2? (YES / NO)
+ *                    glide to their new slots), ENTER goes on to the name, ESC leaves (the original asks EXIT SCREAMER 2? here: a core cannot end itself)
  *   ENTER YOUR NAME  the badges fly off (the chosen one up and a little back), 26 letter tyres (ALETTER.3DX, one frame of LOGO.MLB each) fly in on a ring
  *                    round the middle, the chosen letter at the front tilted to the camera; LEFT / RIGHT turn the ring (the letter becomes the name's
  *                    letter at the cursor), UP / DOWN move the cursor along the three letters, ENTER keeps the name and leaves (a flash to white),
@@ -20,6 +20,6 @@
 /* what the page ends with (S2P3D_IDLE: 30 s on TEAM SELECTION with no button down, the original's rule: the attract sequence follows, s2attract.h) */
 enum { S2P3D_FAIL = 0, S2P3D_DONE = 1, S2P3D_IDLE = 2, S2P3D_QUIT = -1 };
 
-/* The page until the name is kept (S2P3D_DONE: c->team and the save's name and profile are set) or the player answers EXIT SCREAMER 2? with YES
+/* The page until the name is kept (S2P3D_DONE: c->team and the save's name and profile are set) or the player presses ESC
    (S2P3D_QUIT: nothing is changed, the start menu comes). S2P3D_FAIL if the files could not be read (nothing is shown). Needs s2gfx_init(). */
 int s2_page_team(struct s2_menu_cfg *c);

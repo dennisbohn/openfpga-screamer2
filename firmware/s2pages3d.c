@@ -45,7 +45,7 @@ struct letter { int flag; float tilt, spin; };
 
 static struct page {
     struct s2_menu_cfg *cfg;
-    int team, state, yn, cursor, cur, prev;
+    int team, state, cursor, cur, prev;
     char name[4];
     float t;                                /* the ring's turn, 0 .. 1 */
     int32_t slot[BADGES][3];
@@ -58,7 +58,7 @@ static struct page {
     uint32_t pal_work[256];
     int fresh;
     const uint8_t *mlb, *badge_mesh[BADGES], *letter_mesh;
-    const char *title, *name_title, *exit_text, *yes, *no;
+    const char *title, *name_title;
 } P;
 
 static uint32_t pal[256];
@@ -117,7 +117,6 @@ static void setup(struct page *p)
     for (int k = 0; k < p->team; k++) rotate_slots(p->slot, 1);
     letters_reset(p);
     p->state = 0;
-    p->yn = 0;
     p->cursor = 0;
     p->t = 1.0f;                            /* (0x40: the clocks are started when the first letter turns) */
     p->leaving = p->fade_frames = p->result = 0;
@@ -159,9 +158,9 @@ static int team_key(void *self, uint32_t press)
         if (p->state == 1) {
             letters_reset(p);                    /* (the tyres are hidden again; they fly in once more the next time) */
             p->state = 0;
-        } else {
-            p->state = p->state == -1 ? 0 : -1;
-            p->yn = 0;
+        } else {                            /* (the original asks EXIT SCREAMER 2? YES / NO here: a core cannot end itself, the player leaves through the Pocket's menu, so ESC just goes back) */
+            p->leaving = 1;
+            p->result = S2P3D_QUIT;
         }
     } else if (edge & enter) {
         if (p->state == 0) {
@@ -172,11 +171,6 @@ static int team_key(void *self, uint32_t press)
             sound(SOUND_KEEP);
             p->leaving = 1;
             p->result = S2P3D_DONE;
-        } else if (p->yn == 0) {
-            p->leaving = 1;
-            p->result = S2P3D_QUIT;
-        } else {
-            p->state = 0;
         }
     } else if (p->state == 0 && (edge & (KEY_LEFT | KEY_RIGHT))) {
         int right = (edge & KEY_RIGHT) != 0;
@@ -189,10 +183,6 @@ static int team_key(void *self, uint32_t press)
         if (keys & KEY_RIGHT) p->cur = p->cur + 1 > LETTERS - 1 ? 0 : p->cur + 1;
         else p->cur = p->cur - 1 < 0 ? LETTERS - 1 : p->cur - 1;
         p->t = 0.0f;
-    } else if (p->state == -1 && (edge & KEY_RIGHT) && p->yn == 0) {
-        p->yn = 1;
-    } else if (p->state == -1 && (edge & KEY_LEFT) && p->yn > 0) {
-        p->yn = 0;
     } else if (p->state == 1 && (edge & KEY_UP) && p->cursor > 0) {
         p->cursor--;
     } else if (p->state == 1 && (edge & KEY_DOWN) && p->cursor < 2) {
@@ -299,13 +289,6 @@ static void team_draw(void *self, struct blit_list *l, uint32_t tick)
         s2gfx_text_centred(l, S2G_FONT_MEDIUM, S2G_WHITE, 2, 176, s);
         s2gfx_text(l, S2G_FONT_MEDIUM, S2G_WHITE, 2, 136 + 19 * p->cursor, 186, "-");
     }
-    if (p->state == -1) {
-        s2gfx_text_centred(l, S2G_FONT_SMALL, S2G_WHITE, 2, 92, p->exit_text);
-        const int blink = (p->clock & 0x3F) <= 0x20;
-        const int yes_on = p->yn == 0 && blink, no_on = p->yn == 1 && blink;
-        s2gfx_text_boxed(l, yes_on ? S2G_FONT_SMALL2 : S2G_FONT_SMALL, yes_on ? 3 : S2G_WHITE, 2, 120, 40, 110, p->yes);
-        s2gfx_text_boxed(l, no_on ? S2G_FONT_SMALL2 : S2G_FONT_SMALL, no_on ? 3 : S2G_WHITE, 2, 160, 40, 110, p->no);
-    }
     if (p->leaving) {
         float f = (float)p->fade_frames / (float)FADE_FRAMES;
         flash(p, f > 1.0f ? 1.0f : f, p->pal_work);
@@ -357,9 +340,6 @@ int s2_page_team(struct s2_menu_cfg *c)
     p->team = c->team - 1;
     p->title = s2gfx_line("TEAM SELECTION", 0, "TEAM SELECTION");
     p->name_title = s2gfx_line("ENTER YOUR NAME", 0, "ENTER YOUR NAME");
-    p->exit_text = s2gfx_line("EXIT SCREAMER 2?", 0, "EXIT SCREAMER 2?");
-    p->yes = s2gfx_line("ARE YOU SURE ?", 1, "YES");
-    p->no = s2gfx_line("ARE YOU SURE ?", 2, "NO");
     const char *nm = s2save_name();
     memcpy(p->name, nm, 3);
     p->name[3] = 0;

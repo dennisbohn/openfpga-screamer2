@@ -175,7 +175,7 @@ int s2menu_run(struct s2_menu_cfg *c)
         case S2ROOM_IDLE:                                   /* 30 s without a button: the attract sequence, then the room again */
             s2menu_store(c);
             return S2M_ATTRACT;
-        case S2ROOM_BACK:                                   /* ESC: TEAM SELECTION (the name after it), then the room again, also after YES to leaving the program (the core is left from the Pocket's menu) */
+        case S2ROOM_BACK:                                   /* ESC: TEAM SELECTION (the name after it), then the room again (the original asks EXIT SCREAMER 2? on ESC there: a core cannot end itself, it is left from the Pocket's menu) */
             s2menu_store(c);
             team_first = s2_page_team(c) == S2P3D_IDLE;     /* (30 s there is the sequence too, and it comes back to this page) */
             s2menu_load(c);

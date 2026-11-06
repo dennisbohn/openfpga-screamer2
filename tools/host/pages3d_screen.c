@@ -342,16 +342,15 @@ static void check_pages3d(const char *prefix)
         CHECK(d <= 400, "ENTER YOUR NAME: %d pixels differ from the reference", d);
     }
 
-    /* ---- the keys of the team page: ESC asks EXIT SCREAMER 2?, RIGHT chooses NO, ENTER answers it and the page goes on, ESC again and ENTER on YES
-       (the default) leave: nothing is kept, no sound */
+    /* ---- the keys of the team page: ESC leaves at once (the original asks EXIT SCREAMER 2? YES / NO here, a core cannot end itself): nothing is kept, no sound */
     s2save_reset();
     c = (struct s2_menu_cfg){ .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1 };
-    keys_at(script, sizeof script, "5:A 15:R 25:B 35:A 45:B");
+    keys_at(script, sizeof script, "5:A");
     begin_run(script, prefix);
     front = 0;
     r = s2_page_team(&c);
-    CHECK(r == S2P3D_QUIT && c.team == 1 && s2save_get(S2S_PROFILE) == 0 && nclicks == 0, "ESC, NO, ESC, YES: result %d, team %d, profile %d, %d sounds", r, c.team, s2save_get(S2S_PROFILE), nclicks);
-    CHECK(calls == 60, "leaving takes the flash's 13 frames after the last ENTER (tick 45): %u frames, expected 60", calls);
+    CHECK(r == S2P3D_QUIT && c.team == 1 && s2save_get(S2S_PROFILE) == 0 && nclicks == 0, "ESC: result %d, team %d, profile %d, %d sounds", r, c.team, s2save_get(S2S_PROFILE), nclicks);
+    CHECK(calls == 20, "leaving takes the flash's 13 frames after the ESC (tick 5): %u frames, expected 20", calls);
 
     /* RIGHT, RIGHT, LEFT choose team 2, 3, 2 (sound 4 each; the slots turn, the badges glide), ENTER (sound 6) the name, ENTER (sound 1) keeps it: team 2 */
     s2save_reset();

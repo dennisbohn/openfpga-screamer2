@@ -1035,16 +1035,16 @@ static void check_menu_hook(const char *prefix)
     begin_run(script, prefix);
     r0 = s2menu_run(&c);
     CHECK(r0 == S2M_CHAMP && s2save_get(S2S_PROFILE) == 1 && c.team == 1 && !strcmp(s2save_name(), "MIL") && asked == 1, "first start: the menu ended with %d, profile %d", r0, s2save_get(S2S_PROFILE));
-    /* ESC in the room is TEAM SELECTION: ESC asks EXIT SCREAMER 2?, YES (ENTER) leaves it with nothing changed, the room comes again (CHAMPIONSHIP) */
+    /* ESC in the room is TEAM SELECTION: ESC leaves it with nothing changed (no EXIT question), the room comes again (CHAMPIONSHIP) */
     answers[0] = S2ROOM_BACK;
     answers[1] = S2ROOM_CHAMP;
     answered = asked = 0;
-    put_keys(script, sizeof script, "20:A 30:B");
+    put_keys(script, sizeof script, "20:A");
     begin_run(script, prefix);
     s2save_set(S2S_TEAM, 3);
     s2menu_load(&c);
     r0 = s2menu_run(&c);
-    CHECK(r0 == S2M_CHAMP && c.team == 3 && s2save_get(S2S_TEAM) == 3 && asked == 2, "ESC and YES: the menu ended with %d, team %d (%d visits)", r0, c.team, asked);
+    CHECK(r0 == S2M_CHAMP && c.team == 3 && s2save_get(S2S_TEAM) == 3 && asked == 2, "ESC: the menu ended with %d, team %d (%d visits)", r0, c.team, asked);
     s2save_reset();
     s2save_set(S2S_PROFILE, 1);                                     /* (from here on a save that has been through the team pages) */
     s2menu_load(&c);
