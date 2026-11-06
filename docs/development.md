@@ -258,11 +258,11 @@ Start puts the player and three computer cars on the game's start grid (the play
 two rows of two, 2,000 units apart, as the game's `0x2f519` places them), holds them for 3 seconds with the start lights (3, 2,
 1, then GO!), and lets the player race the laps of the menu (3 by default) against them (`firmware/race.c`, docs/screamer2/driving.md, "The race"). The buttons are Screamer 1's
 (`core/input.json`, README "Controls": B accelerate, Y brake, d-pad steering, L / R the gears), the camera is
-the car physics' chase camera. The physics steps 20 ms at a time by real elapsed time (a video
+the player's view (the chase camera, the car physics', or the views from the car: "The views from the car" below). The physics steps 20 ms at a time by real elapsed time (a video
 frame is 20 ms; at most 4 steps per frame, as Screamer 1's race), so a slow frame makes the picture slower, not
 the cars. The four cars (`firmware/s2car.c`) each wear their own team's model and paint: by default the player's is team 1's car 1
 (CONDOR), the computers' are team 2's car 2, team 3's car 3 and team 4's car 4; the start menu sets the player's team and car and the
-computers get the other three teams ("Teams" below). The screen is the original's race screen in the chase camera (docs/screamer2/hud.md, `firmware/s2hud.c`):
+computers get the other three teams ("Teams" below). The screen is the original's race screen (docs/screamer2/hud.md, `firmware/s2hud.c`):
 the lap, the place, this lap's and the total time, the track's best times, the bar of the four cars, the dial with speed, gear and rev needle, the start lights, the
 checkpoint gap, BEST LAP!, WRONG WAY, the bends' arrows, the 1ST mark over a leading computer; the gearbox (AUTO / MAN) has no place on it (the TRANSMISSION page and GAME SETTINGS choose it; nothing in the race changes it). While the
 timing overlay (below) is on, the elements near its two lines move down 16 rows. After his last lap the player's car is the game's driver's (it slows to a stop), the race screen keeps only its dial, and the original's end screen
