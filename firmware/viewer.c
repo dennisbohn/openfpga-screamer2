@@ -36,6 +36,8 @@
 #include "trackmem.h"
 #include "music.h"
 #include "s2hud.h"
+#include "s2cockpit.h"
+#include "s2dash.h"
 #include "s2fx.h"
 #include "s2props.h"
 #include "prof.h"
@@ -71,7 +73,6 @@
 #define FALL_UNITS      3000.0f
 #define OFFER_FRAMES    50              /* the finished race offers "A: race again, B: menu" a second after the line */
 
-static const struct rs_clip clip = { 0, 0, FB_W, FB_H };
 static struct blit_list back;
 
 /* the screen's palette for the loading and error screens: entries 0 to 4 (files.c's) */
@@ -84,6 +85,7 @@ static struct blit_list back;
 static int ui_ready;                    /* the 2D toolkit (s2gfx.h) is up: the loading screen and the pause menu */
 static int league_mode;                 /* the visit is a race of the championship (league_run): no RESTART, no track switch, the end screen is the league's */
 static int league_started;              /* ... and the race did start (its cars' places are there to read) */
+static int mirror_on;                   /* the rear-view mirror (the original's M: off at the start of every race, not in a replay) */
 static int cam_mode;                    /* the camera is s2cam.c's (the trackside cameras after the finish and in the replay, or another car's chase camera), not the player's own */
 static int cut_done;                    /* ... and the cut to the trackside cameras at the player's finish has been made in this race */
 static struct race_result lg_res[RACE_CARS];    /* the championship's places as the end screen's ENTER took them (a replay does not take them again), or as the race was left */
@@ -128,8 +130,8 @@ static void screen_text(int n, const char *l1, const char *l2, const char *l3, i
     con_text(fb, 1, 17, "       Start: drive  Select+B: menu", GREY, BLACK);
     con_text(fb, 1, 19, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
     con_text(fb, 1, 20, "       A handbrake  L/R gears", GREY, BLACK);
-    con_text(fb, 1, 21, "       X: timing", GREY, BLACK);
-    con_text(fb, 1, 22, "       Select + left/right: track", GREY, BLACK);
+    con_text(fb, 1, 21, "       X: timing  Select+X: view", GREY, BLACK);
+    con_text(fb, 1, 22, "       Select+Y: mirror  Select+<>: track", GREY, BLACK);
     con_text(fb, 1, 23, "       Select + Start: restart", GREY, BLACK);
     con_text(fb, 1, 24, "       Start: pause menu (exit there)", GREY, BLACK);
     VID_SWAP = 1;
@@ -332,6 +334,21 @@ static void leave(int n, int cars, const struct stats *s)
    TRANSMISSION page or GAME SETTINGS) stays through new races and tracks; nothing in a race changes it */
 static int manual;
 
+/* the view a race starts in: the one the player left the last race in (the original keeps it in its options, 0x2b64a, 0x20469, and takes 2, 3, 4 or 6, else 2 at 0x2e205) */
+static int start_view(void)
+{
+    const int v = s2save_get(S2S_VIEW);
+    return v == S2CAM_INCAR || v == S2CAM_BACK || v == S2CAM_NEAR || v == S2CAM_INSIDE ? v : S2CAM_INCAR;
+}
+
+/* a view from the car (F1 .. F4), kept for the next race; the race screen follows */
+static void set_view(int view)
+{
+    s2cam_view(view);
+    s2hud_view(s2cam_get_view(), s2cam_get_follow());
+    if (!race_replaying() && !attract_mode) s2save_set(S2S_VIEW, s2cam_get_view());
+}
+
 /* a new race on track n: the four cars on the grid, the countdown from 3 s; 0 if the line or a car could not be set up */
 static int race_start(int n, float floor_z)
 {
@@ -357,8 +374,9 @@ static int race_start(int n, float floor_z)
         cam_mode = race_replaying() || attract_mode;    /* (0x2e1f3: a replay and the attract race begin in view 1) */
         cut_done = 0;
         if (!cam_mode) lg_res_valid = 0;
-        s2cam_begin(n, cam_mode ? S2CAM_TRACKSIDE : S2CAM_BACK);
+        s2cam_begin(n, cam_mode ? S2CAM_TRACKSIDE : start_view());
         for (int i = 0; i < RACE_CARS; i++) race_car(i)->cam_on = 0;
+        mirror_on = 0;
         s2hud_view(s2cam_get_view(), 0);
     }
     return ok;
@@ -396,10 +414,10 @@ static const char *band_text(void)
 
 /* the controls of the driving mode from the buttons, as Screamer 1 reads them (car_keys: B the gas, Y the brake,
    the d-pad the steering, held; L and R the gears on the step they go down). Select held (sel) makes the d-pad a
-   track switch, so it does not steer. */
+   track switch, so it does not steer, and Y the mirror's switch (with X the view's), so it does not brake. */
 static struct s2car_input car_input(uint32_t keys, int sel)
 {
-    return (struct s2car_input){ .throttle = (keys & KEY_B) ? 1.0f : 0.0f, .brake = (keys & KEY_Y) ? 1.0f : 0.0f,
+    return (struct s2car_input){ .throttle = (keys & KEY_B) ? 1.0f : 0.0f, .brake = (keys & KEY_Y) && !sel ? 1.0f : 0.0f,
                                  .steer = sel ? 0.0f : ((keys & KEY_RIGHT) ? 1.0f : 0.0f) - ((keys & KEY_LEFT) ? 1.0f : 0.0f),
                                  .handbrake = (keys & KEY_A) != 0 };
 }
@@ -433,6 +451,60 @@ static void others_slice(void)
     uint32_t t = rdcycle();
     race_others_slice();
     others_in_scene += rdcycle() - t;
+}
+
+/* The rear-view mirror's pass (STARTL.EXE 0x2b873 draws it after the scene, 0x756b0): the scene again from behind the followed car, 320 x 35 rows with the car and its shadow left out, the
+   glass's sense and every block at level of detail 1 or lower (track_draw_mirror); its pixels 2k of each row, right to left, are the 160 x 35 strip the race screen lays at (81, 14). The
+   original renders into a buffer of its own; the rasterizer here only draws into the two screen buffers, so the pass goes into the top rows of the one being built (the main scene is drawn
+   over it after) and the CPU squeezes the rows out of it as soon as the rasterizer is done. The shadows' and the puffs' blocks are the main pass's too: the objects of the mirror are made
+   and drawn first, those of the picture after. */
+static uint8_t mirror_strip[S2CK_MIRROR_W * S2CK_MIRROR_ROWS] __attribute__((aligned(4)));
+
+static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const struct track_object *car_objs, int ncar, uint32_t buffer, int overlap)
+{
+    static struct track_object mobjs[TRACK_MAX_OBJS];
+    static struct blit_list mback;
+    struct track_cam mc;
+    s2cam_mirror((const struct s2car_state *const *)rc, n, &mc);
+    int nm = 0;
+    for (int k = 0; k < ncar; k++)
+        if (k != follow) mobjs[nm++] = car_objs[k];
+    nm += s2anim_objects(mobjs + nm, S2ANIM_OBJECTS);
+    s2fx_hide_shadow(follow);
+    nm += s2fx_objects(&mc, rc, n, mobjs + nm, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS - nm);
+    nm += s2props_objects(&mc, mobjs + nm, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - nm);
+    const struct rs_clip mclip = { 0, 0, FB_W, S2CK_MIRROR_ROWS };
+    struct su_view mv;
+    track_view(&mclip, &mv);
+    draw_buf = buffer;
+    blit_start(&mback, (int)buffer);
+    track_backdrop_blit(&mback, &mclip, &mc);
+    BL_CLOCKS = 0;
+    back_wait = 1;
+    hw_blit(&mback);
+    GU_MODE = buffer << 8;
+    RS_CLIP0 = RS_XY(mclip.x0, mclip.y0);
+    RS_CLIP1 = RS_XY(mclip.x1, mclip.y1);
+    su_view_regs(&mv);
+    struct track_stats mts;
+    if (overlap) hw_idle = others_slice;
+    track_draw_mirror(0, &mclip, &mc, mobjs, nm, &mts);
+    hw_idle = 0;
+    while (overlap && (RS_DRAW & RS_BUSY) && race_others_slice())     /* (the computers' steps fill the wait for the last pixels) */
+        ;
+    while (RS_DRAW & RS_BUSY)
+        ;
+    volatile uint32_t *src = (volatile uint32_t *)FB(buffer);          /* strip[y][j] = row[2 (159 - j)]: the words (a, b) = (79 - 2s, 78 - 2s) make the strip's word s from the bytes 2, 0 of a and of b */
+    uint32_t *dst = (uint32_t *)mirror_strip;
+    for (int y = 0; y < S2CK_MIRROR_ROWS; y++) {
+        const volatile uint32_t *row = src + y * (FB_W / 4);
+        for (int s = 0; s < S2CK_MIRROR_W / 4; s++) {
+            const uint32_t a = row[79 - 2 * s], b = row[78 - 2 * s];
+            *dst++ = (a >> 16 & 0xFF) | (a & 0xFF) << 8 | (b >> 16 & 0xFF) << 16 | (b & 0xFF) << 24;
+        }
+    }
+    while (!(MEM_STATUS & MEM_WRITES_IDLE))                             /* (the blitter reads the strip from the SDRAM) */
+        ;
 }
 
 /* the race's text over the picture: the start lights, laps, place and times (hud: s2hud.c draws those); when the player has finished, the
@@ -642,6 +714,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 if (!hk.finished) {                     /* (the keys of the views and of the car followed are taken while the player's car is racing, 0x132b4, 0x2d7c0) */
                     if (press & KEY_L) { s2cam_view(S2CAM_TRACKSIDE); follow(s2cam_get_follow()); }
                     if (press & KEY_R) { s2cam_view(S2CAM_BACK); follow(s2cam_get_follow()); }
+                    if (press & KEY_B) { s2cam_next_view(); follow(s2cam_get_follow()); }         /* the views from the car in turn, the original's F1 .. F4 (the player's own are not kept: a replay) */
                     if (press & KEY_UP) follow((s2cam_get_follow() + 1) % race_cars());
                 }
             } else if (press & KEY_START) {
@@ -665,7 +738,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                     continue;
                 }
             }
-            if (press & KEY_X) *overlay = !*overlay;
+            if (press & KEY_X) {
+                if (sel && !race_replaying() && !cut_done) set_view(s2cam_next_view());           /* Select + X: the next view from the car (the original's F1 .. F4 in turn; not once the player has finished) */
+                else if (!sel) *overlay = !*overlay;
+            }
+            if ((press & KEY_Y) && sel && !race_replaying() && !cut_done && s2cam_get_view() != S2CAM_TRACKSIDE) mirror_on = !mirror_on;      /* Select + Y: the rear-view mirror (the original's M; not in a replay) */
             if (!race_replaying() && race_car(0)->manual != manual) {   /* nothing in a race changes the gearbox (the TRANSMISSION page and GAME SETTINGS choose it; d-pad up used to toggle it and was pressed by mistake while steering): if it differs it is a fault, logged once with the step and put back */
                 static int logged;
                 if (!logged++) {
@@ -706,6 +783,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         _Static_assert(S2FX_CARS >= RACE_CARS, "s2fx.c keeps state for every car of the race");
         _Static_assert(ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX <= TRACK_MAX_OBJS, "track.c draws TRACK_MAX_OBJS objects at most");
         int nobj;
+        struct s2car_state *rc[RACE_CARS];                  /* the race's cars, the views from the car (s2cockpit.h): the view, the car followed, the scene's rows, the mirror, and the cars' objects before the car */
+        static struct track_object car_objs[ROAD_CARS];     /* followed is taken off the draw list */
+        int view_now = S2CAM_BACK, follow_now = 0, rows = FB_H, ncar = 0, mirror_now = 0;
         uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
         uint32_t hud_steps = 1;                             /* the 20 ms steps this frame took, for the race screen's timers */
         others_in_scene = 0;
@@ -730,10 +810,19 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             race_pending = RACE_OVERLAP ? 1 : 0;
             hud_steps = steps;
             if (race_pending && RACE_OVERLAP > 1) race_others_begin(race_pending);
-            struct s2car_state *rc[RACE_CARS];
             for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
             PF_VAR(pf);
             nobj = road_race_scene(rc, race_cars(), &cam, objs);
+            view_now = s2cam_get_view();
+            follow_now = s2cam_get_follow();
+            ncar = nobj;
+            memcpy(car_objs, objs, (size_t)ncar * sizeof car_objs[0]);
+            if (s2ck_hides_car(view_now) && follow_now < nobj) {      /* INCAR and INSIDE: the car and its shadow are not in the picture (0x2b6b4) */
+                memmove(&objs[follow_now], &objs[follow_now + 1], (size_t)(nobj - follow_now - 1) * sizeof objs[0]);
+                nobj--;
+            }
+            rows = s2ck_rows(view_now, s2dash_row(s2ck_model(&race_grid[follow_now])));
+            mirror_now = mirror_on && view_now != S2CAM_TRACKSIDE && !race_replaying() && !attract_mode;
             s2anim_frame((float)race_steps() * STEP_S, (int)rc[0]->pos[0], (int)rc[0]->pos[1], (int32_t)rc[0]->rec[0x4A8 / 4]);       /* the race clock is the steps run (0x13335c) */
             nobj += s2anim_objects(objs + nobj, S2ANIM_OBJECTS);
             if (!cut_done && attack_mode != 2) {        /* the player has done his laps: the camera cuts to the trackside cameras, following his car (0x201ee; the free run has no end) */
@@ -746,7 +835,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                     follow(0);
                 }
             }
-            if (cam_mode) s2cam_frame((const struct s2car_state *const *)rc, race_cars(), (float)hud_steps * STEP_S, &cam);
+            if (cam_mode || view_now != S2CAM_BACK) s2cam_frame((const struct s2car_state *const *)rc, race_cars(), (float)hud_steps * STEP_S, &cam);
+            if (mirror_now) draw_mirror(rc, race_cars(), follow_now, car_objs, ncar, !(st & VID_FRONT), race_pending && RACE_OVERLAP > 1);
+            s2fx_hide_shadow(s2ck_hides_car(view_now) ? follow_now : -1);
             nobj += s2fx_objects(&cam, rc, race_cars(), objs + nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS - nobj);       /* (seen from the camera of this frame) */
             nobj += s2props_objects(&cam, objs + nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - nobj);        /* (last: should the frame be over the limit, the cars and their effects stay) */
             PF_ADD(PF_SCENE, pf); PF_SET(pf);
@@ -760,6 +851,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         }
         tl_mark(TL_PHYS);
         const uint32_t phys_cycles = rdcycle() - t_frame;
+        const struct rs_clip clip = { 0, 0, FB_W, rows };
         struct su_view view;
         track_view(&clip, &view);
 
@@ -770,6 +862,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         const int veiled = attract_mode && (att_view.black || att_view.exit);    /* the sequence's logos and its last frame: the screen is black, nothing of the scene is seen (s2attract.h): not drawn */
         blit_start(&back, (int)draw_buf);
         if (!veiled) track_backdrop_blit(&back, &clip, &cam);
+        if (rows < FB_H && !veiled) blit_fill(&back, 0, rows, FB_W, FB_H - rows, 0);       /* (INSIDE: the dashboard's picture is drawn over it, but for the pixels it leaves open) */
         BL_CLOCKS = 0;
         back_clocks = back_cycles = 0;
         back_wait = 1;
@@ -808,7 +901,10 @@ static int visit(int n, int *cars, int *overlay, int *drive)
            the 3D units are done, while the CPU goes on with the computers' steps; the timing overlay's two lines come after it, and
            the screen's elements near them move down 16 rows while the overlay is on */
         const int hud = *drive && !attract_mode && s2hud_ready();
-        if (hud) s2hud_draw(&cam, &view, hud_steps, *overlay ? 16 : 0);
+        if (hud) {
+            s2hud_scene(mirror_now ? mirror_strip : 0, rows);
+            s2hud_draw(&cam, &view, hud_steps, *overlay ? 16 : 0);
+        }
         if (attract_mode) {                             /* the sequence's screen instead of the race screen (0x45882 calls 0x37ec1 in its place) */
             static struct blit_list att_list;
             blit_start(&att_list, (int)draw_buf);

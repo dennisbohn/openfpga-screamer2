@@ -3,8 +3,8 @@
  * (docs/screamer2/menus.md, "Replay (row 10)"). Read from STARTL.EXE (tools/dis.sh -f): the camera record of the picture routine 0x12dff, the choice of a trackside
  * camera 0x14acf, its five kinds 0x13514, 0x135b6, 0x13768, 0x138e8, 0x13a8e, the look-at 0x33905; the track's cameras are CAMERASn.MCM of DATA/MAPn.DAT: a
  * count and, for each, 0x20 bytes: x, height, z (whole numbers), the three angles pitch, heading, roll (floats), the kind 0 .. 4 and a figure for it (a float).
- * The game's views are numbered 1 EXTERNAL (the trackside cameras), 2 INCAR, 3 BACK (the chase camera), 4 NEAR, 6 INSIDE (GAME.TXT); only 1 and 3 are here: the
- * viewer has no view from the car (docs/screamer2/hud.md).
+ * The game's views are numbered 1 EXTERNAL (the trackside cameras), 2 INCAR, 3 BACK (the chase camera), 4 NEAR, 6 INSIDE (GAME.TXT); the three from the car are s2cockpit.h's
+ * (docs/screamer2/hud.md "The views from the car"), whose keys are F1 (2), F2 (6), F3 (4) and F4 (3) in the race and F9 (1) in the replay.
  *
  * The cameras of view 1 (each looks at the car it follows, unless it is of the first kind):
  *   kind 0  stands where its row says, with the row's angles
@@ -21,7 +21,7 @@
 struct s2car_state;
 struct track_cam;
 
-enum { S2CAM_TRACKSIDE = 1, S2CAM_BACK = 3 };
+enum { S2CAM_TRACKSIDE = 1, S2CAM_INCAR = 2, S2CAM_BACK = 3, S2CAM_NEAR = 4, S2CAM_INSIDE = 6 };
 
 /* A race begins: the track's cameras (CAMERAS<track>.MCM of the DATA/MAPn.DAT the car physics has loaded, s2car_map_dat()), in `view`, following car 0. Without
    cameras (no such file) view 3 is the only one. */
@@ -29,9 +29,11 @@ void s2cam_begin(int track, int view);
 int s2cam_rows(void);
 int s2cam_shot(void);                           /* the trackside camera in use (a row of the track's list), -1 before the first frame */
 
-/* The view (S2CAM_TRACKSIDE, S2CAM_BACK: others are ignored; view 1 needs cameras; a view asked for is a new choice of camera) and the car followed (0 .. n - 1: the viewer
+/* The view (S2CAM_*: others are ignored; view 1 needs cameras; a view asked for is a new choice of camera) and the car followed (0 .. n - 1: the viewer
    sets s2car_state.cam_on on it, so that its chase camera is worked out) */
 void s2cam_view(int view);
+/* The next view from the car in the order of the keys F1 .. F4 (INCAR, INSIDE, NEAR, BACK, round; from the trackside cameras INCAR): the view now */
+int s2cam_next_view(void);
 int s2cam_get_view(void);
 void s2cam_follow(int car, int ncars);
 int s2cam_get_follow(void);
@@ -43,5 +45,8 @@ void s2cam_next_car(int ncars);                 /* F11 */
 void s2cam_attract_tick(float clock, float step);
 
 /* The camera of this frame in *cam: `dt` seconds have passed since the last (the drifting and the circling cameras go by it). The chase camera view 3 is the followed car's
-   own (s2car_state.cam, kept by its steps; all zero until it has one worked out: the viewer sets cam_on on the car followed). */
+   own (s2car_state.cam, kept by its steps; all zero until it has one worked out: the viewer sets cam_on on the car followed). Views 2, 4 and 6 are s2cockpit.h's, one call a picture
+   (NEAR eases its angles by the call); the car's body height (record +0x218) is the model slot's (s2ck_body_height). */
 void s2cam_frame(const struct s2car_state *const *cars, int n, float dt, struct track_cam *cam);
+/* The rear-view mirror's camera (the game's third camera record, view 5) behind the car followed, for the same frame */
+void s2cam_mirror(const struct s2car_state *const *cars, int n, struct track_cam *cam);

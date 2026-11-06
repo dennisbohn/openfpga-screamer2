@@ -5,6 +5,8 @@
  */
 #include "s2hud.h"
 #include "s2gfx.h"
+#include "s2dash.h"
+#include "s2cockpit.h"
 #include "s2load.h"
 #include "s2save.h"
 #include "s2car.h"
@@ -44,6 +46,8 @@ static int fixed_top = -1, fixed_stale = 1;     /* `top` fixed was made for; the
 static int ready, miles, position_x;                        /* miles: the unit's word begins with M (0x2ef4e): the speed shows as km/h / 1.6 */
 static const char *text[TEXTS];
 static int hud_view = 3, hud_follow;            /* the view the scene is drawn in and the car it follows (s2hud_view) */
+static const uint8_t *hud_strip;                /* the rear-view mirror's glass, S2CK_MIRROR_W x S2CK_MIRROR_ROWS (s2hud_scene): 0 for no mirror */
+static int hud_rows = S2CK_ROWS;                /* the scene's rows */
 static uint8_t band_dark[256];                  /* the darkening table of the race's palette, for the replay's band */
 
 static struct {
@@ -64,6 +68,7 @@ int s2hud_init(struct zip *z)
 {
     ready = 0;
     if (!s2gfx_game_init(z)) return 0;
+    s2dash_init();                                  /* (the cockpits: without them the views from the car have no instruments of their own) */
     for (int i = 0; i < TEXTS; i++) text[i] = s2gfx_line("THIS LAP", i, english[i]);
     miles = (text[T_UNIT][0] | 0x20) == 'm';
     position_x = 0x138 - s2gfx_game_text(0, FONT_LABEL, 3, -1, 0, 0, text[T_POSITION]);       /* POSITION ends at x 312 */
@@ -115,6 +120,9 @@ void s2hud_begin(int track)
     memset(&S, 0, sizeof S);
     hud_view = 3;
     hud_follow = 0;
+    hud_strip = 0;
+    hud_rows = S2CK_ROWS;
+    s2dash_begin();
     S.kind = race_kind;
     if (S.kind == RACE_ATTACK) s2_best_get_kind(S2S_KIND_ATTACK, track, 3, &total, &lap);       /* time attack: its own lists, three laps */
     else s2_best_get(track, race_laps, &total, &lap);
@@ -334,8 +342,19 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
     for (int i = 0; i < n; i++) car[i] = race_car(i);
     update(car, n, steps, h.finished);
     blit_start(&list, (int)draw_buf);
+    if (hud_rows < S2CK_ROWS) s2gfx_clip(0, 200, 0, hud_rows);              /* (0x497f8: the leader's mark is cut at the scene's rows) */
     leader_mark(car, n, cam, view);
-    if (hud_view != 1) dial(car[hud_follow < n ? hud_follow : 0]);          /* (the trackside cameras: no instrument, 0x46fea) */
+    if (hud_rows < S2CK_ROWS) s2gfx_clip(0, 200, 0, 200);
+    if (hud_view != 1) {                                                    /* (the trackside cameras: no instrument, 0x46fea) the instrument 0x46d42: */
+        const struct s2car_state *f = car[hud_follow < n ? hud_follow : 0];
+        const int model = s2ck_model(&race_grid[hud_follow < n ? hud_follow : 0]);
+        if (hud_strip) {                                                    /* the mirror's glass (0x756b0 copied it over the scene), its frame, then in INSIDE the cockpit with its gear lamp and needles in place of the dial */
+            blit_copy(&list, hud_strip, S2CK_MIRROR_W, S2CK_MIRROR_ROWS, S2CK_MIRROR_W, S2CK_MIRROR_X, S2CK_MIRROR_Y, BLIT_COPY | BLIT_OPAQUE, 0);
+            s2dash_mirror_frame(&list);
+        }
+        if (hud_view == S2CK_INSIDE && s2dash_have(model)) s2dash_cockpit(&list, model, RI(f, 0xc7c), S.speed, S.revs);
+        else dial(f);
+    }
     if (!h.finished && S.kind == RACE_FREE) {                   /* the free run: no lap block, no places; the lap's clock, the best lap and the list of the five markers */
         char t[24];
         const struct race_free *fr = race_free_state();
@@ -396,6 +415,12 @@ void s2hud_view(int view, int follow)
 {
     hud_view = view;
     hud_follow = follow;
+}
+
+void s2hud_scene(const uint8_t *mirror, int rows)
+{
+    hud_strip = mirror;
+    hud_rows = rows;
 }
 
 void s2hud_band_prepare(const uint32_t *pal)
