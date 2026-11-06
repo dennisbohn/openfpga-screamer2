@@ -270,3 +270,29 @@ static void check_league_flow(const char *prefix)
     s2save_reset();
     printf("ui: championship flow: the selection and the welcome page in order checked\n");
 }
+
+/* WELCOME's plates (s2plates.c): with no button the page ends by itself with ENTER's result once the flight is over, after the same fade as ENTER's (25 frames), and the number of
+   frames is the original's flight (tools/plates.sh found its end in frame 301 of 4 plates in the running original): tick 301 + 25 for league 1, 355 + 25 for league 2's five plates,
+   410 + 25 for the six of leagues 3 and 4; ENTER during the flight is the same result at once, ESC goes back */
+static void check_welcome_plates(const char *prefix)
+{
+    static const int want[4] = { 301 + 25, 355 + 25, 410 + 25, 410 + 25 };
+    for (int league = 0; league < 4; league++) {
+        begin_run("", prefix);
+        front = 0;
+        const int r = s2lp_welcome(league);
+        CHECK(r == S2LP_GO, "WELCOME of league %d with no button ended with %d", league + 1, r);
+        CHECK((int)calls == want[league], "WELCOME of league %d took %u frames, expected %d", league + 1, calls, want[league]);
+    }
+    char script[400];
+    put_keys(script, sizeof script, "100:B");
+    begin_run(script, prefix);
+    front = 0;
+    CHECK(s2lp_welcome(0) == S2LP_GO && (int)calls == 100 + 25, "ENTER during the flight: %u frames", calls);
+    put_keys(script, sizeof script, "100:A");
+    begin_run(script, prefix);
+    front = 0;
+    CHECK(s2lp_welcome(0) == S2LP_BACK && (int)calls == 101, "ESC during the flight: %u frames", calls);
+    printf("ui: WELCOME's plates: the page ends by itself after 326, 380, 435 and 435 frames (the original's flight and the fade), ENTER and ESC during it checked\n");
+}
+
