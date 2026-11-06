@@ -1,0 +1,25 @@
+# the set-ups the reference traces are made of (tools/s2/ref_trace/ref_run.sh setups): <scenario> <tag> <handling,pressure,tyres,front,rear,brakes or - for the standard set-up (2 2 -1 2 2 2)>
+# (the order of the original's record, 0x130c6c; Custom's own start is 2 2 0 2 2 2: tyres A, the track's own on track 1 are B)
+u_asphalt std -
+u_asphalt def 2,2,0,2,2,2
+u_asphalt h0 0,2,0,2,2,2
+u_asphalt h4 4,2,0,2,2,2
+u_asphalt p0 2,0,0,2,2,2
+u_asphalt p4 2,4,0,2,2,2
+u_asphalt t1 2,2,1,2,2,2
+u_asphalt t2 2,2,2,2,2,2
+u_asphalt b0 2,2,0,2,2,0
+u_asphalt b4 2,2,0,2,2,4
+u_asphalt min 0,0,0,0,0,0
+u_asphalt max 4,4,2,4,4,4
+u_asphalt mix 3,1,1,4,0,3
+u_rough std -
+u_rough def 2,2,0,2,2,2
+u_rough f0 2,2,0,0,2,2
+u_rough f4 2,2,0,4,2,2
+u_rough r0 2,2,0,2,0,2
+u_rough r4 2,2,0,2,4,2
+u_rough f4r0 2,2,0,4,0,2
+u_rough min 0,0,0,0,0,0
+u_rough max 4,4,2,4,4,4
+u_rough mix 3,1,1,4,0,3

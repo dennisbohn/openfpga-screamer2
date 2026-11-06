@@ -1,8 +1,8 @@
 diff --git a/port/src/main.c b/port/src/main.c
-index 811b1c0..acb0634 100644
+index 811b1c0..60aac76 100644
 --- a/port/src/main.c
 +++ b/port/src/main.c
-@@ -11825,7 +11825,8 @@ static int session(int argc, char **argv)
+@@ -11825,12 +11825,14 @@ static int session(int argc, char **argv)
      if (g_scene && os_game() == 2 && getenv("OS_S2PHYS")) {
          /* a test of the game's own car routines: a car on the grid, the accelerator down
             (OS_S2KEYS: letters A B L R), OS_S2PHYS frames of s2_step() (OS_S2STEP=<seconds> another); a line every 25 */
@@ -12,7 +12,13 @@ index 811b1c0..acb0634 100644
          int model[4] = { 1, 2, 3, 0 };
          if (getenv("OS_CAR")) { model[0] = (atoi(getenv("OS_CAR")) % 5 + 5) % 5; for (int t = 1; t < 4; t++) model[t] = (model[0] + t) % 4; }
          const char *keys = getenv("OS_S2KEYS") ? getenv("OS_S2KEYS") : "A";
-@@ -11874,6 +11875,12 @@ static int session(int argc, char **argv)
+         const int frames = atoi(getenv("OS_S2PHYS"));
+         const int ncars = getenv("OS_S2CARS") ? atoi(getenv("OS_S2CARS")) : 1;
++        if (getenv("OS_S2GAME")) s2_mode = atoi(getenv("OS_S2GAME"));     /* reference traces: the kind of game (2 championship: the computers' own set-ups, 4 time attack and 8 free run: OS_S2SETUP is the player's) */
+         if (getenv("OS_DIFF")) s2_level = atoi(getenv("OS_DIFF")) < 0 ? 0 : atoi(getenv("OS_DIFF")) > 2 ? 2 : atoi(getenv("OS_DIFF"));   /* 0 pro, 1 normal, 2 rookie (the port starts in rookie) */
+         if (!s2_race_start(track, g_s2_cond, ncars, team, model)) { fprintf(stderr, "screamer 2: the race did not start\n"); return 1; }
+         if (getenv("OS_S2AT")) { int x = 0, y = 0; float h = 0; sscanf(getenv("OS_S2AT"), "%d,%d,%f", &x, &y, &h); s2_put(0, x, y, h); }   /* a test: the car put somewhere, facing h */
+@@ -11874,6 +11876,12 @@ static int session(int argc, char **argv)
              return 0;
          }
          if (!getenv("OS_S2HOLD")) s2_go();

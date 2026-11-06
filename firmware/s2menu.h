@@ -34,6 +34,8 @@ struct s2_menu_cfg {
     int skill;                          /* 0 ROOKIE, 1 NORMAL, 2 PRO (race_level = 2 - skill) */
     int manual;                         /* 1: the manual gearbox */
     int free_run;                       /* time attack's choice on its CAR page: 0 3 LAPS, 1 FREE RUN (not kept: the original asks it every time) */
+    int setup;                          /* the CAR page of the championship and of time attack: 0 Standard, 1 .. 4 Custom n (a car of the first four: s2save_setup). Kept while the core runs, not in the
+                                           save, as the original's variable 0x13237c is while the program does: the page opens on it. The arcade has none. */
 };
 extern const uint8_t s2_menu_laps[S2M_LAPS];
 

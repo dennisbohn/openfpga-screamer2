@@ -31,6 +31,10 @@ int s2showroom_chosen(void);
 
 /* The cars into the back buffer: the picture is in the list l, which is handed to the blitter first; afterwards l is empty again for the page's sprites */
 void s2showroom_draw(struct blit_list *l);
+/* The same with a box of the picture and the cars darkened through the table (s2gfx_dark_table) before the page draws its text over it (the CAR page's list of set-ups) */
+void s2showroom_draw_dark(struct blit_list *l, const uint8_t table[256], int x, int y, int w, int h);
+/* Car k alone (0 .. n - 1 of s2showroom_load()) at (x, y, z) turned a1 (of 2048) as the page's camera sees it (the CAR CUSTOMIZATION page's), the picture before it as above */
+void s2showroom_draw_one(struct blit_list *l, int k, int32_t x, int32_t y, int32_t z, int a1);
 
 /* The cars at places of the page's own (the ARCADE title's cars drive along their paths, s2arcscene.h): car i (0 .. n - 1) to (x, y up, z) and the heading a1 (2048ths; the places are the engine's, as s2showroom_init
    keeps them), and the cars drawn as s2showroom_draw() does but from the camera cam */

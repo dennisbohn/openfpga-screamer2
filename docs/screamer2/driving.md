@@ -35,7 +35,7 @@ a spring and shows on the car (the marks of the four sides, "The cars' look" bel
   track's `MAPnDAT.DTR` (the best tyre pressure per tyre set, six `ROAD KINDS` rows: grip for slick, rain and snow tyres,
   roughness class): `firmware/s2params.c`, tested field by field against an independent reading in Python
   (`tools/s2/check_params.sh`: 20 cars, 42 road kind rows, equal).
-- The set-up is the game's arcade race: handling, pressure, springs and brakes 2 (the middle), the tyres "the track's
+- The set-up is, unless the player chose another (the next section), the game's arcade race: handling, pressure, springs and brakes 2 (the middle), the tyres "the track's
   own" (`-1`, `14e20` picks slick, rain or snow by the track: 1 1 2 0 2 0 0 for tracks 1 to 7). So on track 1 the
   player's car runs on rain tyres (grip 1.4 on asphalt against 1.1 for slicks): that is what the original does by
   default.
@@ -54,6 +54,52 @@ a spring and shows on the car (the marks of the four sides, "The cars' look" bel
   race's cars have their own; `check_car.sh` runs on images of team 1's five cars (`S2CARS=1:1,1:2,1:3,1:4,1:5`), as before.
 - The car starts on the first node of the track's `MAPnOPP.SPL` (the grid place of the only car: 1000 units to the side),
   heading along the nearest road point's heading.
+
+## The set-up (menus row 12)
+
+What the original's CAR page lets the player choose before a race of the championship or of time attack, and what it does to the car. Read from `STARTL.EXE` (`tools/dis.sh -f`: the car's
+make, 0x14e20; the race's set-up, 0x339e7; the CAR page, 0x3cc2c; CUSTOMIZE, 0x3e1d5) and OpenScreamer's `docs/NOTES2.md` S2-5zn; **measured** where it says so (the original's own routines,
+22 set-ups, `tools/s2/check_car.sh`, below).
+
+**What it is stored as.** Six whole numbers (words of the original's file and its race record), always in this order: HANDLING, TIRE PRESSURE, TIRE TYPE, FRONT SUSPENSIONS, REAR SUSPENSIONS, BRAKES
+(the page's rows are HANDLING, BRAKES, TIRE TYPE, TIRE PRESSURE, FRONT, REAR: numbers 0, 5, 2, 1, 3, 4). Each is **0 .. 4, the middle 2 the standard, but the tyres: 0 A - Dry, 1 B - Wet, 2 C - Snow**
+(`STRINGS.TXT`); the page shows the values 1 .. 5 and A .. C. The save holds four such sets, Custom 1 .. 4, for each of a team's first four cars (`CHOICE.DAT` +0xb0 + team x 0x188: the chosen
+car, the fifth car won, then 4 cars x 4 x 6 words) and starts each at **2 2 0 2 2 2**. Ours is `s2save_setup(team, car, slot)`, six bytes, in the layout that was already there (4 teams x 4 cars x 4 x 6, `-1 .. 4`
+each: nothing missing, no change); the page and `s2car.c` hold the numbers to the page's ranges (the tyres' -1 is "the track's own": the standard set-up's). There is **no set-up for the bonus
+(fifth) car** and none in the arcade: the arcade's race record is always the standard set-up (0x339e7, case 1: `2 2 -1 2 2 2` for all four cars) and its CAR page (0x40c31) has the TRANSMISSION
+state only. The CAR page of the championship and of time attack (0x3cc2c) has three steps: the cars; **Standard / Custom 1 .. 4** (a car of the first four only; ENTER on Standard in the
+championship starts the race at once); then the championship's **RACE / CUSTOMIZE** (for a Custom), time attack's **3 LAPS / FREE RUN** (and, for a Custom, **CUSTOMIZE**). The choice (Standard 0, Custom 1 .. 4)
+is a variable of the program that is not saved (0x13237c): it stays what it was while the program runs. At the start of the race the six of the chosen Custom go into the player's entry of the race record
+(0x339e7: championship, time attack, free run), the others' entries are left as the race before left them (the standard set-up, or what 0x14e20 made of it: the computers come out the same); with Standard every entry is `2 2 -1 2 2 2`. (One slip of the original, not copied: a bonus car in the
+championship takes the chosen number from the page's variable as it was left, which then reads the record next to its own: with Standard chosen last, nothing; ours: the standard set-up.)
+
+**What each number does** (0x14e20 makes the car's record of them; CARS.DTR's numbers are the car's own, TRACK_DATA the track's, `best[tyre]` the best pressure of the tyres on that track):
+
+| Number | Becomes | Measured on HORIZON (team 1, track 1) |
+|---|---|---|
+| HANDLING h | the car's most steering (+0x6c) x ((h - 2) x 0.15 + 0.7): 0.40, 0.55, 0.70, 0.85, 1.00 times the car's own | the front wheels' angle (+0xbc) at most 0.109, 0.190, 0.271 rad in the 10 s scenario for h 0, 2, 4 (h 4 spins the car at 100 km/h: the speed 131 -> 34) |
+| TIRE PRESSURE p | the grip (+0x74) x (1.1 - 0.05 x \|best[tyre] - p\|), and the most revs (+0x5c, the top speed) + (p - 2 - tyre's term) | grip 0.76 / 0.84 / 0.84 for p 0 / 2 / 4 on dry tyres (best 3), 0.88 on the wet ones at p 2 (best 2); the top speed 159.8, 161.8, 163.8 |
+| TIRE TYPE t | the column of the road kinds' grip (slick / rain / snow; +0x50) and best[t]; the most revs + 0, -3, -6 | 161.8, 158.8, 155.8 for A, B, C; on track 1 the wet tyres are the standard's own (`-1`: `1 1 2 0 2 0 0` by track) |
+| FRONT f, REAR r | the springs' stiffness (+0x78 / +0x80 front, +0x7c / +0x84 rear) + (2 - f) x 0.01 (0.005 where the car's drive and its level differ by over 0.4 from the player's: the computers'), the wheels' spring: its rest length and travel (30 at the middle) and its easing row (+0x28, 40) + (2 - f) x 5 units, and the body's softness (+0x2c) = (f + r) / 2, which eases the steering (21 - 5 x that, in 1/50 s), takes a share (1 - that / 10) off the road's bumps and a term (4 - that) off its roughness | stiffness 1.02 / 1.00 / 0.98 front for f 0 / 2 / 4, rear 0.98 / 0.96 / 0.94; the body's pitch and roll (+0xc18, +0xc20) and the springs' length on rough ground (road kind 27: the spring 28.5 .. 8.3 at f 4, 28.5 .. 18.1 at 2) |
+| BRAKES b | the brake pedal's front share (+0x9c) = b x 0.25: the pedal is split into a front (+0x1e4) and a rear share (+0x1e8 = the rest) and the two act differently in the tyres (0x19cac: the front share adds to the front tyres' drag and takes it off the rear's, the rear share holds a tyre's speed back and raises its slip limit) | 0.00, 0.25, 0.50, 0.75, 1.00 the front share; from 127 km/h after 2 s of brake the speed is 84, 111, 124 km/h for b 0, 2, 4: **the more of the pedal goes to the rear the harder the car brakes** (and the rear locks, read from the routine, not measured) |
+
+(The numbers are the car's: the other cars' CARS.DTR numbers scale them; `u_asphalt_*` and `u_rough_*` of `tools/s2/car_scenarios/` are the traces.)
+
+**The computers' cars** (0x14e20, `ctrl == 0`, i.e. a car with no controls): in the arcade (the mode word's bit 0, 0x130d10) they have the standard set-up (and a car whose rear drive is over 0.8 of the traction
+gets handling 1); **where bit 0 is not set (the championship, the attract race) every computer's car is made as `tuned`**: pressure = the best of its tyres, front springs 4, rear springs 4 (3 for a
+car whose drive is not four-wheel), both less 1 on tracks 2 and 3 and less 2 on track 5, handling 4, tyres the track's own, brakes 2. Time attack has no computers; its ghost is made of the set-up of the run it
+replays (the original keeps the record's entry in the ghost's file, 0x327ed). `s2car_state.tuned` is that (`race_tuned`: the viewer sets it for the championship, the attract race will for all four cars).
+
+**In the firmware.** `s2car_state.custom` / `.setup` (before `s2car_init_*()` and kept by it: a car put back on the line is the same car) and `.tuned`; `race_custom`, `race_setup`, `race_tuned` (race.h) set the
+race's cars; the ghost's block holds the set-up of its run (version 2, s2ghost.h; a block of the first version is made over where it is found, the owner's records stay); a replay takes the one of the
+race it runs again, as it does the gearbox. The standard set-up (`custom` 0, `tuned` 0) is the car as it was: `check_car.sh` gives the same 173 cases to the digit.
+
+**Checks.** `tools/s2/check_car.sh`: 22 traces of set-ups from the original's own routines (`tools/s2/ref_trace/ref_run.sh setups`: level asphalt and the roughest road kind of track 1; each number at the ends of its range, all
+least, all most, a mix; the standard set-up too) run through the firmware's float32 car with the place cut as the game does: 10 follow the reference to 1e-5 km/h for all 500 steps, the others to its one-unit
+cuts of a place (the speed off by 0.3 from some step on, the same as `a_flat`, `b_origin`, `g_manual` show), and each case also with the set-up left out (the negative control): the standard car leaves the
+reference by 15 to 106 km/h (`tools/s2/check_setup_s2.py` is the verdict: 23 cases, 0 failures). `tools/s2/check_setup_ai_s2.sh`: all 22 fields of a car's record that the set-up makes, for all four cars of a race,
+equal the original's on all seven tracks in the arcade and in the championship, and the two modes differ in 21 to 60 places (the control). `tools/s2/check_ghost_s2.sh` and `check_replay_s2.sh`: a run with a set-up
+raced again as the ghost, or as the replay, equals the recorded race in every step; a ghost made with the wrong set-up, or the same controls with the standard set-up and computers, is another race.
 
 ## Precision
 

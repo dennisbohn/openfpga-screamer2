@@ -968,6 +968,22 @@ static void apply_cfg(void)
     manual = cfg.manual;
     s2car_damages = s2save_get(S2S_DAMAGE);             /* the other GAME SETTINGS that act in the race (s2pages.h) */
     music_on = s2save_get(S2S_MUSIC) == 0;
+    race_custom = 0;                                    /* the arcade: the standard set-up, the computers' too (race.h); the championship and time attack set theirs after this */
+    race_tuned = 0;
+}
+
+/* The player's set-up of a race of the championship or of time attack: the Custom the CAR page chose (cfg.setup, 1 .. 4) of a car of the first four, from the save; the bonus
+   car's, Standard's and the arcade's is the standard one (docs/screamer2/driving.md "The set-up"). */
+static void apply_setup(void)
+{
+    race_custom = 0;
+    if (cfg.setup >= 1 && cfg.setup <= 4 && cfg.car >= 1 && cfg.car <= 4) {
+        const int8_t *s = s2save_setup(cfg.team, cfg.car, cfg.setup - 1);
+        if (s) {
+            race_custom = 1;
+            race_setup = (struct s2car_setup){ s[0], s[1], s[2], s[3], s[4], s[5] };
+        }
+    }
 }
 
 /* One race of the championship (s2league.h): the original's loading screen with the championship's records, the track, the race (visit in league mode) until the
@@ -1019,7 +1035,14 @@ static void league_run(struct zip *z, int *cars, int *overlay)
             const int n = s2l_track(L.races_done);
             const int tp = s2tp_league(league_at, L.races_done, n);         /* the original's TRACK page: the track's map, TERRAIN, DIFFICULTY (a missing picture leaves it out) */
             if (tp == S2TP_BACK || tp == S2TP_LEAVE) break;                 /* ESC before the first race, or YES to LEAVING LEAGUE?: back to LEAGUE SELECTION */
+            const int cr = s2arcade_page(S2ARC_LEAGUE, &cfg);                /* the CAR page and its set-up: ESC is back to the TRACK page, a page that could not be shown is left out */
+            if (cr != S2ARC_NEXT && cr != S2ARC_FAIL) continue;
+            s2menu_store(&cfg);
+            L.car = cfg.car > 4 && !s2save_car5_open(cfg.team) ? 1 : cfg.car;      /* (the grid is made of the car chosen for each race) */
+            s2l_grid(&L, L.pick);
             apply_cfg();
+            apply_setup();
+            race_tuned = 1;                                                 /* the computers of the championship are tuned (0x14e20: the mode word without bit 1) */
             memcpy(race_grid, L.pick, sizeof race_grid);
             race_level = s2l_def[L.league].level;
             if (!league_race(z, n, cars, overlay)) return;
@@ -1053,6 +1076,7 @@ static void attack_race(struct zip *z, int *cars, int *overlay)
 {
     const int free_run = cfg.free_run != 0, n = cfg.track;
     apply_cfg();
+    apply_setup();
     race_kind = free_run ? RACE_FREE : RACE_ATTACK;
     race_laps = free_run ? 1 : 3;                                           /* (0x339e7: time attack three laps, the free run one that does not end) */
     attack_mode = free_run ? 2 : 1;
@@ -1130,6 +1154,7 @@ static void attract_run(struct zip *z, int *cars)
         s2gfx_end(black, 0x8000);
     }
     apply_cfg();                                        /* (the settings that act in a race: DAMAGES, MUSIC) */
+    race_tuned = 1;                                     /* the attract race's mode word (0x80) has no bit 1 either: the computers are tuned (0x14e20), car 0 too */
     for (int i = 0; i < RACE_CARS; i++) race_grid[i] = (struct s2_pick){ (uint8_t)(i + 1), (uint8_t)(i + 1) };    /* 0x3ca69: car i is team i, model i */
     race_level = 0;                                     /* 0x130d4c = 0 */
     race_laps = 99;                                     /* (no laps given: the original's record had 0 and no car ever finished; a car that does 99 laps is not a thing of 90 s) */

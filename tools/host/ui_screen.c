@@ -52,13 +52,14 @@ static uint32_t pal_trace[128][2];       /* for the fade tests: palette entries 
 static uint32_t swaps;
 static void (*frame_probe)(void);       /* called at the start of every swap's stand-in: what the test looks at in the frame before (the options room's camera) */
 /* frames to compare with a reference when they are on show: the page's frame of tick t is on show in call t + 1 */
-struct expect { uint32_t at; char name[96]; int shot; int kind, league; };     /* kind 1: a frame of the championship's pages (league_screen.c; league: which picture, -1 the selection's) */
+struct expect { uint32_t at; char name[96]; int shot; int kind, league; };     /* kind 1: a frame of the championship's pages (league_screen.c; league: which picture, -1 the selection's); kind 2: of the set-up pages (custom_screen.c) */
 static struct expect expects[40];
 static int nexpects, expect_hits;
 static const char *expect_ref;
 static uint8_t *slurp(const char *path, uint32_t *n);
 static void check_frame(const struct expect *e);
 static void check_league_frame(const struct expect *e);
+static void check_custom_frame(const struct expect *e);
 static void save(const char *name);
 static struct { uint32_t at; int slot; } caps[12];      /* frames kept in memory: the picture on show in a call, for the comparisons */
 static int ncaps;
@@ -469,7 +470,8 @@ static void check_runner(void)
 static void check_frame(const struct expect *e)
 {
     if (e->kind) {
-        check_league_frame(e);
+        if (e->kind == 2) check_custom_frame(e);
+        else check_league_frame(e);
         return;
     }
     char path[512];
@@ -1036,6 +1038,9 @@ static void draw_banner(int track, uint8_t *out)
 /* time attack's pages: trackpage_screen.c */
 #include "trackpage_screen.c"
 
+/* the CAR pages' set-up list and choices and the CAR CUSTOMIZATION page: custom_screen.c */
+#include "custom_screen.c"
+
 /* the options room: room_screen.c */
 #include "room_screen.c"
 
@@ -1072,6 +1077,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_league_flow(prefix);
     check_pages3d(prefix);
     check_trackpages(prefix);
+    check_custom(ref, prefix);
     check_room(ref, prefix);
     check_scene(ref, prefix);
     check_attract(ref, prefix);

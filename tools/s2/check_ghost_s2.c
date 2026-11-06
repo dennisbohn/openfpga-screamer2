@@ -4,10 +4,13 @@
  *
  *   unit        the controls as a byte for every possible byte, the head of a block, the CRC (every byte of a short block damaged in turn), another physics or
  *               setting, the rule of keeping (none kept, slower, equal, quicker), the seven blocks apart, a recording that is too long, a track that is not one
+ *   set-up      the car's set-up (CUSTOMIZE, docs/screamer2/driving.md "The set-up") in the head: kept with the run, in range or the block is no run; a block of the first version
+ *               (32 bytes of head, no set-up) is made over into the second where it is looked at (the controls, time, CRC kept; one too long to move or damaged is erased)
  *   record      a pilot (steering to a point of the road ahead, the gas by a speed it keeps) drives each track's first lap in a race of RACE_ATTACK (one lap, the
  *               kinds of race are the same code at three): the controls are recorded, the run is kept, then it is raced as the ghost beside a player who stands
  *               still: for every step the ghost's car equals the recorded car bit for bit (place, heading, speed, the car's whole record), and its lap time,
- *               best lap and the step in which it has done its laps are the recorded ones
+ *               best lap and the step in which it has done its laps are the recorded ones; the runs are made with the standard set-up and with set-ups of CUSTOMIZE
+ *               (the ghost takes the run's, not the player's; a negative control: a ghost made with the wrong set-up is another car)
  *   batching    the same run with the steps of a frame taken two or three at a time (as the viewer does when a frame is late) is the same run
  *   random      random controls for 6,000 steps, also the gearbox switched and the car off the road for long enough to be put back on the line: the same
  *   sides       the player takes the side the kept run did not start on, and the next run kept (quicker) starts on the one the player had
@@ -77,7 +80,7 @@ static void unit(void)
     CHECK(s2gh_stored(0) == 0 && s2gh_stored(8) == 0 && s2gh_ghost(-1, 0) == 0, "tracks out of range");
 
     /* nothing recorded: nothing kept */
-    s2gh_rec_begin(2, 3, 4, 1, 0);
+    s2gh_rec_begin(2, 3, 4, 1, 0, 0, 0);
     CHECK(s2gh_keep(80.0f, 26.0f, 3) == 0, "an empty recording is not kept");
     struct s2car_input in = { .throttle = 1.0f };
     for (int i = 0; i < 1000; i++) {
@@ -97,7 +100,7 @@ static void unit(void)
     /* the controls come back */
     static uint8_t copy[S2GH_MAX];
     memcpy(copy, s2gh_data(h), 1000);
-    s2gh_rec_begin(2, 3, 4, 0, 0);
+    s2gh_rec_begin(2, 3, 4, 0, 0, 0, 0);
     for (int i = 0; i < 1000; i++) {
         int manual;
         struct s2car_input u = s2gh_unpack(copy[i], &manual);
@@ -145,20 +148,20 @@ static void unit(void)
     memcpy(blk, saved, sizeof saved);
 
     /* a recording too long is not kept, one of the longest length is */
-    s2gh_rec_begin(5, 1, 1, 0, 1);
+    s2gh_rec_begin(5, 1, 1, 0, 1, 0, 0);
     for (uint32_t i = 0; i < S2GH_MAX; i++) s2gh_rec_step(&in, 0);
     CHECK(s2gh_rec_steps() == S2GH_MAX, "the longest run");
     CHECK(s2gh_keep(900.0f, 300.0f, 3) == 1, "the longest run is kept");
     h = s2gh_stored(5);
     CHECK(h && h->steps == S2GH_MAX && h->damages == 1 && s2gh_ghost(5, 1) == h && s2gh_ghost(5, 0) == 0, "its head");
-    s2gh_rec_begin(5, 1, 1, 0, 1);
+    s2gh_rec_begin(5, 1, 1, 0, 1, 0, 0);
     for (uint32_t i = 0; i < S2GH_MAX + 5; i++) s2gh_rec_step(&in, 0);
     CHECK(s2gh_rec_steps() == S2GH_MAX && s2gh_keep(100.0f, 30.0f, 3) == 0, "one step too many: not kept (the quicker time does not matter)");
     CHECK(s2gh_stored(5) == h && h->time == 900.0f, "the kept run is untouched");
 
     /* seven blocks fit and do not touch */
     for (int t = 1; t <= 7; t++) {
-        s2gh_rec_begin(t, 1 + t % 4, 1 + t % 5, t & 1, 0);
+        s2gh_rec_begin(t, 1 + t % 4, 1 + t % 5, t & 1, 0, 0, 0);
         for (int i = 0; i < 300 + t; i++) {
             struct s2car_input u = { .throttle = (float)(t & 1), .steer = (float)(i % 3) - 1.0f };
             s2gh_rec_step(&u, t & 1);
@@ -173,6 +176,90 @@ static void unit(void)
     s2gh_erase(4);
     CHECK(s2gh_stored(4) == 0 && s2gh_stored(3) && s2gh_stored(5), "one erased, the others stay");
     CHECK((uint32_t)S2GH_TRACKS * S2GH_BLOCK <= SAVE_ATTACK_SIZE, "the blocks are inside ATTACK.DAT's slot");
+    memset((void *)(uintptr_t)SAVE_ATTACK_ADDR, 0, SAVE_ATTACK_SIZE);
+}
+
+/* ------------------------------------------------------------------------------------------------ the set-up in the head */
+
+static void unit_setup(void)
+{
+    memset((void *)(uintptr_t)SAVE_ATTACK_ADDR, 0, SAVE_ATTACK_SIZE);
+    struct s2car_input in = { .throttle = 1.0f };
+    /* kept with the run */
+    const struct s2car_setup su = { 3, 1, 2, 4, 0, 3 };
+    s2gh_rec_begin(6, 2, 3, 1, 0, 1, &su);
+    for (int i = 0; i < 500; i++) {
+        in.steer = (float)(int)(rnd() % 3) - 1.0f;
+        s2gh_rec_step(&in, 0);
+    }
+    CHECK(s2gh_keep(70.0f, 24.0f, 3) == 1, "a run with a set-up is kept");
+    const struct s2gh_head *h = s2gh_stored(6);
+    CHECK(h && h->version == 2 && h->custom == 1 && !memcmp(&h->setup, &su, sizeof su) && h->reserved == 0 && h->steps == 500 && s2gh_ghost(6, 0) == h, "the head has the set-up");
+    s2gh_rec_begin(7, 1, 1, 0, 0, 0, &su);                  /* (a standard set-up has no numbers: those handed over are not kept) */
+    for (int i = 0; i < 100; i++) s2gh_rec_step(&in, 0);
+    CHECK(s2gh_keep(60.0f, 20.0f, 3) == 1, "a run with the standard set-up is kept");
+    h = s2gh_stored(7);
+    CHECK(h && h->custom == 0 && !h->setup.handling && !h->setup.pressure && !h->setup.tyres && !h->setup.front && !h->setup.rear && !h->setup.brakes, "its head has none");
+    /* the numbers out of range, with a matching CRC, are no run */
+    uint8_t *blk = (uint8_t *)(uintptr_t)(SAVE_ATTACK_ADDR + 5 * S2GH_BLOCK);       /* track 6's block */
+    static uint8_t saved[S2GH_HEAD + 500];
+    memcpy(saved, blk, sizeof saved);
+    struct s2gh_head *w = (struct s2gh_head *)blk;
+    static const struct { int field; int value; const char *what; } bad[] = {
+        { 0, 5, "handling 5" }, { 0, -1, "handling -1" }, { 1, 5, "pressure 5" }, { 2, 3, "tyres 3" }, { 2, -2, "tyres -2" }, { 3, 5, "front 5" }, { 4, -1, "rear -1" }, { 5, 9, "brakes 9" },
+    };
+    for (unsigned k = 0; k < sizeof bad / sizeof bad[0]; k++) {
+        int8_t *f = &((int8_t *)&w->setup)[bad[k].field];
+        *f = (int8_t)bad[k].value;
+        w->crc = crc32(blk + 8, blk + S2GH_HEAD + w->steps);
+        CHECK(s2gh_stored(6) == 0, "a set-up with %s is no run", bad[k].what);
+        memcpy(blk, saved, sizeof saved);
+    }
+    w->custom = 2;
+    w->crc = crc32(blk + 8, blk + S2GH_HEAD + w->steps);
+    CHECK(s2gh_stored(6) == 0, "custom 2 is no run");
+    memcpy(blk, saved, sizeof saved);
+    w->custom = 0;
+    w->crc = crc32(blk + 8, blk + S2GH_HEAD + w->steps);
+    CHECK(s2gh_stored(6) == 0, "a standard set-up with numbers is no run");
+    memcpy(blk, saved, sizeof saved);
+    w->setup.tyres = -1;                                    /* (the track's own tyres is a number the head may hold) */
+    w->crc = crc32(blk + 8, blk + S2GH_HEAD + w->steps);
+    CHECK(s2gh_stored(6) != 0, "tyres -1 is a set-up");
+    memcpy(blk, saved, sizeof saved);
+    w->reserved = 1;
+    w->crc = crc32(blk + 8, blk + S2GH_HEAD + w->steps);
+    CHECK(s2gh_stored(6) != 0, "the reserved byte is not looked at");
+    memcpy(blk, saved, sizeof saved);
+
+    /* a block of the first version: the same head up to `laps` in 32 bytes, the controls from byte 32 */
+    struct v1 { char magic[4]; uint32_t crc; uint8_t version, track, team, car, slot, damages; uint16_t sim; uint32_t steps; float time, best_lap; uint32_t laps; };
+    _Static_assert(sizeof(struct v1) == S2GH_HEAD_V1, "the first version's head");
+    for (int variant = 0; variant < 5; variant++) {
+        const int track = 1 + variant;
+        uint8_t *b = (uint8_t *)(uintptr_t)(SAVE_ATTACK_ADDR + (uint32_t)(track - 1) * S2GH_BLOCK);
+        const uint32_t steps = variant == 3 ? S2GH_MAX + 1 : variant == 4 ? S2GH_MAX : 777;     /* 51,401 does not fit once the head is 8 bytes longer; 51,400 does */
+        memset(b, 0, S2GH_BLOCK);
+        struct v1 *o = (struct v1 *)b;
+        memcpy(o->magic, "S2AT", 4);
+        o->version = 1; o->track = (uint8_t)track; o->team = 2; o->car = 3; o->slot = 1; o->damages = 0; o->sim = S2GH_SIM; o->steps = steps;
+        o->time = 91.25f; o->best_lap = 30.5f; o->laps = 3;
+        for (uint32_t i = 0; i < steps; i++) b[S2GH_HEAD_V1 + i] = (uint8_t)(i * 7 + 3);
+        o->crc = crc32(b + 8, b + S2GH_HEAD_V1 + steps);
+        if (variant == 2) b[S2GH_HEAD_V1 + 100] ^= 1;                                          /* damaged */
+        const struct s2gh_head *g = s2gh_stored(track);
+        if (variant == 2 || variant == 3) {
+            CHECK(g == 0, "a first-version block that is %s is no run", variant == 2 ? "damaged" : "too long to move");
+            CHECK(s2gh_stored(track) == 0 && b[0] == 0, "... and it is erased");
+            continue;
+        }
+        CHECK(g && g->version == 2 && g->track == (uint8_t)track && g->team == 2 && g->car == 3 && g->slot == 1 && g->damages == 0 && g->sim == S2GH_SIM && g->steps == steps &&
+              g->time == 91.25f && g->best_lap == 30.5f && g->laps == 3 && g->custom == 0 && !g->setup.handling && !g->setup.brakes, "a first-version block is made over: head (variant %d)", variant);
+        int same = g != 0;
+        for (uint32_t i = 0; same && i < steps; i++) same = s2gh_data(g)[i] == (uint8_t)(i * 7 + 3);
+        CHECK(same, "... the controls moved with it (%u steps)", steps);
+        CHECK(g && s2gh_ghost(track, 0) == g && s2gh_stored(track) == g && g->crc == crc32((const uint8_t *)g + 8, (const uint8_t *)g + S2GH_HEAD + steps), "... it is a ghost to race, whole in its new version, and stays so");
+    }
     memset((void *)(uintptr_t)SAVE_ATTACK_ADDR, 0, SAVE_ATTACK_SIZE);
 }
 
@@ -303,19 +390,21 @@ static void run(int track, int how, int batch, int after, int max, int manual, f
 
 /* the batches make the snapshots of the ghost per step impossible (its steps happen after the player's of the batch): the comparison uses batch 1 */
 
-static void record_and_replay(int track, int how, int manual, float speed, int max, int after)
+static void record_and_replay(int track, int how, int manual, float speed, int max, int after, const struct s2car_setup *su)
 {
     static struct snap a[MAX_STEPS], g[MAX_STEPS];
     memset((void *)(uintptr_t)SAVE_ATTACK_ADDR, 0, SAVE_ATTACK_SIZE);
     race_ghost = 0;
     race_grid[0] = (struct s2_pick){ 1, 1 };
+    race_custom = su != 0;                                  /* the player's set-up: CUSTOMIZE's `su`, or the standard one */
+    race_setup = su ? *su : (struct s2car_setup){ 0 };
     rng_state = 777 + (uint32_t)track;
     run(track, how, 1, after, max, manual, speed, a, 0);
     const uint32_t steps = run_info.steps, finish = run_info.finish_step;
     const float time = run_info.time, best_lap = run_info.best_lap;
     const int side = race_slot();
     CHECK(side == 1 && race_cars() == 1, "track %d: no ghost: the player alone, on side 1 (%d)", track, side);
-    printf("  track %d (%s): %u steps, finished at step %u, total %.2f s, best lap %.2f s, %d respawns\n", track, how == PILOT ? "pilot" : "random", steps,
+    printf("  track %d (%s%s): %u steps, finished at step %u, total %.2f s, best lap %.2f s, %d respawns\n", track, how == PILOT ? "pilot" : "random", su ? ", set-up" : "", steps,
            finish, time, best_lap, run_info.respawns);
     if (how == PILOT && g_floor_add < 0.0f) CHECK(finish > 0, "track %d: the pilot did not finish the lap in %d steps", track, max);
     total_respawns += run_info.respawns;
@@ -324,6 +413,8 @@ static void record_and_replay(int track, int how, int manual, float speed, int m
     const struct s2gh_head *gh = s2gh_ghost(track, 0);
     CHECK(gh && gh->steps == s2gh_rec_steps() && gh->time == (finish ? time : 100.0f), "track %d: a ghost to race", track);
     if (!gh) return;
+    CHECK(gh->custom == (su != 0) && (!su || !memcmp(&gh->setup, su, sizeof *su)), "track %d: the run's set-up is in its head", track);
+    race_custom = 0;                                        /* the player who stands still has the standard set-up: the ghost's is the head's */
 
     /* raced again: the player stands still on the other side, the ghost is the recorded car */
     race_ghost = gh;
@@ -348,6 +439,20 @@ static void record_and_replay(int track, int how, int manual, float speed, int m
         CHECK((gc->rec[0x4c / 4] & 3) == 3, "track %d: the ghost has finished", track);
     }
     printf("    the ghost equals the recorded car in all %u steps%s\n", upto, finish ? ", its total and best lap are the recorded ones" : "");
+    if (su) {                                               /* a negative control: the same run raced as a ghost made with the standard set-up is another car */
+        static uint8_t wrong[S2GH_BLOCK];
+        memcpy(wrong, gh, S2GH_BLOCK);
+        struct s2gh_head *wh = (struct s2gh_head *)wrong;
+        wh->custom = 0;
+        memset(&wh->setup, 0, sizeof wh->setup);
+        race_ghost = wh;
+        run(track, STILL, 1, 0, (int)steps, 0, 0.0f, 0, g);
+        uint32_t differ = 0;
+        for (uint32_t k = 0; k < upto; k++) differ += memcmp(&a[k], &g[k], sizeof a[k]) != 0;
+        CHECK(differ > upto / 2, "track %d: a ghost made with the wrong set-up is another car (%u of %u steps differ)", track, differ, upto);
+        printf("    negative control: a ghost made with the standard set-up differs from the recorded car in %u of %u steps\n", differ, upto);
+    }
+    race_custom = 0;
     race_ghost = 0;
     race_grid[1] = (struct s2_pick){ 2, 2 };
 }
@@ -410,6 +515,7 @@ int main(int argc, char **argv)
     s2car_damages = 0;
     printf("unit tests\n");
     unit();
+    unit_setup();
     printf("  %d checks, %d failures\n", checks, failures);
     if (argc < 2) return failures != 0;
 
@@ -425,10 +531,11 @@ int main(int argc, char **argv)
         CHECK(n > 1000 && track_open(TEX_FILE) && track_init(), "track %d: the image", track);
         CHECK(road_build() > 0, "track %d: the road", track);
         printf("track %d\n", track);
-        record_and_replay(track, PILOT, 0, track == 7 || track == 5 ? 70.0f : 95.0f, 14000, 200);
-        record_and_replay(track, RANDOM, 1, 0.0f, 6000, 0);
+        static const struct s2car_setup su_random = { 4, 0, 1, 1, 4, 0 }, su_pilot = { 0, 4, 2, 4, 0, 4 }, su_lap = { 3, 1, 0, 3, 1, 3 };
+        record_and_replay(track, PILOT, 0, track == 7 || track == 5 ? 70.0f : 95.0f, 14000, 200, track % 2 ? 0 : &su_lap);        /* (the standard set-up on the odd tracks, a CUSTOMIZE one on the even) */
+        record_and_replay(track, RANDOM, 1, 0.0f, 6000, 0, track % 2 ? &su_random : 0);
         g_floor_add = 120.0f;                               /* a high floor: the car is put back on the line each time it is lower than 120 above the road's lowest point */
-        record_and_replay(track, PILOT, 1, 80.0f, 6000, 0);
+        record_and_replay(track, PILOT, 1, 80.0f, 6000, 0, track % 2 ? 0 : &su_pilot);
         g_floor_add = -3000.0f;
         if (track == 1) {
             /* batching: the same run with frames of 2 and 3 steps (late frames) is the same run: only the player's snapshots can be compared */

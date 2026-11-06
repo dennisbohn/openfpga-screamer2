@@ -1,5 +1,5 @@
 /*
- * Time attack's pages on the PC (firmware/s2trackmap.c, s2trackpage.c, the TIME ATTACK row's CAR page of s2arcade.c, the free run's loading screen): included by ui_screen.c, which
+ * Time attack's pages on the PC (firmware/s2trackmap.c, s2trackpage.c, the free run's loading screen): included by ui_screen.c, which
  * has the stand-ins of the hardware (the swap, the scripted buttons, the sounds) and the geometry unit's C model of pages3d_screen.c. What is tested here is what scripted buttons
  * make of the pages: the maps read from the ZIP and how many pieces each is (the six blocks over 512 vertices cut in two), the keys, the sounds, the frames a page takes (the fade
  * out is 13 frames, a move 13 frames before the next is taken), the results and the choices. The pages' pictures were compared with the running original's screenshots
@@ -89,23 +89,7 @@ static void check_trackpages(const char *prefix)
     front = 0;
     CHECK(s2tp_league(3, 0, 6) == S2TP_GO && s2tp_league(0, 0, 7) == S2TP_FAIL && s2tp_league(0, 0, 0) == S2TP_FAIL, "the league never races on the Tunnel (no TKG_7L)");
 
-    /* the CAR page of time attack: ENTER to the choice, ENTER takes 3 LAPS (sounds 6, 6); RIGHT chooses FREE RUN (8) ... ; ESC goes back to the cars, ESC again out */
-    c = (struct s2_menu_cfg){ .track = 1, .team = 1, .car = 1, .laps = 1, .skill = 1 };
-    put_keys(script, sizeof script, "100:B 120:B");
-    begin_run(script, prefix);
-    front = 0;
-    r = s2arcade_page(S2ARC_ATTACK, &c);
-    CHECK(r == S2ARC_NEXT && c.free_run == 0 && nclicks == 2 && clicks[0] == 6 && clicks[1] == 6, "CAR page of time attack: 3 LAPS (result %d, free_run %d, %d sounds)", r, c.free_run, nclicks);
-    put_keys(script, sizeof script, "100:B 120:R 130:R 140:B");
-    begin_run(script, prefix);
-    front = 0;
-    r = s2arcade_page(S2ARC_ATTACK, &c);
-    CHECK(r == S2ARC_NEXT && c.free_run == 1 && nclicks == 3 && clicks[1] == 8 && clicks[2] == 6, "CAR page of time attack: FREE RUN (result %d, free_run %d, %d sounds)", r, c.free_run, nclicks);
-    put_keys(script, sizeof script, "100:B 120:R 130:L 140:A 160:A");
-    begin_run(script, prefix);
-    front = 0;
-    r = s2arcade_page(S2ARC_ATTACK, &c);
-    CHECK(r == S2ARC_BACK && c.free_run == 0 && calls == 161, "CAR page of time attack: ESC goes back to the cars, ESC again out (result %d, %u frames)", r, calls);
+    /* the CAR page of time attack and the championship (the list of set-ups, the choice, CUSTOMIZE): custom_screen.c */
 
     /* the free run's LOADING screen shows no records: the rows under the banner are the picture's */
     s2save_reset();

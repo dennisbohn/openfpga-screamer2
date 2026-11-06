@@ -31,18 +31,43 @@ const uint8_t *s2gh_data(const struct s2gh_head *h)
     return (const uint8_t *)h + S2GH_HEAD;
 }
 
-/* the CRC-32 over bytes 8 .. 32 + steps */
+/* the CRC-32 over bytes 8 .. 40 + steps */
 static uint32_t crc_of(const struct s2gh_head *h)
 {
     return crc32((const uint8_t *)h + 8, (const uint8_t *)h + S2GH_HEAD + h->steps);
 }
 
+static int setup_ok(const struct s2car_setup *s)
+{
+    return s->handling >= 0 && s->handling <= 4 && s->pressure >= 0 && s->pressure <= 4 && s->tyres >= -1 && s->tyres <= 2 &&
+           s->front >= 0 && s->front <= 4 && s->rear >= 0 && s->rear <= 4 && s->brakes >= 0 && s->brakes <= 4;
+}
+
+/* a block of version 1 (32 bytes of head: the same fields up to `laps`, no set-up) made over into version 2 if it is whole; one that is not, or too long, is erased */
+static void migrate(int track)
+{
+    struct s2gh_head *h = BLOCK(track);
+    uint8_t *b = (uint8_t *)h;
+    if (memcmp(h->magic, "S2AT", 4) || h->version != 1) return;
+    const uint32_t steps = h->steps;
+    if (steps == 0 || steps > S2GH_BLOCK - S2GH_HEAD_V1 || h->track != track || crc32(b + 8, b + S2GH_HEAD_V1 + steps) != h->crc || steps > S2GH_MAX) {
+        memset(b, 0, S2GH_HEAD);                            /* (not whole, or too long to move: no run) */
+        return;
+    }
+    memmove(b + S2GH_HEAD, b + S2GH_HEAD_V1, steps);
+    memset(b + S2GH_HEAD_V1, 0, S2GH_HEAD - S2GH_HEAD_V1);   /* the standard set-up */
+    h->version = 2;
+    h->crc = crc_of(h);
+}
+
 const struct s2gh_head *s2gh_stored(int track)
 {
     if (track < 1 || track > S2GH_TRACKS) return 0;
+    migrate(track);
     const struct s2gh_head *h = BLOCK(track);
-    if (memcmp(h->magic, "S2AT", 4) || h->version != 1 || h->track != track || h->steps == 0 || h->steps > S2GH_MAX) return 0;
+    if (memcmp(h->magic, "S2AT", 4) || h->version != 2 || h->track != track || h->steps == 0 || h->steps > S2GH_MAX) return 0;
     if (h->team < 1 || h->team > 4 || h->car < 1 || h->car > 5 || h->slot > 1 || h->damages > 1) return 0;
+    if (h->custom > 1 || !setup_ok(&h->setup) || (!h->custom && (h->setup.handling | h->setup.pressure | h->setup.tyres | h->setup.front | h->setup.rear | h->setup.brakes))) return 0;
     if (!(h->time > 0.0f && h->time < 3600.0f)) return 0;
     return h->crc == crc_of(h) ? h : 0;
 }
@@ -56,14 +81,17 @@ const struct s2gh_head *s2gh_ghost(int track, int damages)
 /* ------------------------------------------------------------------------------------------------ the recording */
 
 static struct {
-    int track, team, car, slot, damages;
+    int track, team, car, slot, damages, custom;
+    struct s2car_setup setup;
     uint32_t steps;
     int full;
     uint8_t data[S2GH_MAX];
 } rec;
 
-void s2gh_rec_begin(int track, int team, int car, int slot, int damages)
+void s2gh_rec_begin(int track, int team, int car, int slot, int damages, int custom, const struct s2car_setup *setup)
 {
+    rec.custom = custom != 0;
+    rec.setup = rec.custom && setup ? *setup : (struct s2car_setup){ 0 };
     rec.track = track;
     rec.team = team;
     rec.car = car;
@@ -107,7 +135,7 @@ int s2gh_keep(float time, float best_lap, int laps)
     memset(dst, 0, S2GH_HEAD);                              /* (a block half written is not whole: the head last) */
     memcpy(dst + S2GH_HEAD, rec.data, rec.steps);
     memcpy(h->magic, "S2AT", 4);
-    h->version = 1;
+    h->version = 2;
     h->track = (uint8_t)rec.track;
     h->team = (uint8_t)rec.team;
     h->car = (uint8_t)rec.car;
@@ -118,6 +146,8 @@ int s2gh_keep(float time, float best_lap, int laps)
     h->time = time;
     h->best_lap = best_lap;
     h->laps = (uint32_t)laps;
+    h->custom = (uint8_t)rec.custom;
+    h->setup = rec.setup;
     h->crc = crc_of(h);
     return 1;
 }

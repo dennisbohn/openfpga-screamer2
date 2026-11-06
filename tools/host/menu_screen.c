@@ -119,7 +119,7 @@ int main(int argc, char **argv)
     /* kept: a round trip through the save (s2save.h; its own test is tools/s2/check_save_s2.sh), the ranges are the menu's */
     CHECK(s2save_count(S2S_TRACK) == S2M_TRACKS && s2save_count(S2S_TEAM) == S2M_TEAMS && s2save_count(S2S_CAR) == S2M_CARS &&
           s2save_count(S2S_LAPS) == S2M_LAPS && s2save_count(S2S_SKILL) == S2M_SKILLS && s2save_count(S2S_TRANS) == 2, "the save's ranges are the menu's");
-    struct s2_menu_cfg w = { .track = 6, .team = 3, .car = 5, .laps = 3, .skill = 2, .manual = 1 }, rd, dflt;
+    struct s2_menu_cfg w = { .track = 6, .team = 3, .car = 5, .laps = 3, .skill = 2, .manual = 1 }, rd = { 0 }, dflt;      /* (the set-up list's choice is not kept in the save: s2menu_load() leaves it as it is) */
     s2save_reset();
     s2menu_store(&w);
     s2menu_load(&rd);

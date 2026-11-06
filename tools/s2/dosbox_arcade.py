@@ -123,10 +123,11 @@ def front(pid):
 
 # ------------------------------------------------------------------------------------------------ the private game folder
 
-def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None, cars5=False, detail=None, cursor=None):
+def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, league=None, laps=None, cars5=False, detail=None, cursor=None, setups=None):
     """CONFIG/CHOICE.DAT: word i is kept as (v + i * 0x1050c) ^ i; word 10 (+0x28) is the tracks opened beyond the first three; team (word 0), the
     team's chosen car (the first word of its record at +0xb0 + team * 0x188) and the player's name (+8) as given (--pages3d); detail: the DETAIL LEVEL row
-    (+0x40: 0 LOW, 1 MEDIUM, 2 HIGH; the animated scenery exists at HIGH only, tools/s2/dosbox_anim.py)"""
+    (+0x40: 0 LOW, 1 MEDIUM, 2 HIGH; the animated scenery exists at HIGH only, tools/s2/dosbox_anim.py); setups: {(team, car, slot): six numbers} the CUSTOMIZE
+    set-ups (team 0 .. 3, car 0 .. 3, Custom 1 .. 4 as slot 0 .. 3; the words at +0xb8 + team * 0x188 + car * 0x60 + slot * 0x18: handling, pressure, tyres, front, rear, brakes)"""
     d = open(src, "rb").read()
     w = list(struct.unpack("<%dI" % (len(d) // 4), d))
     dec = [((v ^ i) - i * 0x1050C) & 0xFFFFFFFF for i, v in enumerate(w)]
@@ -149,6 +150,9 @@ def choice_with_extra_tracks(src, dst, extra, team=None, car=None, name=None, le
         dec[(0xB0 + 0x188 * dec[0]) // 4] = car
     if name is not None:
         dec[2] = struct.unpack("<I", name.encode().ljust(4, b"\0"))[0]
+    for (t, c, k), six in (setups or {}).items():
+        for j, v in enumerate(six):
+            dec[(0xB8 + 0x188 * t + 0x60 * c + 0x18 * k) // 4 + j] = v & 0xFFFFFFFF
     out = [((v + i * 0x1050C) ^ i) & 0xFFFFFFFF for i, v in enumerate(dec)]
     open(dst, "wb").write(struct.pack("<%dI" % len(out), *out) + d[len(out) * 4:])
 
@@ -206,6 +210,11 @@ FREE_BYTES = [(0x132fc8, 55), (0x133000, 55), (0x132fa4, 12), (0x132f98, 12), (0
 ROOM_BLOCKS = [(0x131ea4, 24), (0x132378, 4), (0x132494, 28), (0x133350, 4), (0x4cfd6, 4), (0x1347a0, 4)]
 # and what a dump keeps: the cameras' table P_t.MCM was read into (3 records of 0x16c bytes from 0x131f34), the texts' pointers (the title 0x127eec, the five names 0x127ef4), the screen
 ROOM_BYTES = [(0x131f34, 3 * 0x16c), (0x127eec, 4), (0x127ef4, 20)]
+
+# the car page's and the set-up page's words (menus row 12; STARTL.EXE 0x3cc2c, 0x3e1d5): the page's state 0x1324d4, the chosen set-up 0x13237c (0 Standard, 1 .. 4 Custom), the set-up the race
+# takes less one 0x1324e8, the set-up page's editing flag 0x1324c4, the next page 0x132494, the blink clock 0x4cfd6, the player's team 0x1289ec, and the first team's record (0x188 bytes
+# from 0x128a9c: the chosen car, the fifth car won, 4 cars x 4 set-ups x 6 words)
+CUSTOM_BYTES = [(0x1324d4, 4), (0x13237c, 4), (0x1324e8, 4), (0x1324c4, 4), (0x132494, 4), (0x4cfd6, 4), (0x1289ec, 4), (0x128a9c, 0x188)]
 
 # time attack's lists (the totals of kind 2 for three laps, the best laps): 300 bytes a track in columns of 15 (times, names, replay numbers, teams, models), the files' track order
 TA_LISTS = [(0x12d388 + 0x4b0 * t, 300) for t in range(7)] + [(0x12f32c + 0x1068 + 0x12c * t, 300) for t in range(7)]
@@ -395,6 +404,10 @@ def session(steps):
             mem = Mem.open(pid) if mem is None else mem
             if mem:
                 mem.bytes_at(st[1:], work, TA_LISTS)
+        elif st[0] == "C":                      # --customize: C<label> the car page's and the set-up page's words and the team's record to bytes_<label>.txt
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.bytes_at(st[1:], work, CUSTOM_BYTES)
         elif st[0] == "B":                      # --timeattack: Bfree<label> the bytes of the free run's text tables to bytes_<label>.txt
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -718,6 +731,38 @@ def timeattack(which):
                   "Xfree Lfree_1 r2,0.6 Bfree_1 w6 Lfree_2 r2,0.6 Bfree_2 w9 Lfree_3 r2,0.6 Bfree_3 w9 Lfree_4 r2,0.6 Bfree_4 w9 Lfree_5 r2,0.6 Bfree_5 w9 Lfree_6 r2,0.6 Bfree_6 "
                   "w9 Lfree_7 r2,0.6 Bfree_7 w9 Lfree_8 r2,0.6 Bfree_8 w9 Lfree_9 r2,0.6 Bfree_9 w9 Lfree_10 r2,0.6 Bfree_10 w9 Lfree_11 r2,0.6 Bfree_11 q")
     shots = session(boot + tracks)
+    print(f"{len(shots)} screenshots in {work}")
+
+
+def customize():
+    """--customize (menus row 12): time attack's CAR page with its set-up list and the CAR CUSTOMIZATION page against the running original (see the header). Team 1 (CONDOR) named MIL,
+    its second car chosen, the fifth car won, Custom 1 and Custom 2 of that car set to 3 1 2 4 0 3 and 0 4 1 3 3 0 on the private CHOICE.DAT (the original's default is 2 2 0 2 2 2): the
+    cars, the list Standard / Custom 1 .. 4 (the panel of the six numbers), the choice 3 LAPS / FREE RUN / CUSTOMIZE, and the page: the cursor over its eight items, a value opened,
+    changed and kept (the panel sliding in and out), the tyres' page, ESC, SAVE (the team's record is dumped before and after: the numbers it keeps) and the car page again. Keys are
+    the original's (ENTER 0x1c, ESC 0x01, the arrows extended: up 0x48, left 0x4b, right 0x4d, down 0x50)."""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox_custom")
+    atexit.register(drop_junctions)
+    make_private(4, team=0, car=1, name="MIL", cars5=True, setups={(0, 1, 0): (3, 1, 2, 4, 0, 3), (0, 1, 1): (0, 4, 1, 3, 3, 0)})
+    boot = "w3 M k1c w6 k1c w6 k1c w6 ke4d w4 ke4d w4 k1c w7 "      # TIME ATTACK in the options room: TRACK SELECTION
+    cars = "k1c w7 Lcar_0 r3,0.5 C0 "                                  # the CAR page, state 0 (the chosen car is the second)
+    lst = ("k1c w1.2 Llist_std r4,0.45 C1 ke50 w0.7 Llist_c1 r4,0.45 ke50 w0.7 Llist_c2 r3,0.45 ke50 w0.7 Llist_c3 r2,0.45 ke50 w0.7 Llist_c4 r2,0.45 ke50 w0.7 Llist_c4b r1,0.45 "
+           "ke48 w0.7 ke48 w0.7 ke48 w0.7 Llist_c1b r3,0.45 C2 ")
+    modes = ("k1c w1.2 Lmode_3laps r4,0.45 ke4d w0.7 Lmode_free r3,0.45 ke4d w0.7 Lmode_cust r4,0.45 ke4d w0.7 Lmode_cust2 r2,0.45 ke4b w0.7 ke4b w0.7 Lmode_3laps2 r2,0.45 "
+             "k01 w1 Llist_back r3,0.45 C3 k1c w1 ke4d w0.6 ke4d w0.6 ")
+    # ENTER on CUSTOMIZE: the page fades out, the CAR CUSTOMIZATION page comes up (the camera flies in for a few seconds)
+    page = ("k1c w2 Lcu_fly1 r2,0.5 w5 Lcu_i0 r4,0.4 C4 "
+            "ke4d w1.8 Lcu_i1 r3,0.4 ke50 w1.8 Lcu_i3 r3,0.4 ke4b w1.8 Lcu_i2 r3,0.4 ke4b w1.8 Lcu_i2b r2,0.4 ke4d w0.6 ke4d w1.8 "
+            # the tyres opened: the panel slides in; left twice and right once; kept
+            "K1c R8,0 w1 Lcu_tyre_open r4,0.4 C5 Ke4b R4,0 w0.7 Lcu_tyre_v1 r3,0.4 Ke4b R4,0 w0.7 Lcu_tyre_v0 r3,0.4 Ke4d R4,0 w0.7 Lcu_tyre_v1b r2,0.4 "
+            "K1c R8,0 w1 Lcu_tyre_kept r3,0.4 "
+            # item 3 pressure (down from 2 is 4: the front); the handling opened and raised by one, then ESC (the edit is dropped)
+            "ke50 w1.5 Lcu_i4 r3,0.4 ke50 w1.5 Lcu_i6 r3,0.4 ke48 w0.6 ke48 w0.6 ke48 w0.6 ke4b w1.5 Lcu_i0b r3,0.4 "
+            "K1c R8,0 w1 Lcu_hand_open r3,0.4 Ke4d R4,0 w0.7 Lcu_hand_plus r3,0.4 Ke4d R4,0 w0.7 Lcu_hand_max r3,0.4 k01 w1 Lcu_hand_esc r3,0.4 C6 "
+            "K1c R8,0 w1 Ke4b R4,0 w0.7 Lcu_hand_minus r3,0.4 k1c w1 Lcu_hand_kept r3,0.4 C7 "
+            "k01 w1.5 Lcu_i7 r3,0.4 ke48 w0.6 Lcu_i7up r2,0.4 "
+            "ke4b w0.8 ke50 w0.8 ke50 w0.8 ke50 w1.5 Lcu_i6b r3,0.4 C8 k1c w6 Lcar_after r4,0.45 C9 q")
+    shots = session(boot + cars + lst + modes + page)
     print(f"{len(shots)} screenshots in {work}")
 
 
@@ -1117,6 +1162,12 @@ def main():
             options(which)
         work = os.path.join(root, "build", "check", "dosbox_room" + ("_t" + which[4:] if which.startswith("team") else "_" + which if which else ""))
         print("%d screenshots in %s: compared by tools/room.sh" % (len(glob.glob(os.path.join(work, "*.png"))), work))
+        return
+    if "--customize" in sys.argv:
+        if "--check" not in sys.argv:
+            customize()
+        work = os.path.join(root, "build", "check", "dosbox_custom")
+        print("%d screenshots in %s: compared by tools/custom.sh" % (len(glob.glob(os.path.join(work, "*.png"))), work))
         return
     if "--timeattack" in sys.argv:
         which = next((a for a in sys.argv if a in ("closed", "race", "free")), "")

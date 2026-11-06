@@ -1,0 +1,12 @@
+# the set-ups' effect (menus row 12, docs/screamer2/driving.md "The set-up"): level asphalt (road kind 36) towards the origin, as a_origin: full throttle, 1 s left, 1 s right, the brake
+# from 8 s. The set-ups are in setups.txt (tools/s2/ref_trace/ref_run.sh setups writes each one's scenario and trace)
+@steps 500
+@flat 36
+@put -300000,300000,0.785398
+@tracks 1
+0 A
+100 AL
+150 A
+250 AR
+300 A
+400 B

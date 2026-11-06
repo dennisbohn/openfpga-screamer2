@@ -16,6 +16,7 @@ Writes into <out dir> (never committed):
                        own table, which they check on its own against a search in double precision); end_<k>.pal the race's palette
   arcade.txt, arc_*    the arcade pages' scripted runs and the frames they must draw (tools/ui_arcade_ref.py)
   league.txt, lg_*, leagueend.txt, lend_*   the championship's pages and end screens (tools/ui_league_ref.py)
+  custom.txt, cu_*   the CAR pages' set-up list and choices and the CAR CUSTOMIZATION page (tools/ui_custom_ref.py)
 The readers here (LZW, the S2 .SPR / .FNT layout, the text routine) are written from the file formats and the original's routines, not
 from the firmware.
 """
@@ -487,8 +488,10 @@ def main():
     n_runs, n_frames = ui_arcade_ref.build(game, graf, spr, fnt, out, helpers)
     import ui_league_ref
     l_runs, l_frames, l_ends = ui_league_ref.build(game, graf, spr, fnt, out, helpers)
+    import ui_custom_ref
+    c_runs, c_frames = ui_custom_ref.build(game, graf, spr, fnt, out, helpers)
     print(f"{len(lines)} expectations, {len(cases)} cases, 3 frames, {n_runs} arcade page runs with {n_frames} frames, {l_runs} championship page runs with {l_frames} frames "
-          f"and {l_ends} end screens -> {out}")
+          f"and {l_ends} end screens, {c_runs} set-up page runs with {c_frames} frames -> {out}")
 
 
 if __name__ == "__main__":

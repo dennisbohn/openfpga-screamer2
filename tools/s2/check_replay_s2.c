@@ -16,6 +16,9 @@
  *   stop        ESC in the replay: the race stops at that step, the player's car is done, the clock and the place stay; a second ESC changes nothing; a replay of a
  *               race that was not run to the end is not offered (race_replay_ok)
  *   long        a recording over S2GH_MAX steps is not a replay: race_init sets up an ordinary race
+ *   set-ups     every one of the above again with a CUSTOMIZE set-up for the player's car and the championship's tuned computers (race_custom, race_setup, race_tuned): the replay
+ *               takes the recorded race's set-up, not the viewer's globals of the moment (they are changed before it begins); a negative control: the same race with the
+ *               standard set-up is another race
  *   cameras     the trackside cameras of every track (CAMERASn.MCM, 23 to 34 cameras of all five kinds), a car driven along the polyline of the cameras' places at a speed
  *               and in a loop: the camera of every frame (its place, angles and the camera in use) against a model of STARTL.EXE's routines written again in double precision
  *               (the firmware's are single precision: places within 2 units, angles within 6 milliradians), the choice of the camera cutting along the track as the model
@@ -62,8 +65,14 @@ static struct world rec_world[NSTEPS], other[NSTEPS];
 static uint32_t finish_k;                               /* the step in which the player's car had done its laps (a count of steps, 1 up), 0: not in this run */
 static const int ONE[1] = { 1 }, LATE[8] = { 1, 1, 2, 1, 3, 1, 4, 1 }, MANY[3] = { 2, 3, 4 };
 
+static int t_custom, t_tuned;                           /* the set-ups of the runs in hand: the player's CUSTOMIZE one (or the standard), the computers tuned or not */
+static struct s2car_setup t_setup;
+
 static void setup(int laps)
 {
+    race_custom = t_custom;
+    race_setup = t_setup;
+    race_tuned = t_tuned;
     race_kind = RACE_NORMAL;
     race_ghost = 0;
     race_laps = laps;
@@ -143,6 +152,8 @@ static uint32_t replay_race(int track, int laps, uint32_t nsteps, const int *pla
 {
     setup(laps);
     race_replay = 1;
+    race_custom = !t_custom;                                /* what the viewer's globals may be by the time of the replay: another set-up; the replay is of the recorded race's */
+    race_setup = (struct s2car_setup){ 1, 3, 2, 0, 4, 1 };
     CHECK(race_init(track, road_floor() - 3000.0f), "track %d: race_init for the replay", track);
     CHECK(race_replaying() && race_replay == 0, "track %d: the race is a replay and the request is used up", track);
     uint32_t k = 0;
@@ -262,9 +273,24 @@ static void check_track(const char *dir, int track)
     first = first_difference(rec_world, other, n, &bad);
     CHECK(bad == 0, "track %d: the replay after a stopped one equals the race again: %u of %u steps differ", track, bad, n);
 
-    printf("  track %d: %u steps in frames of 1 .. 4 are the one-step race, the player done in step %u; the replay (3 frame plans, after another race, after ESC) equals it in all four cars\n"
+    printf("  track %d%s: %u steps in frames of 1 .. 4 are the one-step race, the player done in step %u; the replay (3 frame plans, after another race, after ESC) equals it in all four cars\n"
            "    at every step; the old order (a frame's player steps, then its computers') differs at %u of %u frame ends (the first at step %u)\n",
-           track, n, finish_k, differ, ends, first_old);
+           track, t_custom ? " with a set-up and tuned computers" : "", n, finish_k, differ, ends, first_old);
+
+    /* a negative control: the same controls with the other set-up are another race (the set-up is part of the race) */
+    if (t_custom) {
+        static struct world other_set[NSTEPS];
+        const int c = t_custom, tu = t_tuned;
+        t_custom = 0;
+        t_tuned = 0;
+        race_by_hand(track, laps, manual0, n, ONE, 1, 1, other_set);
+        t_custom = c;
+        t_tuned = tu;
+        uint32_t d = 0;
+        for (uint32_t k = 0; k < n; k++) d += memcmp(&rec_world[k], &other_set[k], sizeof rec_world[0]) != 0;
+        CHECK(d > n / 2, "track %d: the same controls with the standard set-up and computers are another race (%u of %u steps differ)", track, d, n);
+        printf("    negative control: the standard set-up and computers give another race in %u of %u steps\n", d, n);
+    }
 }
 
 /* a replay is offered only for a race that was run to its end, and a long recording is not one */
@@ -280,7 +306,7 @@ static void limits(void)
     }
     CHECK(s2gh_rec_steps() == 400 && !race_replay_ok(), "a race not yet run to its end cannot be run again");
     /* a recording over the limit */
-    s2gh_rec_begin(1, 1, 1, 0, 0);
+    s2gh_rec_begin(1, 1, 1, 0, 0, 0, 0);
     struct s2car_input in = { .throttle = 1.0f };
     for (uint32_t i = 0; i < S2GH_MAX + 10; i++) s2gh_rec_step(&in, 0);
     CHECK(s2gh_rec_full() && s2gh_rec_steps() == S2GH_MAX, "a race over %u steps fills the recording", S2GH_MAX);
@@ -467,6 +493,13 @@ int main(int argc, char **argv)
     s2car_damages = 0;
     if (argc < 2) return 2;
     for (int track = 1; track <= 7; track++) check_track(argv[1], track);
+    static const struct s2car_setup sets[7] = { { 4, 0, 1, 1, 4, 0 }, { 0, 4, 2, 4, 0, 4 }, { 3, 1, 0, 3, 1, 3 }, { 1, 3, 1, 0, 2, 4 }, { 3, 2, 2, 3, 1, 3 }, { 0, 0, 0, 0, 0, 0 }, { 2, 2, 0, 2, 2, 2 } };
+    for (int track = 1; track <= 7; track++) {              /* the same with a set-up of CUSTOMIZE for the player and the championship's computers */
+        t_custom = t_tuned = 1;
+        t_setup = sets[track - 1];
+        check_track(argv[1], track);
+    }
+    t_custom = t_tuned = 0;
     CHECK(image(argv[1], 1), "image of track 1");
     limits();
     printf("cameras\n");

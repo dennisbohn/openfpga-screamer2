@@ -12,8 +12,9 @@
 #include <stdint.h>
 #include "s2menu.h"
 
-/* the pages: S2ARC_TRANS is the CAR page started in its second state (the choice of the gearbox), for the tests; the chain goes through it inside S2ARC_CAR */
-enum { S2ARC_TITLE, S2ARC_TRACK, S2ARC_CAR, S2ARC_TRANS, S2ARC_ATTACK, S2ARC_PAGES };
+/* the pages: S2ARC_TRANS is the CAR page started in its second state (the choice of the gearbox), for the tests; the chain goes through it inside S2ARC_CAR. S2ARC_ATTACK and
+   S2ARC_LEAGUE are the CAR pages of time attack and the championship (below) */
+enum { S2ARC_TITLE, S2ARC_TRACK, S2ARC_CAR, S2ARC_TRANS, S2ARC_ATTACK, S2ARC_LEAGUE, S2ARC_PAGES };
 
 /* what a page ends with: ENTER goes on, ESC goes back; 0 if its picture could not be read */
 enum { S2ARC_BACK = -1, S2ARC_FAIL = 0, S2ARC_NEXT = 1 };
@@ -21,8 +22,11 @@ enum { S2ARC_BACK = -1, S2ARC_FAIL = 0, S2ARC_NEXT = 1 };
 /* One page, until ENTER or ESC. Needs s2gfx_init() and the menu sounds; changes c. */
 int s2arcade_page(int page, struct s2_menu_cfg *c);
 
-/* Time attack's CAR page (S2ARC_ATTACK): the arcade page's cars in state 0, then in place of the TRANSMISSION choice time attack's own, 3 LAPS or FREE RUN (c->free_run; the
-   original's car page, 0x3cc2c, is another scene with a set-up list between the two: row 12). ENTER on the choice is S2ARC_NEXT, ESC in the first state S2ARC_BACK. */
+/* The CAR pages of time attack (S2ARC_ATTACK) and the championship (S2ARC_LEAGUE), one page of the original's (0x3cc2c, a scene of its own where this has the arcade page's picture and
+   cars) with three steps, ENTER going on and ESC back: the cars (LEFT / RIGHT), the car's set-up Standard / Custom 1 .. 4 (UP / DOWN; c->setup: kept, the page opens on it; no list for the
+   bonus car), then the choice: time attack's 3 LAPS / FREE RUN (c->free_run) with CUSTOMIZE for a Custom, the championship's RACE / CUSTOMIZE (in the championship Standard goes to the
+   race at once). CUSTOMIZE is the CAR CUSTOMIZATION page (s2custom.h) on the set-up in hand, the car page comes back at the list. S2ARC_NEXT: the race is to start with c->car and the
+   set-up c->setup (a Custom of a car of the first four, s2save_setup; else the standard); ESC in the first state S2ARC_BACK. */
 
 /* The chain from the title page: 1 (S2ARC_NEXT) when the TRANSMISSION state was left with ENTER (the race is to start), S2ARC_BACK when
    the player left it with ESC (from the title or from the TRACK page: the original leaves to its options room, which is the start

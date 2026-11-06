@@ -6,7 +6,8 @@
  * C models, natively in Docker; not part of the firmware.
  *
  * Usage: check_car <game folder> <track image> <scenario> <trace.csv> <track> <team> <model> <flat kind or -1> [ours.csv]
- *   scenario  the reference's file: "@steps N", "@flat K", "@put x,y,heading", "@auto 0|1", then "<step> <keys>"
+ *   scenario  the reference's file: "@steps N", "@flat K", "@put x,y,heading", "@auto 0|1", "@setup a,b,c,d,e,f" (the player's CUSTOMIZE set-up, docs/screamer2/driving.md
+ *             "The set-up"; the reference's OS_S2SETUP: tools/s2/ref_trace/ref_run.sh; CHECK_CAR_NOSETUP=1 leaves it out: the negative control), then "<step> <keys>"
  *             lines (keys A accelerate, B brake, L left, R right, U gear up, D gear down; from that step on, counting the first
  *             step as 0, whose result is row 1 of the trace)
  *   flat kind a level world of that road kind with no walls and no road points (the ground and the road points
@@ -172,7 +173,7 @@ int main(int argc, char **argv)
     FILE *sf = fopen(argv[3], "r");
     if(!sf) { fprintf(stderr, "cannot read %s\n", argv[3]); return 2; }
     static struct line lines[256];
-    int nlines = 0, steps = 0, put = 0, manual = 0;
+    int nlines = 0, steps = 0, put = 0, manual = 0, nset = 0, six[6] = { 0 };
     double px = 0, py = 0, ph = 0;
     char buf[256];
     while(fgets(buf, sizeof buf, sf)) {
@@ -180,6 +181,7 @@ int main(int argc, char **argv)
         if(!strncmp(buf, "@steps", 6)) steps = atoi(buf + 6);
         else if(!strncmp(buf, "@put", 4)) { put = sscanf(buf + 4, "%lf,%lf,%lf", &px, &py, &ph) == 3; }
         else if(!strncmp(buf, "@auto", 5)) manual = atoi(buf + 5) == 0;
+        else if(!strncmp(buf, "@setup", 6)) nset = sscanf(buf + 6, "%d,%d,%d,%d,%d,%d", &six[0], &six[1], &six[2], &six[3], &six[4], &six[5]) == 6;
         else if(buf[0] == '@') continue;
         else if(nlines < 256) {
             lines[nlines].keys[0] = 0;
@@ -194,6 +196,10 @@ int main(int argc, char **argv)
     g_flat = flat;
     static struct s2car_state s;
     s.manual = manual;
+    if(nset && !getenv("CHECK_CAR_NOSETUP")) {
+        s.custom = 1;
+        s.setup = (struct s2car_setup){ (int8_t)six[0], (int8_t)six[1], (int8_t)six[2], (int8_t)six[3], (int8_t)six[4], (int8_t)six[5] };
+    }
     if(!s2car_init(&s, team, model, track, 0)) { fprintf(stderr, "s2car_init failed\n"); return 2; }
     if(put) s2car_put(&s, (int)px, (int)py, (float)ph);       /* the reference's s2_put() */
     struct s2car_input none = { 0 };
@@ -234,6 +240,13 @@ int main(int argc, char **argv)
             if(d > worst) { worst = d; at = k; }
         }
         printf("%-12s %12.5g %8d %12.5g\n", col_name[c], worst, at, sum / rows);
+    }
+    if(getenv("CHECK_CAR_FIRST")) {                       /* the set-ups' cases: where the car first leaves the reference's speed by more than 0.001 (a place cut to whole numbers one unit
+                                                              the other way, which the float32 sums make now and then, shows from there on: the tests of the set-ups look at how long the car follows) */
+        int first = -1;
+        for(int k = 0; k < rows && first < 0; k++) if(fabs(ours[k][C_SPEED] - ref[k][C_SPEED]) > 0.001) first = k;
+        if(first < 0) printf("first speed difference over 0.001: none in %d steps\n", rows - 1);
+        else printf("first speed difference over 0.001: step %d of %d\n", first, rows - 1);
     }
     if(argc > 9) {
         FILE *o = fopen(argv[9], "w");
