@@ -99,6 +99,8 @@ void s2snd_init(struct zip *z)
     music_init(0, 0);                           /* the cue sheet (GAME.DAT); no MIDI songs in Screamer 2 */
 }
 
+int s2snd_music_later;
+
 void s2snd_race_start(int track)
 {
     if (!inited || track < 1 || track > 7) return;
@@ -123,6 +125,13 @@ void s2snd_race_start(int track)
     fade = 0x8000;
     sum_fx = sum_music = 0;
     max_fx = max_music = 0;
+    if (!s2snd_music_later) s2snd_music(track);
+    else music_stop();                          /* (the attract race: the song of the menu, if any, is not the track's; it comes with the picture) */
+}
+
+void s2snd_music(int track)
+{
+    if (!inited || track < 1 || track > 7) return;
     if (!cd_read) {
         uint32_t size;
         const uint8_t *game = s2car_game_dat(&size);
