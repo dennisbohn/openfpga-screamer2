@@ -37,6 +37,8 @@ void s2snd_frame(const struct track_cam *cam);
 /* The race is left (another track, the ride): every voice and the music stop; a line into the log with the cost
    per frame. Nothing may run on the data slots (a track's load) while music plays, so this comes first. */
 void s2snd_stop(void);
+/* A race is on: s2snd_race_start() was called and s2snd_stop() not yet (the pause menu and the end screen are in it; the menus' song is not played then) */
+int s2snd_racing(void);
 
 /* The menu's sound `id` (MENU.DTR of SOUND.DAT, 0 .. 14: MENU1 .. MENU15, s2snd.h) on a voice of its own, at the sample's rate and the
    effects' master volume. Works in the menus and in the race. Silent without SOUND.DAT. */

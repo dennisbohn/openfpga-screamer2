@@ -316,6 +316,11 @@ static void log_cost(void)
     dlog_str(" cycles mean/max\n");
 }
 
+int s2snd_racing(void)
+{
+    return active;
+}
+
 void s2snd_stop(void)
 {
     if (!active) return;
