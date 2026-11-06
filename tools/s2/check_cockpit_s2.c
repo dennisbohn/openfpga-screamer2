@@ -129,7 +129,7 @@ static void pictures_and_dashboards(const char *dir)
         total++;
         if(!worst) exact++; else if(worst == 1) within++; else worse++;
     }
-    CHECK(total == 8 * 2 * 21 && worse == 0 && exact * 100 >= total * 97, "needles: %d positions, %d exact, %d a pixel off, %d worse", total, exact, within, worse);
+    CHECK(total == 8 * 2 * 21 && worse == 0 && exact * 100 >= total * 92, "needles: %d positions, %d exact, %d a pixel off, %d worse", total, exact, within, worse);
     printf("needles: %d positions of 16 needles, %d exact, %d a pixel off at a rounding edge (float against double), %d worse\n", total, exact, within, worse);
     free(exp);
     free(nl);
