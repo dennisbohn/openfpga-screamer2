@@ -12,7 +12,7 @@
  * CD never fades (no volume or stop call is made by the race or its end screens, STARTL.EXE 0x4d990 /
  * 0x4d908), only the effects ease out on the end screens (s2sound_effects, s2end.h). Without
  * GAME.GOG / GAME.DAT, or without SOUND.DAT in the ZIP, that part is silent and nothing else is wrong.
- * Everything is silent in the ride (no race).
+ * Everything is silent in the ride (no race). The menus' song (CD track 2) is s2menumusic.h's.
  */
 #pragma once
 #include <stdint.h>
