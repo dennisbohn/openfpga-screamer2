@@ -65,7 +65,7 @@ void race_replay_stop(void);
    The viewer clears it again when the race is left. */
 extern int race_attract;
 /* The race's clock in seconds (0x13335c): 0 at the start, 0.02 a step (float, as the game adds it); the lights go out at 3 */
-float race_clock(void);
+float race_get_clock(void);
 
 /* RACE_ATTACK: the side (0 / 1) the player's car took on the first row (the other is the ghost's: the player takes the one the kept run did not start on) */
 int race_slot(void);

@@ -708,7 +708,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 in.gear_down = k == 0 && (press & KEY_L);
                 race_step_player(&in);
                 if (attract_mode && !att.over) {                /* the screen of the sequence, a step of it for each step of the race; the cameras' ten seconds */
-                    s2cam_attract_tick(race_clock(), STEP_S);
+                    s2cam_attract_tick(race_get_clock(), STEP_S);
                     s2att_step(&att, k == 0 && press != 0, &att_view);
                     if (att_view.music) s2snd_music(n);         /* (in the one step of the sequence that cues it: the frame's last view may not say so) */
                 }

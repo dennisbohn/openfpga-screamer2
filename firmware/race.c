@@ -251,7 +251,7 @@ void race_free_reset(void)
 struct s2car_state *race_car(int i) { return &R.car[i]; }
 int race_cars(void) { return R.n; }
 uint32_t race_steps(void) { return R.steps; }
-float race_clock(void) { return R.clock; }
+float race_get_clock(void) { return R.clock; }
 int race_line_length(void) { return L.n ? L.nd[L.n - 1].dist : 0; }
 int race_line_nodes(void) { return L.n; }
 static uint32_t respawns;
