@@ -29,6 +29,7 @@
 #include "s2scene.h"
 #include "s2gfx.h"
 #include "s2page.h"
+#include "s2attract.h"
 #include "s2sound.h"
 #include "track.h"
 #include "track_build.h"
@@ -221,6 +222,7 @@ static struct room {
     float anim;                                 /* the engine's animation clock */
     float fade;                                 /* the fade out's level, 0 until the frame after ENTER */
     int leaving, fresh;
+    float idle;                                 /* seconds left of the 30 without a button (s2attract.h) */
     uint32_t before;                            /* the buttons held a frame ago */
     const char *title, *name[S2ROOM_STATIONS];
     uint8_t dark[256];
@@ -249,6 +251,8 @@ static int room_key(void *self, uint32_t press)
     const uint32_t keys = in_keys(), edge = keys & ~p->before;
     p->before = keys;
     if (p->leaving) return 0;
+    if (keys) s2att_idle_reset(&p->idle);               /* (STARTL.EXE has this on TEAM SELECTION only; the Pocket starts in the room) */
+    else if (s2att_idle_step(&p->idle)) return S2ROOM_IDLE;
     if (edge & S2PAGE_ESC) return S2ROOM_BACK;
     if (edge & S2PAGE_ENTER) {
         s2sound_menu(SOUND_ENTER);
@@ -332,6 +336,7 @@ int s2room_run(struct zip *z, const struct s2room_mem *m, int team)
     for (int k = 0; k < S2ROOM_STATIONS; k++) p->name[k] = s2gfx_line("MAIN MENU", 1 + k, names[k]);
     s2room_cam_start(&p->cam, station);
     s2gfx_dark_table(track_palette(), p->dark, 256);
+    s2att_idle_reset(&p->idle);
     p->fresh = 1;
     p->before = in_keys();
     const struct s2_page page = { 0, track_palette(), 0, FADE_FRAMES, room_frame, room_key, room_draw };

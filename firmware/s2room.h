@@ -19,8 +19,8 @@
 #include "zip.h"
 #include "s2menu.h"
 
-/* what the page ends with: the station's choice (the fade out is done), or ESC */
-enum { S2ROOM_FAIL = 0, S2ROOM_ARCADE, S2ROOM_CHAMP, S2ROOM_ATTACK, S2ROOM_MULTI, S2ROOM_SETTINGS, S2ROOM_BACK = -1 };
+/* what the page ends with: the station's choice (the fade out is done), ESC, or S2ROOM_IDLE: 30 s without a button (s2attract.h; the fade out is done: the attract sequence follows) */
+enum { S2ROOM_FAIL = 0, S2ROOM_ARCADE, S2ROOM_CHAMP, S2ROOM_ATTACK, S2ROOM_MULTI, S2ROOM_SETTINGS, S2ROOM_IDLE, S2ROOM_BACK = -1 };
 #define S2ROOM_STATIONS 5
 
 /* The SDRAM the room is built in (viewer.c's track window and the memory the track's containers are read to): the container GFX/MENU<t>1.DAT (0.8 to 0.9 MB),

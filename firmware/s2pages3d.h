@@ -17,8 +17,8 @@
 #include <stdint.h>
 #include "s2menu.h"
 
-/* what the page ends with */
-enum { S2P3D_FAIL = 0, S2P3D_DONE = 1, S2P3D_QUIT = -1 };
+/* what the page ends with (S2P3D_IDLE: 30 s on TEAM SELECTION with no button down, the original's rule: the attract sequence follows, s2attract.h) */
+enum { S2P3D_FAIL = 0, S2P3D_DONE = 1, S2P3D_IDLE = 2, S2P3D_QUIT = -1 };
 
 /* The page until the name is kept (S2P3D_DONE: c->team and the save's name and profile are set) or the player answers EXIT SCREAMER 2? with YES
    (S2P3D_QUIT: nothing is changed, the start menu comes). S2P3D_FAIL if the files could not be read (nothing is shown). Needs s2gfx_init(). */
