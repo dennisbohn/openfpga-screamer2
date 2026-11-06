@@ -31,6 +31,7 @@ static struct {
     int32_t x, h, z;                    /* +0x48 .. : the camera's place, whole numbers */
     float pitch, yaw, roll;             /* +0x54 .. */
     float turn, rise;                   /* +0x3c, +0x38: the circling camera's two turns, 0 .. 1 */
+    int rotate;                         /* +0xae8: the attract race's camera follows the next car when it next changes to another camera */
 } C;
 
 static uint8_t buf[0x800 + 8];
@@ -137,8 +138,9 @@ static void turned(float x, float z, float a, float out[2])
 }
 
 /* Which row (0x14acf): the one nearest to the car on the ground, in 64ths and not at no distance at all, taken when it is the next one or the one before the one in use (round the end
-   too), or when none is yet. The distance is a float here (the game's is a double): only a row that is nearer by less than a millionth could be taken instead of another. */
-static void choose(const int32_t p[3])
+   too), or when none is yet. The distance is a float here (the game's is a double): only a row that is nearer by less than a millionth could be taken instead of another.
+   1 if the camera in use is now another (the attract race's rotation looks at that). */
+static int choose(const int32_t p[3])
 {
     const int now = C.shot, next = now + 1, before = now - 1;
     int best = -1, pick = now;
@@ -150,14 +152,24 @@ static void choose(const int32_t p[3])
             pick = i;
         }
     }
-    if((pick == next || now == -1 || (next == C.n && pick == 0) || pick == before || (before < 0 && C.n - 1 == pick)) && pick != now) C.shot = pick;
+    if((pick == next || now == -1 || (next == C.n && pick == 0) || pick == before || (before < 0 && C.n - 1 == pick)) && pick != now) {
+        C.shot = pick;
+        return 1;
+    }
+    return 0;
 }
 
-static void trackside(const struct s2car_state *car, float dt)
+static void trackside(const struct s2car_state *const *cars, int n, float dt)
 {
     int32_t p[3];
-    place_of(car, p);
-    choose(p);
+    place_of(cars[C.follow], p);
+    if(choose(p) && C.rotate) {         /* 0x14c97: the camera has changed and the flag is up: the next car (0x12d00: no camera chosen for it yet), the camera chosen again for it */
+        C.rotate = 0;
+        s2cam_follow((C.follow + 1) % n, n);
+        place_of(cars[C.follow], p);
+        choose(p);
+    }
+    const struct s2car_state *car = cars[C.follow];
     if(C.shot < 0) return;
     const struct row *r = &C.row[C.shot];
     const float figure = r->figure;
@@ -220,9 +232,9 @@ static void trackside(const struct s2car_state *car, float dt)
 void s2cam_frame(const struct s2car_state *const *cars, int n, float dt, struct track_cam *cam)
 {
     if(C.follow >= n) C.follow = 0;
-    const struct s2car_state *car = cars[C.follow];
     if(C.view == S2CAM_TRACKSIDE && C.n) {
-        trackside(car, dt);
+        trackside(cars, n, dt);
+        const struct s2car_state *car = cars[C.follow];
         if(C.shot >= 0) {
             *cam = (struct track_cam){ (float)C.x, (float)C.z, (float)C.h, C.yaw, C.pitch, C.roll };
             C.last_shot = C.shot;
@@ -230,6 +242,11 @@ void s2cam_frame(const struct s2car_state *const *cars, int n, float dt, struct 
             s2car_camera(car, cam);
         }
     } else {
-        s2car_camera(car, cam);
+        s2car_camera(cars[C.follow], cam);
     }
+}
+
+void s2cam_attract_tick(float clock, float step)
+{
+    if((int)clock % 10 == 0 && (int)(clock - step) % 10 != 0) C.rotate = 1;     /* 0x2d804: the whole seconds of the clock reach a multiple of ten */
 }
