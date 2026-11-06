@@ -30,6 +30,13 @@ struct s2car_input {
     int handbrake;                      /* 0 / 1 */
 };
 
+/* The six numbers of a car's set-up as the original's CUSTOMIZE page keeps them and its race record carries them (STARTL.EXE 0x128aa4, 0x130c6c; the order of the
+   save, s2save.h): HANDLING, TIRE PRESSURE, TIRE TYPE, FRONT and REAR SUSPENSIONS, BRAKES. Each 0 .. 4 (the middle, 2, is the standard) but the tyres: 0 A - Dry, 1 B - Wet,
+   2 C - Snow, or -1 for the track's own (the standard set-up's, and every computer's). docs/screamer2/driving.md, "The set-up" says what each does to the car. */
+struct s2car_setup {
+    int8_t handling, pressure, tyres, front, rear, brakes;
+};
+
 struct s2car_state {
     /* ---- output: read after s2car_step() ---- */
     float pos[3];                       /* x, y, height (up), as track.c / car_look use them */
@@ -65,6 +72,13 @@ struct s2car_state {
     int cam_on;                         /* 1: a computer's car (ai) keeps its chase camera worked out in cam[] as the player's does: the replay's cameras follow it */
     int hold;                           /* 1: the car waits on the grid, the gearbox in neutral (the game's race flag
                                            0x11f0a8 & 0x20 not yet set); the caller clears it when the race is let go */
+    int custom;                         /* the car's set-up, read when s2car_init_*() makes the car (and again when it is put back on the line): 1 the set-up `setup`
+                                           (the CUSTOMIZE page's, or a ghost's, a replay's); 0 the standard, the arcade's 2 2 -1 2 2 2 (the track's own tyres); a
+                                           computer's car (ai) takes `custom` as it is: the caller leaves it 0 */
+    struct s2car_setup setup;
+    int tuned;                          /* 1: a computer's car (ai) is made as the original makes it where the kind of game has no bit 1 in its mode word (0x14e20: the championship's
+                                           and the attract race's, not the arcade's): the tyres' best pressure, the springs softer and stiffer, the most handling, by the track and the car's
+                                           drive; 0: the arcade's, the standard set-up (a rear-drive car only has handling 1) */
     /* ---- private ---- */
     uint32_t rec[0xcc0 / 4];            /* the game's car record, word for word where the port keeps its layout */
     float camst[5];                     /* the chase camera's eased distance, pitch, yaw, roll and height */

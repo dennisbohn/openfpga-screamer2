@@ -1372,14 +1372,37 @@ static int wheel_places(int team, int car, int32_t pos[4][3])
     return found == 15;
 }
 
-/* 0x14e20: the car made of its set-up: the arcade race's six (2 2 -1 2 2 2): the track's own tyres */
+static int clamp_to(int v, int lo, int hi)
+{
+    return v < lo ? lo : v > hi ? hi : v;
+}
+
+/* 0x14e20: the car made of its set-up, the six numbers of the race's record (docs/screamer2/driving.md, "The set-up"): the arcade's 2 2 -1 2 2 2 (-1: the track's own tyres) unless
+   the car is given another (`custom`: the CUSTOMIZE page's, the ghost's); the numbers are held to the page's ranges, the save may hold anything within -1 .. 4 */
 static void make_car(car_t *c, int track)
 {
-    int set[6] = { 2, 2, tyre_by_track[track - 1], 2, 2, 2 };
-    RI(0x50) = set[2];
+    int set[6] = { 2, 2, -1, 2, 2, 2 };
+    if(c->custom) {
+        set[0] = clamp_to(c->setup.handling, 0, 4);
+        set[1] = clamp_to(c->setup.pressure, 0, 4);
+        set[2] = clamp_to(c->setup.tyres, -1, 2);
+        set[3] = clamp_to(c->setup.front, 0, 4);
+        set[4] = clamp_to(c->setup.rear, 0, 4);
+        set[5] = clamp_to(c->setup.brakes, 0, 4);
+    }
+    RI(0x50) = set[2] < 0 ? tyre_by_track[track - 1] : set[2];
     if(RF(0x94) > 0.8f && c->ai) set[0] = 1;            /* a computer's rear-drive car gets the handling 1 */
     int tyre_set = RI(0x50);
-    set[1] = 2;
+    if(c->ai && c->tuned) {                             /* a computer's car where the mode word has no bit 1: the tyres' best pressure, springs 4 (the rear's 3 for a car that is not
+                                                           four-wheel drive), softer by the track (England's neighbours 1 and 2: one, track 5: two), the most handling */
+        const int softer = track - 1 >= 1 && track - 1 <= 2 ? 1 : track - 1 == 4 ? 2 : 0;
+        set[1] = G.trk.tyre_pressure[tyre_set];
+        set[3] = 4;
+        set[4] = fabsf(RF(0x94) - RF(0x90)) > 0.4f ? 3 : 4;
+        set[3] -= softer;
+        set[4] -= softer;
+        set[0] = 4;
+    }
     float step = 0.01f;                                 /* |0x94 - 0x90| > 0.4: 0.005 */
     if(fabsf(RF(0x94) - RF(0x90)) > 0.4f) step = 0.005f;
     RF(0x70) = 1.0f;

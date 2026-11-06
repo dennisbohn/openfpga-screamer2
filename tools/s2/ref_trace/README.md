@@ -18,6 +18,7 @@ audio), no threads in the physics, no timers: the traces are byte-identical run 
     ./ref_run.sh run a_full_throttle 1            # one trace: scenario, track [team model [dt20|dtport]]
     ./ref_run.sh all          # the whole set: 102 traces + 102 .meta, ~50 MB, about 1.5 minutes
     ./ref_run.sh check        # `all` twice, compared byte for byte
+    ./ref_run.sh setups       # the set-ups' traces (menus row 12): tools/s2/car_scenarios/setups.txt, 22 traces -> $REF_WORK/traces_setup/, the generated scenarios -> $REF_WORK/scn/
     ./ref_run.sh race 2 1 park 2500 1   # a race of four cars (track, level 0..2, park|gas, frames, the player's car 0..4): every car's whole record after every frame
                                         # -> $REF_WORK/traces_race/ (not part of `all`: tools/s2/check_aicontact_s2.sh makes and uses them; 33 MB each)
 
@@ -92,7 +93,13 @@ below k held during it. The 3 s start hold is skipped (`s2_go` at once). t = k *
 | `f_jump` | track 4: the car leaves the ground at 5.4 s at 129 and flies 0.9 s (47 steps with no wheel down, 2400 units down) | track 4; dtport |
 | `g_manual` | manual gearbox on level ground: gear ups, downs, a held key shifts once | flat; dtport |
 
-Directives (`@steps @tracks @flat @put @auto @robot @surfaces`) are read by `ref_run.sh`, the port reads only the key lines.
+Directives (`@steps @tracks @flat @put @auto @robot @surfaces @game @setup`) are read by `ref_run.sh`, the port reads only the key lines (and tools/s2/check_car.c the `@setup`).
+
+**Set-ups** (`@game 8`, `@setup a,b,c,d,e,f`): the player's CUSTOMIZE set-up (handling, tyre pressure, tyres, front and rear suspension, brakes: docs/screamer2/driving.md "The set-up") goes into the
+race record as the original's 0x339e7 puts it for time attack and the free run (the port reads `OS_S2SETUP` for the kinds of game 2, 4 and 8), `OS_S2GAME=<kind of game>` sets the kind (`s2_ref.patch`
+makes the test race read it: without the patch it stayed 1). The standard set-up is no `@setup` (2 2 -1 2 2 2, the track's own tyres). `@game 8` is the free run (one car); the traces of the arcade's
+default are byte for byte the ones of `all` (`ref_run.sh run a_flat 1` with and without `OS_S2GAME=8`). `OS_S2GAME=2 ref_run.sh race ...` is a championship's race: 0x14e20 tunes the
+computers' cars (tools/s2/check_setup_ai_s2.sh).
 
 ## Caveats
 

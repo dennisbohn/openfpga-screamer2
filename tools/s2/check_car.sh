@@ -14,6 +14,9 @@
 #                     b_flat, c_flat, g_manual, d_surface) and tools/s2/car_scenarios/ (a_origin, b_origin, c_origin: level
 #                     ground heading towards the map's origin, where the game's whole-number places do the least harm; their
 #                     traces are made with the reference runner into $ref/traces_benign); default: all that have a trace
+# The set-ups' traces (menus row 12, docs/screamer2/driving.md "The set-up"; made by tools/s2/ref_trace/ref_run.sh setups into build/ref/traces_setup/ with the generated scenarios in
+# build/ref/scn/, REF_WORK=build/ref) are run at the end with the scenario's "@setup" as the player's set-up, each also with the set-up left out (a negative control: it has to be
+# another car), and tools/s2/check_setup_s2.py gives the verdict (exit code 1 if a case or its control fails).
 # Everything it writes stays in build/s2/ (images, our traces as car_<name>.csv, the log car_check.txt).
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -25,6 +28,7 @@ src="$out/carsrc"
 mkdir -p "$out/scn"
 cp "$root"/tools/s2/car_scenarios/*.txt "$out/scn/"
 cp "$ref"/scn/*.txt "$out/scn/" 2>/dev/null || true
+cp "$root"/build/ref/scn/*.txt "$out/scn/" 2>/dev/null || true        # (the generated scenarios of the set-ups' traces)
 ls "$ref"/traces*/*.dt20.csv > /dev/null 2>&1 || { echo "no reference traces in $ref/traces"; exit 1; }
 py=python3
 "$py" -c "" 2>/dev/null || py=python     # Windows: python3 may be the Store's stub
@@ -88,7 +92,23 @@ for n in 1 2 3 4 5 6 7; do
     echo "echo '== grid place of track $n, full throttle (float places)'; ./check_car_float /game car$n.bin scn/car_drive.txt - $n 0 1 -1" >> "$script"
 done
 
+# the set-ups' traces (build/ref/traces_setup): each as it was made (the scenario file has the @setup), with a negative control
+for t in "$root"/build/ref/traces_setup/*.dt20.csv; do
+    [ -f "$t" ] || continue
+    base=$(basename "$t" .dt20.csv)
+    sname=$(echo "$base" | sed 's/\.t[0-9]\..*//')
+    track=$(echo "$base" | sed 's/.*\.t\([0-9]\)\..*/\1/')
+    team=$(echo "$base" | sed 's/.*\.team\([0-9]\)\..*/\1/')
+    model=$(echo "$base" | sed 's/.*\.model\([0-9]\)$/\1/')
+    flat=$(echo "$base" | sed -n 's/.*\.flat\([0-9]*\)\..*/\1/p'); [ -n "$flat" ] || flat=-1
+    echo "echo '== $base (whole places)'; CHECK_CAR_FIRST=1 ./check_car_whole /game car1.bin /b/s2/scn/$sname.txt /b/ref/traces_setup/$base.dt20.csv $track $team $model $flat car_whole_$base.csv || echo FAILED" >> "$script"
+    if grep -q '^@setup' "$out/scn/$sname.txt"; then
+        echo "echo '== $base (set-up left out: negative control)'; CHECK_CAR_FIRST=1 CHECK_CAR_NOSETUP=1 ./check_car_whole /game car1.bin /b/s2/scn/$sname.txt /b/ref/traces_setup/$base.dt20.csv $track $team $model $flat || echo FAILED" >> "$script"
+    fi
+done
+
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -v "$ref_mount:/ref:ro" --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2/carsrc && gcc -O2 -w -DS2_WHOLE_PLACES=1 -o ../check_car_whole check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls,--wrap=sinf,--wrap=cosf,--wrap=atanf &&
     gcc -O2 -w -o ../check_car_float check_car.c $LIST -lm -Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls,--wrap=sinf,--wrap=cosf,--wrap=atanf &&
     cd /b/s2 && sh car_runs.sh" 2>&1 | tee "$out/car_check.txt"
+"$py" -I "$root/tools/s2/check_setup_s2.py" "$out/car_check.txt"

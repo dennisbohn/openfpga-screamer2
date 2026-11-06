@@ -1,0 +1,9 @@
+# the same on the roughest ground track 1 has (road kind 27, roughness class 6, mask 15: the springs matter): throttle, 1 s left, the brake from 6 s
+@steps 500
+@flat 27
+@put -300000,300000,0.785398
+@tracks 1
+0 A
+100 AL
+150 A
+300 B
