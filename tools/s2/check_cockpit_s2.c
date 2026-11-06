@@ -171,7 +171,7 @@ static void cameras(const char *recfile, const char *crusc_file)
     int body = 0, body_seen = 0, last_view = -1, model = 1;
     long changes = 0;
     for(long fr = 0; fr < frames; fr++) {
-        const uint8_t *r = data + fr * FRAME, *car = r + HEAD, *cam = car + REC;
+        const uint8_t *r = data + fr * FRAME, *car = r + HEAD, *cam = car + REC, *cam2 = cam + CAMSZ;
         const int view = i32(cam + 0xAE4);
         memcpy(st.rec, car, REC);
         const float x = (float)i32(car + 0x4D8), z = (float)i32(car + 0x4E0);
@@ -183,6 +183,20 @@ static void cameras(const char *recfile, const char *crusc_file)
         }
         if(view != last_view) changes++;
         last_view = view;
+        if(i32(r + 16) && i32(cam2 + 0xAE4) == 5 && view != 1 && body_seen) {      /* the mirror's own camera record (the mirror is on): view 5, 35 rows */
+            struct s2ck_state scratch;
+            struct track_cam m;
+            s2ck_reset(&scratch);
+            s2ck_camera(&st, S2CK_MIRROR, body, &scratch, &m);
+            const float mw[6] = { (float)i32(cam2 + 0x48), (float)i32(cam2 + 0x50), (float)i32(cam2 + 0x4C), fl(cam2 + 0x58), fl(cam2 + 0x54), fl(cam2 + 0x5C) };
+            const float mg[6] = { m.x + (negative ? 5.0f : 0.0f), m.y, m.h, m.yaw, m.pitch, m.roll };
+            for(int j = 0; j < 6; j++) {
+                const float dd = fabsf(j < 3 ? mg[j] - mw[j] : wrap(mg[j] - mw[j]));
+                if(dd > v[5].worst[j]) v[5].worst[j] = dd;
+            }
+            v[5].n++;
+            if(i32(cam2 + 0x1C) != s2ck_rows(S2CK_MIRROR, 0)) v[5].rows_bad++;
+        }
         if(view != 2 && view != 4 && view != 6) { k.last_view = view; continue; }
         struct track_cam c;
         s2ck_camera(&st, negative ? (view == 2 ? 4 : 2) : view, body, &k, &c);
@@ -195,8 +209,9 @@ static void cameras(const char *recfile, const char *crusc_file)
         v[view].n++;
         if(i32(cam + 0x1C) != s2ck_rows(view, &((const struct s2ck_dash *)cr)[model])) v[view].rows_bad++;
     }
-    const char *names[7] = { "", "", "INCAR", "", "NEAR", "", "INSIDE" };
-    for(int view = 2; view <= 6; view += 2) {
+    const char *names[7] = { "", "", "INCAR", "", "NEAR", "the mirror's", "INSIDE" };
+    for(int view = 2; view <= 6; view++) {
+        if(view == 3) continue;
         if(!v[view].n) continue;
         const float tp = 1.5f, ta = 0.003f;
         const int ok = v[view].worst[0] <= tp && v[view].worst[1] <= tp && v[view].worst[2] <= tp && v[view].worst[3] <= ta && v[view].worst[4] <= ta && v[view].worst[5] <= ta &&

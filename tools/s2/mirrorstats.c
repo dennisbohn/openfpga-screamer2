@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     s2cam_begin(tn, S2CAM_BACK);
     FILE *out = fopen(argv[3], "w");
     if (!out) { perror(argv[3]); return 1; }
-    fprintf(out, "label,step,node,mph,pieces,faces,polys,px_span,px_drawn,tex_lines,m_pieces,m_faces,m_polys,m_px_span,m_px_drawn,m_tex_lines\n");
+    fprintf(out, "label,step,node,mph,pieces,faces,polys,px_span,px_drawn,tex_lines,cells,tested,visible,obj_blocks,m_pieces,m_faces,m_polys,m_px_span,m_px_drawn,m_tex_lines,m_cells,m_tested,m_visible,m_obj_blocks\n");
     fprintf(stderr, "%s: road loop %d points, race of track %d, %d steps, a frame every %d\n", argv[2], loop, tn, steps, every);
     for (int k = 0; k < steps; k++) {
         struct s2car_input in = { .throttle = 0 };
@@ -93,8 +93,9 @@ int main(int argc, char **argv)
         struct perf_counts b = perf_c;
         float node;
         memcpy(&node, &p->rec[0x4b8 / 4], 4);
-        fprintf(out, "%s,%d,%.1f,%.0f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n", argv[2], k + 1, node, p->speed_mph, a.gu_pieces, a.faces_row, a.polys, a.px_span, a.px_drawn, a.tex_lines,
-                b.gu_pieces, b.faces_row, b.polys, b.px_span, b.px_drawn, b.tex_lines);
+        fprintf(out, "%s,%d,%.1f,%.0f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n", argv[2], k + 1, node, p->speed_mph, a.gu_pieces, a.faces_row, a.polys, a.px_span,
+                a.px_drawn, a.tex_lines, a.groups - a.grp_skipped, a.tested, a.visible, a.obj_blocks, b.gu_pieces, b.faces_row, b.polys, b.px_span, b.px_drawn, b.tex_lines,
+                b.groups - b.grp_skipped, b.tested, b.visible, b.obj_blocks);
     }
     fclose(out);
     return 0;

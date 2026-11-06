@@ -41,12 +41,20 @@ done
 python -I - "$st" $tracks <<'PY'
 import csv, sys
 st = sys.argv[1]
-print("track frames | main: pieces faces px_drawn | mirror: pieces faces px_drawn | mirror / main: pieces faces px_drawn")
+# the CPU's part of a pass by the constants of tools/s2/perf_race.py (counted in the simulation of the race on the grid): the cull 25,000 + 126 a cell looked at + 150 a placement tested
+# + 110 a piece in view, 920 cycles a static piece and 6,300 a car's block handed on; at 74.25 MHz
+def cpu(r, p):
+    pieces, objb = float(r[p + "pieces"]), float(r[p + "obj_blocks"])
+    cull = 25000 + 126 * float(r[p + "cells"]) + 150 * float(r[p + "tested"]) + 110 * float(r[p + "visible"])
+    return (cull + 920 * (pieces - objb) + 6300 * objb) / 74250.0
+print("what the mirror's pass adds to a frame of the race (tools/s2/mirrorstats.sh; the frames after step 200, one in 10, the game's driver driving all four cars)")
+print("track frames | main: pieces faces pixels | mirror: pieces faces pixels | mirror / main: pieces faces pixels | CPU ms (model): main, mirror")
 for n in sys.argv[2:]:
-    rows = list(csv.DictReader(open("%s/mirror_t%s.csv" % (st, n))))
-    rows = [r for r in rows if int(r["step"]) > 200]                  # (the grid holds the cars for the first 150 steps)
-    def m(k): return sum(int(r[k]) for r in rows) / max(len(rows), 1)
+    rows = [r for r in csv.DictReader(open("%s/mirror_t%s.csv" % (st, n))) if int(r["step"]) > 200]
+    def m(k): return sum(float(r[k]) for r in rows) / max(len(rows), 1)
     a = [m("pieces"), m("faces"), m("px_drawn")]
     b = [m("m_pieces"), m("m_faces"), m("m_px_drawn")]
-    print("%5s %6d | %7.1f %7.0f %8.0f | %7.1f %7.0f %8.0f | %5.2f %5.2f %5.2f" % (n, len(rows), a[0], a[1], a[2], b[0], b[1], b[2], b[0] / a[0], b[1] / a[1], b[2] / a[2]))
+    ca = sum(cpu(r, "") for r in rows) / len(rows)
+    cb = sum(cpu(r, "m_") for r in rows) / len(rows)
+    print("%5s %6d | %7.1f %7.0f %8.0f | %7.1f %7.0f %8.0f | %5.2f %5.2f %5.2f | %5.2f %5.2f" % (n, len(rows), a[0], a[1], a[2], b[0], b[1], b[2], b[0] / a[0], b[1] / a[1], b[2] / a[2], ca, cb))
 PY
