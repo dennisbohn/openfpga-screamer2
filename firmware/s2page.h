@@ -34,6 +34,9 @@ struct s2_page {
 
 /* Runs the page until key() returns a result, and returns it. The button that opened the page does not count as a press. */
 int s2page_run(const struct s2_page *p, void *self);
+/* The same with the fade out's step given in 1/32768 of the picture a frame instead of the whole picture over fade_out frames (0: as s2page_run): the CAR pages' (STARTL.EXE 0x514c1:
+   the palette's colours times 1 - level, the level 0 on the frame after the key and 0.08 more each frame) is 2621 with fade_out 13: 13 frames, the last at 0.04 of the colours */
+int s2page_run_step(const struct s2_page *p, void *self, int fade_step);
 
 /* The keys with repeat for a loop of your own (the race's pause menu uses the runner; the start menu has its own copy): the state
    starts at the buttons held now */
