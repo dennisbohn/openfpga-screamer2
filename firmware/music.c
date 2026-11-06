@@ -17,7 +17,8 @@
 #define SECTOR      2352u
 #define MAX_TRACKS  99
 #define PRIME       0x18000u                /* the mixer starts when this many bytes are in the ring: 3 reads, 0.55 s of music */
-#define KEEP        (CPU_HZ * 3 / 5)        /* cycles of song a blocking read must leave in the ring when it is done: 0.6 s, for the CPU's work after it before the page looks after the ring */
+#define KEEP        (CPU_HZ * 3 / 10)       /* cycles of song a blocking read must leave in the ring besides what it and the work on its bytes take: 0.3 s, six frames' work */
+#define UNSERVED    (CPU_HZ / 2)            /* cycles a song may go without music_frame() while blocking calls follow each other (a load made of many reads): 0.5 s, the work after the last of them is on top */
 #define FRAME_CYCLES (CPU_HZ / 44100)       /* cycles a ring frame plays for (the CD's 44,100 a second) */
 #define READ_CYCLES 100u                    /* cycles a byte of a slot read may take: 0.74 MB/s, below anything measured (2.4 MB in 2.1 s on the Pocket, 32 KB in 25 ms) */
 
@@ -407,11 +408,15 @@ int music_active(void)
 }
 
 /* Every blocking call of the data slot (slot.c) comes here first. The slot does one read at a time, so the ring's own read running is
-   waited for (a few ms) and taken. A song that plays is held when the call (its estimated time, READ_CYCLES a byte) would leave less than
-   KEEP of song in the ring: the lead is the live one (what is written less what the mixer has played), 1.2 s at the most right after
-   music_frame(), 0.55 s right after a start. When the ring runs dry the mixer plays the old ring again; that is what this prevents. A song
-   held goes on from where it was at the next music_frame() (music_resume). While it is only starting nothing is played and a long read only
-   delays it. len: the bytes the call reads (0: a look-up), SLOT_REST counts as long. */
+   waited for (a few ms) and taken. A song that plays is held when the ring would not outlast the call: its estimated time (READ_CYCLES a
+   byte) and the CPU's work on the bytes after it (as long again, the Pocket's logs: a room's or a track's build takes as long as its reads;
+   the estimate is slower than the APF, which covers it) and KEEP besides. The lead is the live one (what is written less what the mixer has
+   played): 1.2 to 1.45 s right after music_frame(), 0.55 s right after a start, so a picture or a sprite sheet (64 KB, 90 ms) passes
+   always and a container of 0.4 MB only on a full ring. When the ring runs dry the mixer plays the old ring again; that is what this
+   prevents. A chain of calls that each pass (the 64 KB chunks of a ZIP's entry with the inflating between them) is held when UNSERVED
+   has gone by since music_frame(): the work after the last call, a build of the options room, must find the ring with 0.7 s in it
+   at the least or the song held. A song held goes on from where it was at the next music_frame() (music_resume). While it is only starting nothing is
+   played and a long read only delays it. len: the bytes the call reads (0: a look-up), SLOT_REST counts as long. */
 static void slot_guard(uint32_t len)
 {
     if (!playing) return;
@@ -420,7 +425,8 @@ static void slot_guard(uint32_t len)
     uint32_t p = AU_MUSIC & 0xFFFF;
     int32_t ahead = (int32_t)(written - (played + ((p - place) & 0xFFFF)));     /* the frames the mixer has not played yet */
     uint32_t lead = ahead > 0 ? (uint32_t)ahead * FRAME_CYCLES : 0;
-    if (rdcycle() - served >= CPU_HZ || lead <= KEEP || (lead - KEEP) / READ_CYCLES < len) {
+    uint64_t need = KEEP + (uint64_t)len * READ_CYCLES * 17 / 10;
+    if (rdcycle() - served >= UNSERVED || lead < need) {
         held_at = rdcycle();
         holds++;
         music_pause();
