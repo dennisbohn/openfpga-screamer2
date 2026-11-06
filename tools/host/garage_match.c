@@ -265,6 +265,31 @@ static void camera_test(void)
     printf("\nshadows (the firmware's, from the camera of the frame before, against the game's records): %d of %d equal\n", sh_ok, sh_n);
 }
 
+/* a negative control: the cars' state's states followed by one step of the firmware's camera, with the swing's phase right and with it 0.02 off (the camera's height is the swing's:
+   the check must tell a camera that is not the game's) */
+static void camera_control(void)
+{
+    int right = 0, wrong = 0, n = 0;
+    for (int i = 0; i + 1 < nrows && n < 1500; i++) {
+        const struct row *r = &rows[i];
+        if (r->page != 0 || r->state != 0 || r->dt < 19500 || r->dt > 20500 || r->sway == 0 || rows[i + 1].page != 0 || rows[i + 1].chosen != r->chosen) continue;
+        n++;
+        for (int bad = 0; bad < 2; bad++) {
+            struct s2garage_cam c = cam_of(r);
+            if (bad) c.phase += 0.02f;
+            s2garage_set(r->chosen, &c);
+            s2garage_car_step(0);
+            for (int k = i + 1; k <= i + 3 && k < nrows; k++)
+                if (rows[k].page == 0 && same(&rows[k], s2garage_camera())) {
+                    if (bad) wrong++;
+                    else right++;
+                    break;
+                }
+        }
+    }
+    printf("negative control: of %d states of the cars' state one step of the firmware's camera reaches a recorded state in %d; with the swing's phase 0.02 off, in %d\n", n, right, wrong);
+}
+
 /* ------------------------------------------------------------------------------------------------ the picture */
 
 static uint8_t shot_idx[S2G_PIC_BYTES], mine[S2G_PIC_BYTES];
@@ -393,6 +418,7 @@ int main(int argc, char **argv)
     if (!read_rows(argv[2])) { perror(argv[2]); return 1; }
     printf("%d recorded states, %d screenshots\n", nrows, nshots);
     camera_test();
+    camera_control();
 
     const char *only = getenv("ONLY"), *dump_name = getenv("DUMP");
     if (only && !*only) only = 0;
