@@ -216,5 +216,7 @@ extern void (*s2car_sparks)(const float at[3], const float dir[3], float hit, in
 int s2car_wall_near(int x, int z, int *wx, int *wz, float *angle);
 int s2car_road_near(int x, int z, float *heading);
 float s2car_ang_diff(float a, float b);
+/* 0x1016b: the angle *v eased towards target the short way round by row `row` of the game's easing table (0x50: 0.9, 0x3c: 0.8; the chase camera's, the view NEAR's), kept in 0 .. 2 pi */
+void s2car_ease_angle(float *v, float target, int row);
 float s2car_ground_angle(float x, float z);
 void s2car_turn_up(int32_t out[3], const int32_t in[3], float angle);
