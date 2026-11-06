@@ -70,7 +70,7 @@ PC (`build/check/screens/*.png`).
 ## Viewer (milestone 2)
 
 After the files screen (a LOADING screen while all is in order, the list of the files with what is wrong otherwise) the core goes on by itself once the read test passed: the viewer puts the original's
-LOADING picture up as soon as the toolkit can draw it and starts with the intro, the attract sequence (any button ends it), and then the menu (next section). The viewer's ride, which the simulation (`SIM_*`) runs for timing, loads a track and shows it from the game's near chase camera over a car that drives
+LOADING picture up as soon as the toolkit can draw it and starts with the intro, the attract sequence (any button ends it), and then the menu (next section). The simulation has no menus, so `tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_INTRO=1 TAG=intro` builds a variant that runs the intro there on track 1's image (`tools/s2/sim_race.sh build/sim/<dir> build/s2/track1.bin 1 600 <name>`): the LOADING picture after 31 ms, the track built in 0.7 s, the logos, then the title over the England race under the trackside cameras with the four computer cars (the last frame shows "SCREAMER 2" and "COPYRIGHT 1996"), no trap, the stack 5,360 bytes. The viewer's ride, which the simulation (`SIM_*`) runs for timing, loads a track and shows it from the game's near chase camera over a car that drives
 the road at 150 km/h in a loop, with the player's car and three more ahead (`firmware/viewer.c`, `firmware/road.c`); the menu has no way to it. Frames go through the
 hardware path (geometry unit, setup unit, rasterizer, blitter) with the original's level of detail at
 DETAIL HIGH (`track_lod_level()`: placed meshes switch at 6,000 and 9,000 units, cars at 2,000 and 6,000;

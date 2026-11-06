@@ -1191,21 +1191,25 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     dlog_str("viewer: start\n");
     s2menu_init(z);
     s2menu_load(&cfg);
-#ifdef S2_SIM_END
-    ui_ready = s2gfx_init(z);                           /* (the measurement build of the end screen has the toolkit in the simulation) */
+#if defined(S2_SIM_END) || defined(S2_SIM_INTRO)
+    ui_ready = s2gfx_init(z);                           /* (the measurement builds of the end screen and of the intro have the toolkit in the simulation) */
 #else
     ui_ready = !sim && s2gfx_init(z);                   /* (the simulation has no menus) */
 #endif
+#ifdef S2_SIM_INTRO
+    int intro = ui_ready;                               /* (the measurement build of the intro: tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_INTRO=1 TAG=intro runs it in the simulation, on track 1's image) */
+#else
     int intro = !sim && ui_ready;                       /* the program starts with the intro (the attract sequence), then the menu */
+#endif
     if (intro) s2load_show_kind(S2S_KINDS, s2att_track(), 1);     /* the LOADING picture of the intro's track, up as soon as the toolkit can draw it: it stays through the rest of the start-up and the track's build, visit() fades it out */
     s2snd_init(z);
     s2hud_init(z);                                      /* the race screen (the simulation has it: its cost is measured there) */
     for (;;) {
+        if (intro) {                                    /* the intro: any button ends it, the menu follows (on a first start TEAM SELECTION first) */
+            intro = 0;
+            attract_run(z, &cars, 1);
+        }
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
-            if (intro) {                                /* the intro: any button ends it, the menu follows (on a first start TEAM SELECTION first) */
-                intro = 0;
-                attract_run(z, &cars, 1);
-            }
             int go = s2menu_run(&cfg);
             if (go == S2M_CHAMP) {                      /* the championship needs the toolkit's pages; without it the row does nothing */
                 if (ui_ready) league_run(z, &cars, &overlay);
