@@ -260,13 +260,6 @@ static int desk_car(struct zip *z, int team, int car)
     return 1;
 }
 
-static void log_ms(const char *what, uint32_t cycles)
-{
-    dlog_str(what);
-    dlog_dec((int32_t)(cycles / (CPU_HZ / 1000)));
-    dlog_str(" ms");
-}
-
 /* The scene in memory: the team's map built as a room (track_build_s2 with no cars), the paths and the car. 1, or 0 and the log says which file. */
 static int desk_load(struct zip *z, const struct s2room_mem *m, int scene, int team, int car)
 {
@@ -275,9 +268,10 @@ static int desk_load(struct zip *z, const struct s2room_mem *m, int scene, int t
     char path[24] = "ANIMS/SCENE011.DAT";                  /* (scene<nn><resolution>: nn the two digits at 11 and 12) */
     path[12] = (char)('0' + scene);
     if (!s2scene_open(z, &scene_c, path)) {
+        const struct zip_entry *ze = zip_find(z, path);
         dlog_str("desk: ");
         dlog_str(path);
-        dlog_str(" is not in the ZIP\n");
+        dlog_str(ze && ze->method != 0 ? " is deflated: only a stored entry can be read by range, the desk scene is left out\n" : " is not in the ZIP\n");
         return 0;
     }
     struct dat_entry dp, dt;
@@ -314,20 +308,23 @@ static int desk_load(struct zip *z, const struct s2room_mem *m, int scene, int t
         dlog_str("desk: the car could not be read\n");
         return 0;
     }
-    dlog_str("desk: scene ");
+    dlog_str("desk: S");                                /* (short: the log is 4 KB) */
     dlog_dec(scene);
     dlog_str(" T");
     dlog_dec(team);
-    dlog_str(" car ");
+    dlog_str(" c");
     dlog_dec(car);
     dlog_char(' ');
     dlog_dec((int32_t)size);
-    dlog_str(" bytes read, image ");
+    dlog_str(" B read, image ");
     dlog_dec((int32_t)image);
-    log_ms(": read ", t1 - t0);
-    log_ms(", built ", t2 - t1);
-    log_ms(", car ", rdcycle() - t2);
-    dlog_char('\n');
+    dlog_str(": read ");
+    dlog_dec((int32_t)((t1 - t0) / (CPU_HZ / 1000)));
+    dlog_str(", build ");
+    dlog_dec((int32_t)((t2 - t1) / (CPU_HZ / 1000)));
+    dlog_str(", car ");
+    dlog_dec((int32_t)((rdcycle() - t2) / (CPU_HZ / 1000)));
+    dlog_str(" ms\n");
     return 1;
 }
 
