@@ -1,6 +1,8 @@
 """The original's views from the car in DOSBox (docs/screamer2/hud.md "The views from the car"): the camera record and the player's car frame by frame, and raw screenshots.
 
-Usage: python -I tools/s2/dosbox_cockpit.py <track 1..7> [seconds of race, default 26]      (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2")
+Usage: python -I tools/s2/dosbox_cockpit.py <track 1..7> [seconds of race, default 26 [team car]]      (Windows; $GAME_DIR, default "C:/GOG Games/Screamer 2")
+       team 0 .. 3 and car 0 .. 4 (4 the team's bonus car, all four open) choose the player's car; default the first team's second car (dashboard model 1); the files are then named
+       cockpit_t<track>_c<team><car>...
 
 Starts STARTL.EXE in the game folder's own DOSBox on the private copy of the game folder of tools/s2/dosbox_arcade.py (build/dosgame, never linked) and types its way to an ARCADE race
 on the track (tools/s2/dosbox_race_s2.py: the first team's second car, the name MIL), then, by the race's clock, presses the keys of the views (F1 INCAR, F2 INSIDE, F3 NEAR, F4 BACK, M
@@ -106,8 +108,12 @@ def ours(p, pid):
 def main():
     track = int(sys.argv[1])
     seconds = float(sys.argv[2]) if len(sys.argv) > 2 else 26.0
+    team, car = (int(sys.argv[3]), int(sys.argv[4])) if len(sys.argv) > 4 else (0, 1)
     os.makedirs(out, exist_ok=True)
     dr.out = out
+    if (team, car) != (0, 1):                                   # (dosbox_race_s2.start() makes the private folder for the first team's second car: another car, with every bonus car open)
+        make = da.make_private
+        da.make_private = lambda extra, **choice: make(extra, **dict(choice, team=team, car=car, cars5=True))
     p, mem = dr.start(track, seconds)
     pid = p.pid
     da.keyed_pid = pid
@@ -115,7 +121,8 @@ def main():
     ok = mem.wait(lambda: mem.word(0x130D10) == 1 and mem.word(0x130C48) == 4 and f32(g.flat(0x13335C, 4)) < 1.0, 200)
     if not ok:
         sys.exit("the race did not start")
-    name = lambda what: os.path.join(out, "cockpit_t%d.%s" % (track, what))
+    tag = "t%d" % track if (team, car) == (0, 1) else "t%d_c%d%d" % (track, team, car)
+    name = lambda what: os.path.join(out, "cockpit_%s.%s" % (tag, what))
     open(name("crusc.bin"), "wb").write(g.flat(0x1242B4, 8 * 0x58))
     lo, hi = g.objs[3]
     open(name("data.bin"), "wb").write(g.flat(lo, hi - lo))
@@ -152,8 +159,8 @@ def main():
     shot_log = [l for l in log if l[0] == "s"]
     with open(name("shots.txt"), "w") as fh:
         for i, f in enumerate(pngs):
-            os.replace(f, name("%02d.png" % i).replace("cockpit_t%d." % track, "cockpit_t%d_" % track))
-            fh.write("cockpit_t%d_%02d.png %s\n" % (track, i, shot_log[i] if i < len(shot_log) else "?"))
+            os.replace(f, name("%02d.png" % i).replace("cockpit_%s." % tag, "cockpit_%s_" % tag))
+            fh.write("cockpit_%s_%02d.png %s\n" % (tag, i, shot_log[i] if i < len(shot_log) else "?"))
         fh.write("# keys\n" + "\n".join(l for l in log if l[0] == "k") + "\n")
     print("%d frames written (%d bytes each), race clock to %.2f s, %d screenshots of %d asked" % (s.frames, FRAME, s.clock, len(pngs), shots))
     p.kill()

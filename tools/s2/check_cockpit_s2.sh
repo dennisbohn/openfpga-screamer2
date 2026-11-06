@@ -32,7 +32,9 @@ LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c s
 rec=/b/check/dosbox_cockpit/cockpit_t1.bin
 crusc=/b/check/dosbox_cockpit/cockpit_t1.crusc.bin
 args="/b/s2/cockpit"
-[ -f "$root/build/check/dosbox_cockpit/cockpit_t1.bin" ] && args="$args $rec $crusc"
+[ -f "$root/build/check/dosbox_cockpit/cockpit_t1.bin" ] && args="$args $rec $crusc 1"
+d=/b/check/dosbox_cockpit
+[ -f "$root/build/check/dosbox_cockpit/cockpit_t4_c24.bin" ] && args="$args $d/cockpit_t4_c24.bin $d/cockpit_t4_c24.crusc.bin 6"
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -e S2_GAME=/game -v "$mount:/b" --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2/cockpitsrc && gcc -O2 -g -w -fsanitize=address,undefined -fno-sanitize-recover -o ../check_cockpit_s2 check_cockpit_s2.c $LIST -lm &&
     cd /b/s2 && ./check_cockpit_s2 $args"
@@ -41,10 +43,12 @@ if MSYS_NO_PATHCONV=1 docker run --rm -e NEGATIVE=1 -e ASAN_OPTIONS=detect_leaks
     echo "NEGATIVE CONTROL PASSED: the checks do not check"; exit 1
 fi
 tail -1 "$work/negative.txt"
-if [ -f "$root/build/check/dosbox_cockpit/cockpit_t1.shots.txt" ]; then
-    "$py" -I "$root/tools/s2/check_cockpit_shots.py" "$game" "$root/build/check/dosbox_cockpit" 1
-    if NEGATIVE=1 "$py" -I "$root/tools/s2/check_cockpit_shots.py" "$game" "$root/build/check/dosbox_cockpit" 1 > "$work/negative_shots.txt"; then
+for rt in "t1 1" "t4_c24 6"; do
+    set -- $rt
+    [ -f "$root/build/check/dosbox_cockpit/cockpit_$1.shots.txt" ] || continue
+    "$py" -I "$root/tools/s2/check_cockpit_shots.py" "$game" "$root/build/check/dosbox_cockpit" $1 $2
+    if NEGATIVE=1 "$py" -I "$root/tools/s2/check_cockpit_shots.py" "$game" "$root/build/check/dosbox_cockpit" $1 $2 > "$work/negative_shots.txt"; then
         echo "NEGATIVE CONTROL OF THE SCREENSHOTS PASSED: the checks do not check"; exit 1
     fi
     echo "the screenshots' negative control (a needle at the wrong part) fails: $(grep -c FAIL "$work/negative_shots.txt") shots"
-fi
+done

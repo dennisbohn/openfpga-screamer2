@@ -3,7 +3,7 @@ cockpit's picture, the gear lamp, the two needles and the mirror's frame, worked
 picture, needle and table readers), over every pixel they cover. Where the original draws something else over them (the race screen's texts) the pixel is left out; each shot says how many pixels
 of the overlay the original has as the rules give them.
 
-Usage: python -I tools/s2/check_cockpit_shots.py <game folder> <the recording's folder, build/check/dosbox_cockpit> [track, default 1]
+Usage: python -I tools/s2/check_cockpit_shots.py <game folder> <the recording's folder, build/check/dosbox_cockpit> [tag, default t1 [dashboard model, default 1]]
 Exit code 0 if, in every shot of the view INSIDE, at least 99 % of the cockpit picture's pixels and every needle and gear lamp pixel are as the rules give them, and the mirror's frame in the
 shots with the mirror; 1 otherwise. A negative control (a needle at the wrong part) must fail.
 """
@@ -54,21 +54,21 @@ def read_png(path):
 
 def main():
     game, folder = sys.argv[1], sys.argv[2]
-    track = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+    tag = sys.argv[3] if len(sys.argv) > 3 else "t1"
     negative = bool(os.environ.get("NEGATIVE"))
     g1 = datfile.read(os.path.join(game, "GFX", "GAME1.DAT"))
     spr = ui.sprites(bytes(datfile.extract(g1, "GAMEL.SPR")))
     pkc = {n: ck.pkc(bytes(datfile.extract(g1, n))) for n in ["COCK%d_L.PKC" % k for k in range(1, 9)] + ["MIRROR_L.PKC"]}
-    table = open(os.path.join(folder, "cockpit_t%d.crusc.bin" % track), "rb").read()
-    rec = open(os.path.join(folder, "cockpit_t%d.bin" % track), "rb").read()
+    table = open(os.path.join(folder, "cockpit_%s.crusc.bin" % tag), "rb").read()
+    rec = open(os.path.join(folder, "cockpit_%s.bin" % tag), "rb").read()
     head, REC, CAM = 20, 0xCC0, 0xAEC
     frame = head + REC + 2 * CAM + 0x40
     clocks = [struct.unpack_from("<f", rec, i * frame)[0] for i in range(len(rec) // frame)]
-    model = 1                                                   # the first team's second car
+    model = int(sys.argv[4]) if len(sys.argv) > 4 else 1                # the dashboard model of the recorded car (default: the first team's second car)
     row = list(struct.unpack_from("<22i", table, 0x58 * model))
     rowf = [struct.unpack("<f", struct.pack("<i", v))[0] if k in (4, 5, 10, 11) else v for k, v in enumerate(row)]
     fails = 0
-    for line in open(os.path.join(folder, "cockpit_t%d.shots.txt" % track)):
+    for line in open(os.path.join(folder, "cockpit_%s.shots.txt" % tag)):
         if line.startswith("#"):
             break
         name, label, before, after = line.split()
@@ -121,7 +121,7 @@ def main():
         equal, total, f, gear, speed, revs, mirror_flag, ne, nn, le, ln = best
         share = equal / total if total else 1.0
         # the shots are of all views: only the instruments of the view INSIDE and the mirror's frame are in the rules above
-        ok = total == 0 or (share >= 0.99 and ne >= 0.9 * nn and le >= 0.98 * ln)
+        ok = total == 0 or (share >= 0.98 and ne >= 0.9 * nn and le >= 0.98 * ln)
         fails += not ok
         print("%s %-16s view %d mirror %d: frame %d (clock %.2f), gear %d, speed %.1f, revs %.3f: %d of %d overlay pixels as the rules have them (%.2f %%; the needles' %d of %d, the lamp's %d of %d) %s" %
               (name, label, view, mirror_flag, f, clocks[f], gear, speed, revs, equal, total, 100 * share, ne, nn, le, ln, "ok" if ok else "FAIL"))

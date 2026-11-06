@@ -5,7 +5,7 @@
  * Built and run by tools/s2/check_cockpit_s2.sh. NEGATIVE=1 changes what the firmware is asked (a needle at the wrong part, a box shifted, a camera of the wrong view): every
  * check must then fail. Not part of the firmware.
  *
- * Usage: check_cockpit_s2 <work folder> [recording.bin crusc.bin]
+ * Usage: check_cockpit_s2 <work folder> [recording.bin crusc.bin model]...      (model: the recorded car's dashboard, 0 .. 3 a team's cars, 4 .. 7 the bonus cars)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,7 +153,7 @@ static float wrap(float d)
     return d;
 }
 
-static void cameras(const char *recfile, const char *crusc_file)
+static void cameras(const char *recfile, const char *crusc_file, int model)
 {
     size_t total, csize;
     FILE *probe = fopen(recfile, "rb");
@@ -168,7 +168,7 @@ static void cameras(const char *recfile, const char *crusc_file)
     static struct s2car_state st;
     struct s2ck_state k;
     s2ck_reset(&k);
-    int body = 0, body_seen = 0, last_view = -1, model = 1;
+    int body = 0, body_seen = 0, last_view = -1;
     long changes = 0;
     for(long fr = 0; fr < frames; fr++) {
         const uint8_t *r = data + fr * FRAME, *car = r + HEAD, *cam = car + REC, *cam2 = cam + CAMSZ;
@@ -222,7 +222,7 @@ static void cameras(const char *recfile, const char *crusc_file)
                (double)v[view].worst[0], (double)v[view].worst[1], (double)v[view].worst[2], (double)v[view].worst[3], (double)v[view].worst[4], (double)v[view].worst[5],
                v[view].rows_bad ? "DIFFER" : "equal");
     }
-    printf("cameras: %ld frames recorded, the body's height (record +0x218) %d, %ld view changes\n", frames, body, changes);
+    printf("cameras of %s (dashboard model %d): %ld frames recorded, the body's height (record +0x218) %d, %ld view changes\n", recfile, model, frames, body, changes);
     free(data);
     free(cr);
 }
@@ -237,7 +237,7 @@ int main(int argc, char **argv)
     const struct s2_pick p[4] = { { 1, 1 }, { 2, 4 }, { 3, 5 }, { 4, 5 } };
     CHECK(s2ck_model(&p[0]) == 0 && s2ck_model(&p[1]) == 3 && s2ck_model(&p[2]) == 6 && s2ck_model(&p[3]) == 7, "the dashboard of a car and of a bonus car");
     CHECK(s2ck_rows(S2CK_INCAR, 0) == 200 && s2ck_rows(S2CK_BACK, 0) == 200 && s2ck_rows(S2CK_MIRROR, 0) == 35, "the scene's rows");
-    if(argc > 3) cameras(argv[2], argv[3]);
+    for(int a = 2; a + 2 < argc; a += 3) cameras(argv[a], argv[a + 1], atoi(argv[a + 2]));
     printf("%d checks, %d failed%s\n", checks, fails, negative ? " (the negative control: they are meant to fail)" : "");
     return fails ? 1 : 0;
 }
