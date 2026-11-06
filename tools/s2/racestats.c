@@ -6,6 +6,9 @@
  * plus the race (step, the player's node on the line, speed, the cars' places).
  * Built and run by tools/s2/racestats.sh. Not part of the firmware.
  *
+ * ATTRACT=1 (menus row 9): the attract race instead: nobody drives car 0 (race_attract: every car the game's driver's), the scene seen from the replay's trackside cameras
+ * (s2cam.c, the ten-second rotation of the car followed) instead of the physics' chase camera; the columns px.. are car 0's as before.
+ *
  * Usage: racestats <track image> <label> <out.csv> <steps> <every> [track]
  *   track  1 .. 7, default the last digit of the image's file name
  * Needs the game's files for the physics: S2_GAME=<game folder> (racestats.sh mounts it).
@@ -23,6 +26,7 @@
 #include "s2car.h"
 #include "race.h"
 #include "perf.h"
+#include "s2cam.h"
 
 #define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as the viewer */
 
@@ -57,11 +61,17 @@ int main(int argc, char **argv)
     if (argc > 6) tn = atoi(argv[6]);
     int steps = atoi(argv[4]), every = atoi(argv[5]);
     if (every < 1) every = 1;
+    const int attract = getenv("ATTRACT") != 0;
+    race_attract = attract;
     if (!race_init(tn, road_floor() - 3000.0f)) { fprintf(stderr, "race_init failed\n"); return 1; }
     struct s2car_state *p = race_car(0);
     float forever = 1e9f;
-    p->rec[0x4c / 4] |= 1;                              /* the game's driver drives the player's car too */
-    memcpy(&p->rec[1], &forever, 4);
+    if (attract) {
+        s2cam_begin(tn, S2CAM_TRACKSIDE);
+    } else {
+        p->rec[0x4c / 4] |= 1;                          /* the game's driver drives the player's car too */
+        memcpy(&p->rec[1], &forever, 4);
+    }
     FILE *out = fopen(argv[3], "w");
     if (!out) { perror(argv[3]); return 1; }
     FILE *pcs = 0;                                      /* PIECES=<file>: every piece of every frame (the pipeline model) */
@@ -79,6 +89,10 @@ int main(int argc, char **argv)
         struct s2car_state *rc[RACE_CARS];
         for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
         int nobj = road_race_scene(rc, race_cars(), &cam, objs);
+        if (attract) {
+            s2cam_attract_tick(race_get_clock(), 0.02f * (float)every);
+            s2cam_frame((const struct s2car_state *const *)rc, race_cars(), 0.02f * (float)every, &cam);
+        }
         const struct rs_clip clip = { 0, 0, FB_W, FB_H };
         struct track_stats ts;
         memset(&ts, 0, sizeof ts);

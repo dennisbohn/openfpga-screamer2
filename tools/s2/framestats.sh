@@ -8,6 +8,7 @@
 #       the frames along the road, see framestats.c
 #   tools/s2/framestats.sh race <track image> <label> <out.csv> <steps> <every> [track]
 #       a race on the PC (the game's driver drives all four cars), a frame every <every> steps, see racestats.c
+#       ATTRACT=1: the attract race instead (nobody drives car 0, the replay's trackside cameras: menus row 9)
 #       (needs the game's folder for the physics: GAME_DIR, default C:/GOG Games/Screamer 2;
 #       PIECES=<file>: also every piece of every frame with the counters it added, for the pipeline model)
 # The firmware is never changed; the counters live in the copies. Game data only under build/.
@@ -49,7 +50,7 @@ PY
     python -I "$root/tools/s2/perf_patch.py" "$src"
     docker_sh -v "$mount:/b" --entrypoint sh $img -c "
         cd /b/stats/src_s2 && gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../framestats_s2 framestats.c perf.c $LIST -lm &&
-        gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../racestats_s2 racestats.c perf.c $LIST race.c s2ghost.c -lm"
+        gcc -O2 -w -include perf.h -DRS_TRACE ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../racestats_s2 racestats.c perf.c $LIST race.c s2ghost.c s2cam.c -lm"
     ;;
 sweep)
     v=$1; image=$2; label=$3; out=$4; step=$5; cars=$6; grid=$7
@@ -62,7 +63,7 @@ race)
     cp "$image" "$st/$(basename "$image")"
     game=${GAME_DIR:-C:/GOG Games/Screamer 2}
     if command -v cygpath >/dev/null 2>&1; then game_mount=$(cygpath -wa "$game"); else game_mount=$game; fi
-    docker_sh -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game ${PIECES:+-e PIECES=$(basename "$PIECES")} --entrypoint sh $img -c "cd /b/stats && ./racestats_s2 $(basename "$image") $label $(basename "$out") $steps $every $tn"
+    docker_sh -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game ${ATTRACT:+-e ATTRACT=1} ${PIECES:+-e PIECES=$(basename "$PIECES")} --entrypoint sh $img -c "cd /b/stats && ./racestats_s2 $(basename "$image") $label $(basename "$out") $steps $every $tn"
     mv "$st/$(basename "$out")" "$out"
     [ -z "$PIECES" ] || mv "$st/$(basename "$PIECES")" "$PIECES"
     ;;
