@@ -99,6 +99,10 @@ int race_others_slice(void);
    second), 0 if none: the sound's knock (s2snd.h). */
 float race_knock_take(void);
 
+/* Called at the end of each step of the race (the game's 0x2b9b1 after its race frame) with the n cars and whether only the player's car counts (time attack, the free run), if set:
+   the obstacles and the sparks of s2props.h are run from it, so that they are the race's function as the cars are. */
+extern void (*race_step_hook)(struct s2car_state *cars, int n, int attack);
+
 /* The cars: 0 is the player's. The state stays where it is until the next race_step / race_init. */
 struct s2car_state *race_car(int i);
 int race_cars(void);

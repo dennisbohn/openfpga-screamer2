@@ -19,7 +19,11 @@
  *                           the animated scenery (firmware/s2anim.h; the game's folder $S2_GAME) at the race clock, the player at px, py in lap `lap`, seen from the free
  *                           camera x, y, h, yaw, pitch, roll (the original's camera record's +0x48 .. +0x5c); show 0: the rows' objects left out. Also <prefix><k>.idx,
  *                           the picture as palette indices (320 x 200 bytes)
- *           @<file>         the cameras listed in a text file, one to a line (a command line has its limits)
+ *           p<steps>,<i>,<behind>,<up>[,<yaw>]
+                           the obstacles and sparks (firmware/s2props.h; the game's folder $S2_GAME) after the race (the game's driver driving all four cars) has run `steps` steps
+                           with them (0: as they stand), seen from `behind` units behind obstacle i as it stood (along its heading, or the heading yaw given) and `up` above it,
+                           looking at it; the four cars are drawn too. Also <prefix><k>.idx
+           @<file>         the cameras listed in a text file, one to a line (a command line has its limits)
  * Writes <prefix><k>.rgb (320 x 200 x 3) per camera and prints what the renderer reports. Every run also checks the car models' wheels
  * (check_models) and the cars' look: brake lights, wheels' blur, damage marks (check_looks); the exit code is 3 if one fails.
  */
@@ -37,6 +41,7 @@
 #include "race.h"
 #include "car.h"
 #include "s2anim.h"
+#include "s2props.h"
 #include "dat.h"
 #include "s2env.h"
 
@@ -426,7 +431,7 @@ int main(int argc, char **argv)
 
     for (int a = 3; a < argc; a++) {
         struct track_cam cam;
-        static struct track_object objs[ROAD_CARS + S2ANIM_OBJECTS];
+        static struct track_object objs[ROAD_CARS + S2ANIM_OBJECTS + S2PROPS_MAX];
         int nobj = 0;
         if (argv[a][0] == 'a') {
             float clock, cx, cy, ch, yaw, pitch, roll;
@@ -456,6 +461,48 @@ int main(int argc, char **argv)
                     objs[k].make = scenery_without_rotors;
                 }
             cam = (struct track_cam){ cx, cy, ch, yaw, pitch, roll };
+        } else if (argv[a][0] == 'p') {
+            int steps, oi;
+            float behind, up, yaw_given = 1e9f;
+            if (sscanf(argv[a] + 1, "%d,%d,%f,%f,%f", &steps, &oi, &behind, &up, &yaw_given) < 4) { fprintf(stderr, "bad camera %s\n", argv[a]); return 2; }
+            char name[64];
+            uint32_t gn, dn;
+            snprintf(name, sizeof name, "GFX/MAP%dH01.DAT", tn);
+            uint8_t *gfx = game_file(name, &gn);
+            snprintf(name, sizeof name, "DATA/MAP%d.DAT", tn);
+            uint8_t *data = game_file(name, &dn);
+            static uint8_t scratch[65536] __attribute__((aligned(4)));
+            printf("obstacles: %d\n", s2props_load(tn, gfx, gn, data, dn, misc_delta(gfx, gn), scratch, sizeof scratch));
+            if (!race_init(tn, road_floor() - 3000.0f)) { fprintf(stderr, "race_init failed\n"); return 1; }
+            struct s2car_state *p = race_car(0);                 /* the game's driver drives the player's car too */
+            float forever = 1e9f;
+            p->rec[0x4c / 4] |= 1;
+            memcpy(&p->rec[1], &forever, 4);
+            s2props_begin();
+            struct s2props_rec r0;
+            s2props_get(0, oi < 0 ? 0 : oi, &r0);
+            for (int k = 0; k < steps; k++) {
+                struct s2car_input in = { 0 };
+                race_step(&in);
+            }
+            struct s2props_rec r;
+            if (oi < 0) {                                       /* -1: the first obstacle flying, else the first knocked */
+                oi = 0;
+                for (int i = s2props_obstacles(); i-- > 0;) {
+                    s2props_get(0, i, &r);
+                    if (r.on) { oi = i; break; }
+                    if (r.hit) oi = i;
+                }
+            }
+            s2props_get(0, oi, &r);
+            const float yaw = yaw_given < 1e8f ? yaw_given : r0.a[1];
+            cam = (struct track_cam){ r.p[0] - sinf(yaw) * behind, r.p[2] + cosf(yaw) * behind, r.p[1] + up, yaw, -atanf(up / (behind > 1.0f ? behind : 1.0f)), 0.0f };
+            struct s2car_state *rc[RACE_CARS];
+            for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
+            nobj = road_race_scene(rc, race_cars(), &cam, objs);
+            cam = (struct track_cam){ r.p[0] - sinf(yaw) * behind, r.p[2] + cosf(yaw) * behind, r.p[1] + up, yaw, -atanf(up / (behind > 1.0f ? behind : 1.0f)), 0.0f };
+            nobj += s2props_objects(&cam, objs + nobj, ROAD_CARS + S2ANIM_OBJECTS + S2PROPS_MAX - nobj);
+            printf("obstacle %d at %.0f %.0f %.0f angles %.3f %.3f %.3f (%s); %d objects\n", oi, r.p[0], r.p[1], r.p[2], r.a[0], r.a[1], r.a[2], r.on ? "flying" : r.hit ? "knocked" : "standing", nobj);
         } else if (argv[a][0] == 'v') {
             char *end;
             double s = strtod(argv[a] + 1, &end);

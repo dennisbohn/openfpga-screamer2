@@ -36,6 +36,7 @@
 #include "music.h"
 #include "s2hud.h"
 #include "s2fx.h"
+#include "s2props.h"
 #include "prof.h"
 #include <string.h>
 
@@ -213,6 +214,7 @@ static int load_track(struct zip *z, int n, const char **what)
         }
         image = size;
         s2anim_load(n, GFX_MEM, f.gfx_size, DATA_MEM, f.data_size, info.misc_delta, SCRATCH_MEM, SCRATCH_MAX);     /* the animated scenery: rows, paths and meshes, from the containers still there */
+        s2props_load(n, GFX_MEM, f.gfx_size, DATA_MEM, f.data_size, info.misc_delta, SCRATCH_MEM, SCRATCH_MAX);     /* the obstacles (cones, fences, chests, crates) and the sparks' meshes */
         while (!(MEM_STATUS & MEM_WRITES_IDLE))     /* (the meshes in the SDRAM for the geometry unit) */
             ;
     }
@@ -343,6 +345,7 @@ static int race_start(int n, float floor_z)
         dlog_str(" ms\n");
     }
     if (ok) s2anim_begin();                             /* the animated scenery at the start of its paths */
+    if (ok) s2props_begin();                            /* the obstacles standing, no sparks */
     if (ok) s2snd_race_start(n);                        /* (after the timing: the music's first fill takes 170 ms) */
     if (ok) s2hud_begin(n);
     if (ok) {                                           /* the camera: the player's chase camera, or in a replay the trackside cameras (0x2e1f3: a replay begins in view 1) */
@@ -692,9 +695,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
 
         /* the scene moves with real time: a video frame is 1/50 s whatever the frame took */
         struct track_cam cam;
-        static struct track_object objs[ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS];     /* the cars, in a race the shadows and the puffs (s2fx.h), then the track's animated scenery (s2anim.h) */
+        static struct track_object objs[ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX];     /* the cars, in a race the shadows and the puffs (s2fx.h), then the track's animated scenery (s2anim.h), the obstacles and the sparks (s2props.h) */
         _Static_assert(S2FX_CARS >= RACE_CARS, "s2fx.c keeps state for every car of the race");
-        _Static_assert(ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS <= TRACK_MAX_OBJS, "track.c draws TRACK_MAX_OBJS objects at most");
+        _Static_assert(ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX <= TRACK_MAX_OBJS, "track.c draws TRACK_MAX_OBJS objects at most");
         int nobj;
         uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
         uint32_t hud_steps = 1;                             /* the 20 ms steps this frame took, for the race screen's timers */
@@ -733,6 +736,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             }
             if (cam_mode) s2cam_frame((const struct s2car_state *const *)rc, race_cars(), (float)hud_steps * STEP_S, &cam);
             nobj += s2fx_objects(&cam, rc, race_cars(), objs + nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS - nobj);       /* (seen from the camera of this frame) */
+            nobj += s2props_objects(&cam, objs + nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - nobj);        /* (last: should the frame be over the limit, the cars and their effects stay) */
             PF_ADD(PF_SCENE, pf); PF_SET(pf);
             s2snd_frame(&cam);                          /* the race's sound (s2sound.h) */
             PF_ADD(PF_SOUND, pf);

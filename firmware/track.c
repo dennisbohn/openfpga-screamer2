@@ -518,6 +518,11 @@ int track_lod_level(float dist, int moving)
 #endif
 }
 
+float track_far(void)
+{
+    return far_z;
+}
+
 const uint32_t *track_palette(void)
 {
     return pal;
@@ -969,7 +974,7 @@ static inline int32_t depth_key(float d2)
 }
 
 /* the list drawn: key << 16 | i, i (the low half) a piece, or npieces + an object */
-#define MAX_OBJS    TRACK_MAX_OBJS      /* objects of a frame: the four cars, their shadows and puffs (s2fx.h: 68 at most), the animated scenery (s2anim.h: 16) */
+#define MAX_OBJS    TRACK_MAX_OBJS      /* objects of a frame: the four cars, their shadows and puffs (s2fx.h: 68 at most), the animated scenery (s2anim.h: 16), the obstacles and sparks (s2props.h: 124) */
 static int32_t vis[MAX_PIECES + MAX_OBJS];
 
 /* The faces of a block as the game takes them (0x834d6..0x83547): the camera in the block's

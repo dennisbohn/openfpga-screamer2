@@ -325,6 +325,19 @@ int s2_faces_onto(uint8_t *x, uint32_t size, int32_t delta)
     return 1;
 }
 
+uint32_t s2_mesh_load(const uint8_t *gfx, uint32_t gfx_size, const char *name, int32_t misc_delta, uint8_t *dst, uint32_t cap)
+{
+    char file[20];
+    struct dat_entry e;
+    uint32_t len = (uint32_t)strlen(name);
+    if(len > 11) return 0;
+    for(uint32_t i = 0; i < len; i++) file[i] = name[i] >= 'a' && name[i] <= 'z' ? (char)(name[i] - 32) : name[i];
+    memcpy(file + len, ".3DX", 5);
+    if(!dat_find(gfx, gfx_size, file, &e) || e.size < 0x100 || ((e.size + 3) & ~3u) > cap) return 0;
+    if(dat_extract(gfx, gfx_size, &e, dst, cap) != e.size) return 0;
+    return s2_faces_onto(dst, e.size, misc_delta) ? e.size : 0;     /* its faces onto the image's copy of MISC.MLB's records */
+}
+
 /* TRACK_DATA of MAPnDAT.DTR: the first eleven numbers ("d-50000": far plane, background rgb, background palette entry, asmoke rgb, a2smoke rgb) of the lines
    after it, comment lines (*) and empty ones left out; 1, or 0 if there are fewer */
 static int s2_track_data(const uint8_t *s, uint32_t size, int32_t v[11])

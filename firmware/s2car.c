@@ -51,6 +51,8 @@
 static float step_dt = DT;                  /* the step the passes before the touching cars' solver work with (the game's 0x133350): DT, or
                                                what is left of it after a touch (s2car_move_again) */
 
+void (*s2car_sparks)(const float at[3], const float dir[3], float hit, int set);
+
 union word { int32_t i; uint32_t u; float f; };
 typedef struct s2car_state car_t;
 #define W(o)    (((union word *)c->rec)[(o) >> 2])
@@ -496,6 +498,10 @@ static void against_wall(car_t *c, const struct corner_ground q[4])
     RF(0x4e0) += (float)RI(0x15c);
     if(fabsf(ang_diff(RF(0x160), RF(0x4e8))) > 1.5707963705f) RF(0x160) = ang_diff(RF(0x160), PI_F);
     int push = PUSH(hit);
+    if(s2car_sparks) {                              /* 0x2aeb9 (the wall's thirty): at the corner, thrown along (0, the push's up and z parts: the game's x is left 0), the car's speed in units a second */
+        const float at[3] = { RF(CORNER(hit)), RF(CORNER(hit) + 4), RF(CORNER(hit) + 8) }, dir[3] = { 0.0f, RF(push + 4), RF(push + 8) };
+        s2car_sparks(at, dir, RF(0x500) * 400000.0f / 3600.0f, 0);
+    }
     float P[3] = { RF(0x4d8), 0.0f, RF(0x4e0) };
     float D[3] = { sinf(RF(0x4e8)), 0.0f, -cosf(RF(0x4e8)) };
     float Q[3] = { (float)G.wall->x, (float)RI(0x4dc), (float)G.wall->y };
@@ -1222,6 +1228,30 @@ const struct s2_road_kind *s2car_road_kind(int id)
 {
     return kind_of(id);
 }
+
+int s2car_wall_near(int x, int z, int *wx, int *wz, float *angle)
+{
+    const int i = nearest(1, x, z);
+    if(i < 0) return 0;
+    *wx = G.walls[i].x;
+    *wz = G.walls[i].y;
+    *angle = G.walls[i].angle;
+    return 1;
+}
+
+int s2car_road_near(int x, int z, float *heading)
+{
+    const int i = nearest(0, x, z);
+    if(i < 0) return 0;
+    float a = G.dirs[i].angle;
+    if(a > TWO_PI_F) a += -TWO_PI_F;
+    *heading = a;
+    return 1;
+}
+
+float s2car_ang_diff(float a, float b) { return ang_diff(a, b); }
+float s2car_ground_angle(float x, float z) { return ground_angle(x, z); }
+void s2car_turn_up(int32_t out[3], const int32_t in[3], float angle) { turn_up(out, in, angle); }
 
 /* the reflection's picture by the kind of the ground under the fourth wheel (record +0x6b0): s2env.h */
 uint32_t s2car_reflection(const struct s2car_state *s, float *rate)

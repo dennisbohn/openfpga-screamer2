@@ -25,7 +25,7 @@ game's addresses (the comment at each routine in `s2car.c` names it):
 
 Left out of `s2car.c` because one car does not need them: the other cars (the solver 0x245a3, the outlines 0x22d35, 0x20a18),
 the driver of the computer's cars (0x17726), laps and the position along the road (0x153c6): these are in `race.c`
-(section "The race" below), `s2fx.c` (the wheel smoke and the shadows: docs/development.md "Wheel smoke and shadows"); cones, sparks and dust,
+(section "The race" below), `s2fx.c` (the wheel smoke and the shadows: docs/development.md "Wheel smoke and shadows"), `s2props.c` (the obstacles and the sparks of touches and wall knocks: "Obstacles and sparks"); the dust of the road kinds,
 sound, the road kind's look (0x1f1ef), the other camera views are not done. The car's damage takes power away, softens
 a spring and shows on the car (the marks of the four sides, "The cars' look" below).
 
@@ -191,7 +191,7 @@ touch then stays at the put-back place), after the walls and ground of every car
 step, for any two cars. 0x22d35 then pushes apart two cars that still overlap (a corner of one inside the other's outline: back along the line between the
 middles, the corners only; two cars both under speed 5 are turned away from each other). Only then the cars do what they do with the step's controls
 (`s2car_finish()`: the wheels' picture, the clocks, the engine, the throttle and the steering, and for a computer the driver, which therefore sees every car
-as the physics left it). Sparks and the sound's own call are not done; the player's touch is heard through `race_knock_take()` with the game's knock to the
+as the physics left it). The sparks of the touch are thrown by the solver (`s2car_sparks`, `s2props.c`); the sound's own call is not done: the player's touch is heard through `race_knock_take()` with the game's knock to the
 unit. The computers' steps are in slices for the viewer (`race_others_slice()`): each car's passes, the touch (in pieces: the solver, the walls again, a
 car's rest of the step each), each car's rest. The player's car has done all of its step before the first slice; where it is one of the two it is put back
 and its passes are run again with its newest controls and without its engine, wheels' picture and outputs being worked out again (one step's change).
@@ -328,7 +328,7 @@ car's move changes by more than 32 units from one frame to the next; the old cod
 
 **Approximated, or not done.** (a) The player's car does its whole step (`race_step_player()`) before the computers' first slice, so a touch that puts it back runs its
 passes again with the controls of the whole step and without its engine, wheels' picture and outputs worked out a second time (four touches of the set have the player
-in them: the errors are like the others). (b) The sparks. (c) The damage the knock does is scaled by the level as the game does; a wall's knock of the player's car is not
+in them: the errors are like the others). (b) The sparks are thrown from the touch as the game's `0x2aeb9` is called (the point, the mean of the two points' pushes, the knock), checked by running the firmware's step from the game's state before each batch of a recording (docs/development.md "Obstacles and sparks"). (c) The damage the knock does is scaled by the level as the game does; a wall's knock of the player's car is not
 (it has been scaled by 1, the rookie level's, at every level: with the level normal, the default, the game hurts it 2.5 times as much -- not changed here: the player's car).
 (d) The sums are float32: the reach of the driver's avoidance (the widths x 1.2, a double in the game) is worked out as 12 x the widths / 10 for the same rounding.
 
@@ -389,8 +389,8 @@ in each of the 68 intervals; the frame time is the same, 10.3 ms mean and 11.4 w
   what the check measures.
 - The pose of a tilted car (`s2car_look`) and the wheels' sign of turning have not been seen on a slope, and the camera
   of view 3 only in the numbers.
-- Not done: the road kind's effects on the look, the dust, the camera's other views, the sparks of a touch.
-- The race (section above): the sparks of a touch; the split times and
+- Not done: the road kind's effects on the look, the dust, the camera's other views.
+- The race (section above): the split times and
   "BEST LAP!" messages; the records (best times kept between races); the levels (pro / normal / rookie, `race_level`) and the number of laps (`race_laps`) and the player's team and car
   (`race_grid`) are set by the start menu (`firmware/s2menu.c`, docs/development.md "Start menu"); the computers' cars are the other three
   teams' cars of their own numbers; the game's end screen (REPLAY / RACE AGAIN / EXIT, the table of best times) is a text.

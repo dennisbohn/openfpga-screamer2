@@ -4,6 +4,7 @@
 #include "s2sound.h"
 #include "s2snd.h"
 #include "s2anim.h"
+#include "s2props.h"
 #include "s2car.h"
 #include "s2params.h"
 #include "race.h"
@@ -249,6 +250,7 @@ void s2snd_frame(const struct track_cam *cam)
         } else if (ground_before == 0 && p->on_ground > 0) {    /* from the air onto the ground (0x1bef1) */
             knock(S2SND_GROUND, 0);
         }
+        if (s2props_hit_take()) knock(S2SND_CRASH + 1, 5u);     /* the player's car knocked an obstacle (0x2a639 starts sample 0x10, the middle one of the crashes') */
         ground_before = p->on_ground;
     }
     struct race_hud h;

@@ -95,4 +95,5 @@ def main():
             write_ppm(f"{out}_{k}.ppm", v)
 
 
-main()
+if __name__ == "__main__":
+    main()

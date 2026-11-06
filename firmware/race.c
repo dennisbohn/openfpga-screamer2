@@ -561,6 +561,8 @@ static void places_and_pace(void)
     }
 }
 
+void (*race_step_hook)(struct s2car_state *cars, int n, int attack);
+
 /* ------------------------------------------------------------------------------------------------ cars touching */
 
 static float knock_max;                                 /* the hardest touch of the player's car since race_knock_take() */
@@ -761,6 +763,15 @@ static float touch_solver(void)
         rel[k] = (F(A, 0x544 + 0xc * corner + 4 * k) - bi) - bj;
     }
     const float knock = sqrtf(rel[1] * rel[1] + rel[0] * rel[0] + rel[2] * rel[2]);
+    if(s2car_sparks) {                                  /* 0x2aeb9, the cars' thirty: at the touch's point, thrown along the mean of the two points' pushes */
+        float mid[3];
+        const float si = d1 / (d0 + d1);
+        for(int k = 0; k < 3; k++) {
+            const float bj = F(B, 0x544 + 0xc * ej + 4 * k) * s, bi = F(B, 0x544 + 0xc * ei + 4 * k) * si;
+            mid[k] = ((F(A, 0x544 + 0xc * corner + 4 * k) + bi) + bj) * 0.5f;
+        }
+        s2car_sparks(point, mid, knock, 1);
+    }
     if((ca == 0 || cb == 0) && knock > knock_max) knock_max = knock;     /* heard (s2sound.c) */
     s2car_knock(A, corner == 1 || corner == 3 ? 3 : 1, corner, 1.0f, knock, R.damages[race_level]);
     s2car_knock(B, edge, s >= 0.5f ? ej : ei, fabsf(s + -0.5f) * 2.0f, knock, R.damages[race_level]);
@@ -1059,6 +1070,7 @@ int race_others_slice(void)
             ghost_step();
             return 1;
         }
+        if(race_step_hook) race_step_hook(R.car, n, 1);     /* the end of the step: the obstacles and the sparks (s2props.h) */
         others.stage = 1;
         return --others.left != 0;
     }
@@ -1083,6 +1095,7 @@ int race_others_slice(void)
         PF_ADD(PF_AI_STEP, pf);
         return 1;
     }
+    if(race_step_hook) race_step_hook(R.car, n, 0);
     for(int i = 0; i < R.n; i++) {                      /* a car off the road for good goes back onto the line */
         struct s2car_state *c = &R.car[i];
         R.off[i] = c->off_track ? R.off[i] + 1 : 0;

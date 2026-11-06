@@ -190,3 +190,17 @@ void s2car_fx(const struct s2car_state *s, struct s2car_fx *out);
    sounds, s2snd.h); a row of zeros for any the track does not list */
 struct s2_road_kind;
 const struct s2_road_kind *s2car_road_kind(int id);
+
+/* The game's sparks (0x2aeb9), thrown where the car's knock against a wall happens (0x29571, the wall's thirty: set 0; the touching cars' (set 1) are race.c's): called, if set,
+   with the place (x, height, z), the direction (the game's x, up, z: only x and z are used), the knock's speed in units a second and the set; s2props.c sets it. */
+extern void (*s2car_sparks)(const float at[3], const float dir[3], float hit, int set);
+
+/* The game's road and walls for things that are no car (the obstacles, s2props.c); the track and the car physics set up (s2car_init). s2car_wall_near: the nearest wall segment
+   to (x, z) (0x2a371 with 1): its middle's x and z and its angle; s2car_road_near: the road point nearest (0x2a371 with 0): the road's heading there (a pure look: the car physics'
+   own record of the last heading found is not touched). 1 if one was found. The angle routines are the car physics' own: 0x14dc0 (a - b brought into -pi .. pi), the angle of a
+   vector's x and z on the ground (the game's atan2, 0 .. 2 pi) and 0x10388 (a point of whole numbers turned about the up axis, cut). */
+int s2car_wall_near(int x, int z, int *wx, int *wz, float *angle);
+int s2car_road_near(int x, int z, float *heading);
+float s2car_ang_diff(float a, float b);
+float s2car_ground_angle(float x, float z);
+void s2car_turn_up(int32_t out[3], const int32_t in[3], float angle);

@@ -68,3 +68,7 @@ int s2_params_track(const uint8_t *text, uint32_t size, struct s2_track_params *
 int s2_params_cars_dat(const uint8_t *game_dat, uint32_t size, uint8_t *scratch, uint32_t cap, struct s2_car_params *out);
 int s2_params_track_dat(const uint8_t *map_dat, uint32_t size, int track, uint8_t *scratch, uint32_t cap,
                         struct s2_track_params *out);
+
+/* The names of a section of a .DTR file: its words that begin with s (the game's mark for a name; the s is left off), each cut to 11 characters, from the section's name to
+   its END_LIST, at most max of them; how many. (The numbers of the same rows come from s2_dtr_words.) */
+int s2_dtr_names(const uint8_t *text, uint32_t size, const char *section, char names[][12], int max);
