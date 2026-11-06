@@ -963,7 +963,7 @@ int race_init(int track, float floor_z)
         FR.list_left = 0.0f;
         FR.msg_left = 0.0f;
     }
-    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages);
+    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages, 0, 0);
     return 1;
 }
 
