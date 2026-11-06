@@ -499,6 +499,11 @@ int track_class_key(const uint8_t *obj)
     return obj ? -(int)(int16_t)rd32(obj + 0xC4) : 0;
 }
 
+/* The rear-view mirror's pass (track_draw_mirror): the picture is the glass's, turned over (the camera's right-hand side reversed: the geometry unit's test of a face is the eye's side
+   of its plane, which no reflection changes, and the rasterizer takes either way round on screen), the backdrop turned too, and the level of detail is at least 1 (STARTL.EXE 0x756b0
+   sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
+static int mirror_pass;
+
 /* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and
    other moving objects; docs/screamer2/performance.md, section 6): the distance of the block's middle
    from the camera, rounded to nearest (even). Placed: key = -(dist >> 1), level 0 above -3000 (dist <
@@ -514,7 +519,8 @@ int track_lod_level(float dist, int moving)
 #else
     int32_t d = (int32_t)lrintf(dist);
     int32_t key = moving ? -d : -(d >> 1);
-    return key > (moving ? -2000 : -3000) ? 0 : key > (moving ? -6000 : -4500) ? 1 : 2;
+    const int level = key > (moving ? -2000 : -3000) ? 0 : key > (moving ? -6000 : -4500) ? 1 : 2;
+    return level < mirror_pass ? mirror_pass : level;
 #endif
 }
 
@@ -637,21 +643,49 @@ int track_ground_colour(void)
  * in the ground colour. Upright whatever the camera's roll: the game's leaning version
  * (0x83b44) is never called.
  */
-void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam)
+/* The backdrop's panorama with every row read from the other end (the rear-view mirror's pass), made when it is first asked for with this track's panorama: 128 KB, one pass over it */
+static uint8_t *backdrop_turned(const uint8_t *pano)
+{
+    static uint8_t turned[512 * 256] __attribute__((aligned(4)));
+    static const uint8_t *made_for;
+    if(made_for != pano) {
+        for(int y = 0; y < 256; y++)
+            for(int x = 0; x < 512; x++) turned[y * 512 + x] = pano[y * 512 + 511 - x];
+        made_for = pano;
+    }
+    return turned;
+}
+
+static void backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam, int mirror)
 {
     int w = clip->x1 - clip->x0, h = clip->y1 - clip->y0, eye = EYE_LINE(h);
     int32_t s = view_sin16(view_angle(cam->pitch));             /* the game's sine, [0x8228c] */
     int top = eye + 22 - 256 + ((-54152 * s) >> 7) / -54152;
     int heading = (int)lrintf((cam->yaw + 1.5707964f) * (1024.0f / 3.14159265f));
     int col = ((2047 - heading) >> 1) & 511;
+    const uint8_t *pano = track_backdrop();
+    if(mirror) {                                                /* the glass shows the picture turned over, the panorama's rows read from the other end: column x of the window is column 319 - x of the ordinary one */
+        pano = backdrop_turned(pano);
+        col = (192 - col) & 511;
+    }
     int rows = 256 + (top < 0 ? top : 0);
     if(top + 256 > h) rows -= top + 256 - h;
     if(rows > 0)
-        blit_copy(l, track_backdrop() + (top < 0 ? -top : top) * 512 + col, w, rows, 512, clip->x0, clip->y0,
+        blit_copy(l, pano + (top < 0 ? -top : top) * 512 + col, w, rows, 512, clip->x0, clip->y0,
                   BLIT_COPY | BLIT_OPAQUE, 0);
     else
         rows = 0;
     if(rows < h) blit_fill(l, clip->x0, clip->y0 + rows, w, h - rows, track_ground_colour());
+}
+
+void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam)
+{
+    backdrop_blit(l, clip, cam, 0);
+}
+
+void track_backdrop_blit_mirror(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam)
+{
+    backdrop_blit(l, clip, cam, 1);
 }
 
 const uint8_t *track_hud(void)
@@ -929,6 +963,12 @@ int track_block_ok(int k)
 {
     uint32_t o = 0x100 + (uint32_t)k * BLOCK, e = o + BLOCK < file_size ? o + BLOCK : file_size;
     return o < e && crc32(file_start + o, file_start + e) == (uint32_t)rd32(file_start + 0x90 + 4 * k);
+}
+
+void track_view_mirror(const struct rs_clip *clip, struct su_view *v)
+{
+    track_view(clip, v);
+    v->cx += 48;                                /* the game draws the pass backwards and turns the picture over about its middle (the pixel x goes to 319 - x); the rasterizer's pixel x is the lens's x + 1, so the reflected lens's middle is at 162, three pixels right of the ordinary one (measured: tools/s2/check_mirror_s2.sh) */
 }
 
 void track_view(const struct rs_clip *clip, struct su_view *v)
@@ -1279,7 +1319,8 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
 
     struct su_view view;
     struct gu_stats gst = { 0, 0, 0, 0 };
-    track_view(clip, &view);
+    if(mirror_pass) track_view_mirror(clip, &view);
+    else track_view(clip, &view);
     uint32_t t_out = 0;
     for(int n = 0; n < nv; n++) {
         const int vi = vis[n] & 0xFFFF;
@@ -1384,6 +1425,18 @@ void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const stru
     float f[3], r[3], u[3];
     cam_frame(cam, f, r, u);
     draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
+}
+
+void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
+                       struct track_object *objs, int nobj, struct track_stats *st)
+{
+    const float c[3] = { cam->x, cam->y, cam->h };
+    float f[3], r[3], u[3];
+    cam_frame(cam, f, r, u);
+    for(int k = 0; k < 3; k++) r[k] = -r[k];
+    mirror_pass = 1;
+    draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
+    mirror_pass = 0;
 }
 
 void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, struct track_stats *st)

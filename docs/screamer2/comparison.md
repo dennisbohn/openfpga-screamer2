@@ -113,7 +113,7 @@ code, against about 2,400 lines of car, drive and opp in our firmware.
 | `car.c`, `drive.c` | `CARS_DATA`, OpenScreamer `drive.c` (engine, gearbox, grip) | new model: per-wheel grip and traction, springs and body lean, road kinds with tyre/weather grip, damage (look = texture picture, power loss), wheelspin smoke (N2 S2-5o, 5u, 5zd, 5zq) | **new** | large |
 | `opp.c` | `OPPONENTS` rows, 10 splines | `OPP.SPL` aim line, `DIR.SPL`, `SKILLS` catch-up by distance and level (`0x2da06`), computer cars from teams | new | large |
 | `scenery.c` | `ANM/CNG/SLA/OST.SPL`, `MAPnDAT.DTR` | `ANIMATIONS` rows + `.PTH` cubic paths (17 on track 1), obstacles (cones fly and bounce), sounds on paths | new | medium. **Built: the animated rows, their objects and their sounds (`firmware/s2anim.c`, docs/development.md "Animated scenery"; their meshes use the track's `MISC.MLB`, which the image now holds), and the obstacles (cones, fences, chests, crates: stood up, knocked and flown by the cars, and the sparks of touches and wall knocks, `firmware/s2props.c`, "Obstacles and sparks", checked against the running original's memory)** |
-| camera views | `CAM.SPL`, `RPL.SPL` | `CAMERASn.MCM` trackside records, mirror (second pass: 160x35 rows, camera 3, N2 S2-5zh) | new | medium |
+| camera views | `CAM.SPL`, `RPL.SPL` | `CAMERASn.MCM` trackside records, the views from the car (INCAR, NEAR, INSIDE with the cockpits), mirror (second pass: 160x35 rows, camera 3, N2 S2-5zh) | new | medium; **built, docs/screamer2/hud.md section 5** |
 | `ghost.c` | recorded keys in `ATTACK.DAT` | S2 time attack: 2 cars, the ghost is the controls record | small change (follows the physics) | small |
 | `champ.c` | stages 0 to 52, `CHAMP.TXT` | leagues with CUSTOMIZE set-ups (built, menus row 12), weather by chance, points, LEAGUE REPORT | new | medium |
 | `menu.c`, `intro.c` | `MENU.DAT`, PCX, `LOGOL.SPR`, `ATTR.TXT`, attract race | 3D rooms (`MENUt1.DAT`), team select with 3D badges, name entry with 3D tyres, `.BKK`, plates, maps, logo scenes, attract race | **new** | large (a plain list menu first: small, built: `firmware/s2menu.c`; the original's screens, formats and a build order: `menus.md`) |
@@ -147,7 +147,7 @@ Measured against `core/src/fpga/core` (geom.v, setup.v, raster_tex.v, ...) and t
 | Fade by depth (`.DPT`) | - | none | per face: row = |z - near| x 16384 / range & 0x3f80, every texel through a 256-byte row; night (all but one track) and fog | **new hardware** (a 256-byte row buffer per face plus the geometry unit picking the row; small in M10K, a big step in design) or accept day only |
 | Mesh class word | track.c sort key | at `+0x32C` | does not exist (header 0xC8); the S2 rule is the table entry 43 at `+0xC4` and d^2 >> 3, read in `STARTL.EXE 0x7e8c0` and done 2026-11-04 (`draw_distance.md`): it fixed the crowd over the barrier and a wall hidden by a backdrop panel | done |
 | 65K colours | - | - | `..2` files, `.HIC` | skipped |
-| Mirror | - | - | a second drawing pass into 160 x 35 rows (blitter squeezes every other column) | new (software; CPU time unmeasured) |
+| Mirror | - | - | a second drawing pass into 160 x 35 rows (blitter squeezes every other column) | new; **built** (`track_draw_mirror`; the pass adds 56 to 126 pieces, 18,700 to 26,400 pixels, about 2 to 3.5 ms by count: docs/screamer2/hud.md section 5) |
 | Damage | - | - | by texture picture (frames of the car's material via the phase), power loss: software only (N2 S2-5zq) | new, no hardware |
 | SDRAM map | `docs/soc.md` | slot sizes as listed | `GRAF1.DAT` over its 4 MiB slot; more slots; car libraries | small change |
 | Frame content | 50 fps | start grid with 9 opponents: 257 pieces, ~2,500 faces | 22 to 173 pieces, 547 to 2,111 faces a frame from the road (no cars) | within S1's range; cars add more |
@@ -181,7 +181,7 @@ commits). Sizes: small = under a day, medium = 1 to 2 days, large = 3 days or mo
 | Fade by depth (night, fog) | medium to large | new unit logic; may stay out at first |
 | Car, physics, wheels, body, road kinds, damage | large | the heart; 8,000-line reference |
 | Opponents, skills, cones, animations (`.PTH`), cameras (`.MCM`), mirror | large | together (the animations are built, `s2anim.c`, their rotors through the see-through table; the obstacles and sparks are built, `s2props.c`) |
-| HUD, cockpits, dashboards | medium | the race screen in the chase camera is done (docs/screamer2/hud.md); cockpits, dashboards, mirror open |
+| HUD, cockpits, dashboards | medium | the race screen is done (docs/screamer2/hud.md); the cockpits, the dashboards' needles and lamps, the views from the car and the mirror too (section 5, checked against the running original) |
 | Sound (new tables), CD cue | small | |
 | Menus (3D rooms, `.BKK`, league), intro, attract race | large | a plain menu first: small |
 | Total for a drivable race with a plain menu | about 8 to 10 days | |

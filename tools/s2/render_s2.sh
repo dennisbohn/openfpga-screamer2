@@ -38,7 +38,7 @@ LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console
 # the real car physics reads its numbers from the unzipped game (DATA/GAME.DAT, DATA/MAPn.DAT): $GAME_DIR, default as elsewhere
 game=${GAME_DIR:-C:/GOG Games/Screamer 2}
 if command -v cygpath >/dev/null 2>&1; then game_mount=$(cygpath -wa "$game"); else game_mount=$game; fi
-MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game -e NOROTOR -e RACE_GAS -e RACE_ROBOT -e RACE_CAM -e LOOK_DUMP --entrypoint sh verilator/verilator:v5.050 -c "
+MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" -e S2_GAME=/game -e NOROTOR -e MIRROR_ROWS -e RACE_GAS -e RACE_ROBOT -e RACE_CAM -e LOOK_DUMP --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2host/src && gcc -O2 -w ${PITCH:+-DPITCH_SIGN=$PITCH} ${NOLOD:+-DTRACK_NO_LOD} ${NOVIS:+-DTRACK_NO_VIS} -o ../render_s2 render_s2.c $LIST -lm &&
     cd /b/s2host && ./render_s2 $img $prefix $*"
 mv "$root/build/s2host/$prefix"*.rgb "$root/build/s2host/$prefix"*.idx "$outdir/"

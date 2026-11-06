@@ -3,6 +3,7 @@
  */
 #include "s2cam.h"
 #include "s2car.h"
+#include "s2cockpit.h"
 #include "track.h"
 #include "dat.h"
 #include <math.h>
@@ -32,6 +33,8 @@ static struct {
     float pitch, yaw, roll;             /* +0x54 .. */
     float turn, rise;                   /* +0x3c, +0x38: the circling camera's two turns, 0 .. 1 */
     int rotate;                         /* +0xae8: the attract race's camera follows the next car when it next changes to another camera */
+    struct s2ck_state ck;               /* the views from the car: NEAR's eased angles and the view of the last frame (+0x2c) */
+    int body[8], body_ok[8];            /* each car's body height (record +0x218), once */
 } C;
 
 static uint8_t buf[0x800 + 8];
@@ -40,6 +43,7 @@ void s2cam_begin(int track, int view)
 {
     memset(&C, 0, sizeof C);
     C.shot = C.last_shot = -1;
+    s2ck_reset(&C.ck);
     C.view = S2CAM_BACK;
     uint32_t msize = 0;
     const uint8_t *map = s2car_map_dat(&msize);
@@ -74,10 +78,20 @@ int s2cam_shot(void)
 
 void s2cam_view(int view)
 {
-    if((view == S2CAM_TRACKSIDE && C.n) || view == S2CAM_BACK) {
+    if((view == S2CAM_TRACKSIDE && C.n) || view == S2CAM_BACK || view == S2CAM_INCAR || view == S2CAM_NEAR || view == S2CAM_INSIDE) {
         C.view = view;
         C.shot = -1;                    /* 0x12d31 and the key: no camera chosen yet */
     }
+}
+
+int s2cam_next_view(void)
+{
+    static const int order[4] = { S2CAM_INCAR, S2CAM_INSIDE, S2CAM_NEAR, S2CAM_BACK };      /* F1, F2, F3, F4 */
+    int next = 0;
+    for(int i = 0; i < 4; i++)
+        if(order[i] == C.view) next = (i + 1) % 4;
+    s2cam_view(order[next]);
+    return C.view;
 }
 
 int s2cam_get_view(void)
@@ -229,9 +243,32 @@ static void trackside(const struct s2car_state *const *cars, int n, float dt)
     }
 }
 
+static int body_of(int car)
+{
+    if(car < 0 || car >= 8) return 0;
+    if(!C.body_ok[car]) {
+        C.body[car] = s2ck_body_height(car);
+        C.body_ok[car] = 1;
+    }
+    return C.body[car];
+}
+
+void s2cam_mirror(const struct s2car_state *const *cars, int n, struct track_cam *cam)
+{
+    struct s2ck_state scratch;          /* (the mirror's camera has a record of its own: it keeps nothing) */
+    s2ck_reset(&scratch);
+    if(C.follow >= n) C.follow = 0;
+    s2ck_camera(cars[C.follow], S2CK_MIRROR, body_of(C.follow), &scratch, cam);
+}
+
 void s2cam_frame(const struct s2car_state *const *cars, int n, float dt, struct track_cam *cam)
 {
     if(C.follow >= n) C.follow = 0;
+    if(C.view == S2CAM_INCAR || C.view == S2CAM_INSIDE || C.view == S2CAM_NEAR) {
+        s2ck_camera(cars[C.follow], C.view, body_of(C.follow), &C.ck, cam);
+        return;
+    }
+    C.ck.last_view = C.view;            /* (the record's +0x2c is the view of every frame) */
     if(C.view == S2CAM_TRACKSIDE && C.n) {
         trackside(cars, n, dt);
         const struct s2car_state *car = cars[C.follow];

@@ -32,6 +32,10 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
 /* The view the scene is drawn in (s2cam.h: 1 the trackside cameras, 3 the chase camera, the default) and the car it follows: in view 1 the race screen shows no dial and none of
    its texts or WRONG WAY (0x45d17, 0x463fc, 0x46fea), only the leader's mark, the start lights and the replay's band; the dial is that of the car followed. Reset by s2hud_begin(). */
 void s2hud_view(int view, int follow);
+/* The views from the car (s2cockpit.h): the rear-view mirror's glass if it is on (S2CK_MIRROR_W x S2CK_MIRROR_ROWS pixels, 4-aligned, in the SDRAM; it goes over the scene and the leader's
+   mark with its frame, MIRROR_L.PKC, in every view but the trackside cameras; 0: off) and the scene's rows (200, the dashboard's in INSIDE: the leader's mark is cut there). In the view
+   INSIDE (S2CK_INSIDE) the cockpit's picture, gear lamp and two needles take the dial's place. Reset by s2hud_begin(). */
+void s2hud_scene(const uint8_t *mirror, int rows);
 
 /* The replay's band (0x4658c, while the player's car is still racing): the bottom 20 rows darkened and `text` ("TEAM - VIEW") in the big letters at (10, 180). Drawn after the
    rasterizer is done, into the framebuffer fb (buffer is its number) as the end screen is; s2hud_band_prepare() makes the darkening table of the race's palette (70 ms

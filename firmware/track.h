@@ -156,6 +156,8 @@ float track_far(void);
 
 /* The projection for clip (for the setup unit's registers) */
 void track_view(const struct rs_clip *clip, struct su_view *v);
+/* The same for the rear-view mirror's pass (track_draw_mirror): the lens's middle three pixels further right, so that the pass turned over about the picture's middle is the game's */
+void track_view_mirror(const struct rs_clip *clip, struct su_view *v);
 
 /* A camera: place, heading as the car's (forward = (sin yaw, -cos yaw)), pitch (+ looks up)
    and roll (+ tips the camera's right-hand side up) */
@@ -164,6 +166,8 @@ struct track_cam { float x, y, h, yaw, pitch, roll; };
 /* the blitter's commands for the backdrop behind the view clip, seen from cam (the game's
    0x83a68; track.c) */
 void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam);
+/* The same for the rear-view mirror's pass: the panorama turned over (column x of the window is column 319 - x of the ordinary one), `cam` the mirror's camera */
+void track_backdrop_blit_mirror(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam);
 
 /* An object besides the track's pieces (a car, a shadow, a puff of smoke): its blocks in the
    order they are drawn, each with its own place: world = o + m . local (m rows: world x, y,
@@ -223,6 +227,13 @@ void track_cam_axes(const struct track_cam *cam, float f[3], float r[3], float u
    file (each cell's scenery before its road), the objects after them. Up to 32 objects. */
 void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
                     struct track_object *objs, int nobj, struct track_stats *st);
+
+/* The rear-view mirror's pass (STARTL.EXE 0x756b0): the scene seen from cam (the camera of s2ck_camera(.., S2CK_MIRROR, ..), looking backwards) in the glass's reversed sense (right and
+   left exchanged, backdrop included: track_backdrop_blit() in the pass turns its panorama), every block at level of detail 1 or lower. Otherwise track_draw_cam(). The pixels equal the
+   ordinary pass's turned over about the picture's middle (x to 319 - x) but at the texture's sampling (tools/s2/check_mirror_s2.sh: 88 to 97 %); the caller sets the projection by
+   track_view_mirror(). */
+void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
+                       struct track_object *objs, int nobj, struct track_stats *st);
 
 /* The view from path position pos (path points, 8 fraction bits), clipped to clip */
 void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, struct track_stats *st);

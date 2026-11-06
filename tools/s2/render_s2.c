@@ -169,17 +169,27 @@ static int check_models(void)
 
 /* The scene as the viewer draws it: the backdrop and the track's pieces and objects seen from cam, into the frame buffer; the
    picture also copied into out (FB_W x FB_H palette indices) if it is not NULL */
+/* MIRROR_ROWS=<n> (check_mirror_s2.sh): every camera is drawn twice more, into the top n rows: the ordinary pass (<prefix><k>n.idx) and the rear-view mirror's (track_draw_mirror,
+   <prefix><k>m.idx), which must be the ordinary one turned over left to right */
+static int scene_rows = FB_H, scene_mirror, scene_backdrop;
+
 static void draw_scene(const struct track_cam *cam, struct track_object *objs, int nobj, struct track_stats *ts, uint8_t *out)
 {
-    const struct rs_clip clip = { 0, 0, FB_W, FB_H };
+    const struct rs_clip clip = { 0, 0, FB_W, scene_rows };
     volatile uint8_t *fb = FB(0);
     static struct blit_list l;
     blit_start(&l, 0);
-    track_backdrop_blit(&l, &clip, cam);
+    if (scene_mirror) track_backdrop_blit_mirror(&l, &clip, cam);
+    else track_backdrop_blit(&l, &clip, cam);
     blit_model(fb, &l);
+    if (scene_backdrop) {                                       /* (MIRROR_ROWS with BACKDROP=1: the backdrops alone) */
+        memset(ts, 0, sizeof *ts);
+        return;
+    }
     memset(ts, 0, sizeof *ts);
     track_mode = TRACK_MODEL;
-    track_draw_cam(fb, &clip, cam, objs, nobj, ts);
+    if (scene_mirror) track_draw_mirror(fb, &clip, cam, objs, nobj, ts);
+    else track_draw_cam(fb, &clip, cam, objs, nobj, ts);
     if (out)
         for (int i = 0; i < FB_W * FB_H; i++) out[i] = fb[i];
 }
@@ -593,6 +603,22 @@ int main(int argc, char **argv)
         }
         struct track_stats ts;
         draw_scene(&cam, objs, nobj, &ts, 0);
+        if (getenv("MIRROR_ROWS")) {
+            struct track_stats tn, tm;
+            char path[512];
+            scene_rows = atoi(getenv("MIRROR_ROWS"));
+            for (scene_backdrop = 1; scene_backdrop >= 0; scene_backdrop--)                  /* (the backdrops alone: <prefix><k>bn.idx, bm.idx; then the whole passes) */
+            for (scene_mirror = 0; scene_mirror < 2; scene_mirror++) {
+                draw_scene(&cam, objs, nobj, scene_mirror ? &tm : &tn, 0);
+                snprintf(path, sizeof path, "%s%d%s%c.idx", argv[2], a - 3, scene_backdrop ? "b" : "", scene_mirror ? 'm' : 'n');
+                FILE *fm = fopen(path, "wb");
+                if (fm) { for (int i = 0; i < FB_W * FB_H; i++) fputc(FB(0)[i], fm); fclose(fm); }
+            }
+            printf("mirror pass %d rows: ordinary %u pieces %u faces, the mirror's %u pieces %u faces\n", scene_rows, tn.pieces, tn.faces, tm.pieces, tm.faces);
+            scene_rows = FB_H;
+            scene_mirror = scene_backdrop = 0;
+            draw_scene(&cam, objs, nobj, &ts, 0);               /* (the picture written below is the whole one) */
+        }
         char name[512];
         snprintf(name, sizeof name, "%s%d.rgb", argv[2], a - 3);
         write_rgb(name, track_palette());

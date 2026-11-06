@@ -124,6 +124,13 @@ static void carried(const struct puff *q, const struct s2car_fx *f, const float 
     out[2] = (float)f->z + (float)(int32_t)(z * t[2]);
 }
 
+static int hidden = -1;
+
+void s2fx_hide_shadow(int car)
+{
+    hidden = car;
+}
+
 int s2fx_objects(const struct track_cam *cam, struct s2car_state *const *cars, int n, struct track_object *objs, int max)
 {
     struct track_fx fx;
@@ -134,7 +141,7 @@ int s2fx_objects(const struct track_cam *cam, struct s2car_state *const *cars, i
     for(int i = 0; i < n && i < S2FX_CARS; i++) {
         struct s2car_fx a;
         s2car_fx(cars[i], &a);
-        if(fx.shadow && count < max) {              /* 0x1f4a7: 30 units further from the camera than the car along the ground, 2 under the ground under it */
+        if(fx.shadow && count < max && i != hidden) {   /* 0x1f4a7: 30 units further from the camera than the car along the ground, 2 under the ground under it */
             const float dx = cam->x - (float)a.x, dz = cam->y - (float)a.z, d = sqrtf(dx * dx + dz * dz);
             const float x = d > 0.0f ? (float)(int32_t)((float)a.x - dx / d * 30.0f) : (float)a.x;
             const float z = d > 0.0f ? (float)(int32_t)((float)a.z - dz / d * 30.0f) : (float)a.z;
