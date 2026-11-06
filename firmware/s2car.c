@@ -1250,7 +1250,6 @@ int s2car_road_near(int x, int z, float *heading)
 }
 
 float s2car_ang_diff(float a, float b) { return ang_diff(a, b); }
-void s2car_ease_angle(float *v, float target, int row) { ease_angle(v, target, row); }
 float s2car_ground_angle(float x, float z) { return ground_angle(x, z); }
 void s2car_turn_up(int32_t out[3], const int32_t in[3], float angle) { turn_up(out, in, angle); }
 
