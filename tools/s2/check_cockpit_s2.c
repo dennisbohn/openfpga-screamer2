@@ -136,6 +136,58 @@ static void pictures_and_dashboards(const char *dir)
     free(text);
 }
 
+/* The glass: s2ck_glass()'s squeeze of the pass's rows against the game's own loop (0x756df .. 0x75755) ported literally: it reads 16 bytes of the work buffer and writes 8 pixels downwards
+   from edi, 20 times a row, rows of 320 + 160 further on. The glass is then the strip at x 81 .. 240 of the screen's rows 14 .. 48. */
+static uint32_t rd32(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v; }
+
+static void glass(void)
+{
+    static uint8_t work[S2CK_MIRROR_ROWS * 320] __attribute__((aligned(4))), screen[320 * 200], strip[S2CK_MIRROR_W * S2CK_MIRROR_ROWS] __attribute__((aligned(4)));
+    uint32_t seed = 12345;
+    for(size_t i = 0; i < sizeof work; i++) {
+        seed = seed * 1664525u + 1013904223u;
+        work[i] = (uint8_t)(seed >> 24);
+    }
+    memset(screen, 0, sizeof screen);
+    uint8_t *edi = screen + 80 + 14 * 320 + 0xa0;                /* the game: x 0x50, y 0x0e of the screen, 0xa0 across */
+    const uint8_t *esi = work;
+    for(int row = 0; row < S2CK_MIRROR_ROWS; row++) {
+        for(int c = 0; c < 20; c++) {
+            uint32_t eax = rd32(esi), edx = rd32(esi + 4);
+            edi[0] = (uint8_t)eax;
+            eax >>= 16;
+            edi[-2] = (uint8_t)edx;
+            edx >>= 16;
+            edi[-1] = (uint8_t)eax;
+            edi[-3] = (uint8_t)edx;
+            eax = rd32(esi + 8);
+            edx = rd32(esi + 12);
+            esi += 16;
+            edi[-4] = (uint8_t)eax;
+            eax >>= 16;
+            edi[-6] = (uint8_t)edx;
+            edx >>= 16;
+            edi[-5] = (uint8_t)eax;
+            edi[-7] = (uint8_t)edx;
+            edi -= 8;
+        }
+        edi += 0x1e0;
+    }
+    s2ck_glass((const volatile uint32_t *)work, strip);
+    int differ = 0, outside = 0;
+    for(int y = 0; y < 200; y++)
+        for(int x = 0; x < 320; x++) {
+            const int in = y >= S2CK_MIRROR_Y && y < S2CK_MIRROR_Y + S2CK_MIRROR_ROWS && x >= S2CK_MIRROR_X && x < S2CK_MIRROR_X + S2CK_MIRROR_W;
+            const uint8_t want = screen[y * 320 + x], got = in ? strip[(y - S2CK_MIRROR_Y) * S2CK_MIRROR_W + (x - S2CK_MIRROR_X + (negative ? 1 : 0)) % S2CK_MIRROR_W] : 0;
+            if(want != got) differ++;
+            if(!in && want) outside++;
+        }
+    CHECK(!differ && !outside, "the glass: %d pixels differ from the game's squeeze, %d pixels of it outside x %d .. %d, rows %d .. %d", differ, outside, S2CK_MIRROR_X, S2CK_MIRROR_X + S2CK_MIRROR_W - 1,
+          S2CK_MIRROR_Y, S2CK_MIRROR_Y + S2CK_MIRROR_ROWS - 1);
+    printf("glass: s2ck_glass() equals the game's squeeze loop (0x756df) over %d pixels, the glass is x %d .. %d, rows %d .. %d of the screen\n", S2CK_MIRROR_W * S2CK_MIRROR_ROWS, S2CK_MIRROR_X,
+           S2CK_MIRROR_X + S2CK_MIRROR_W - 1, S2CK_MIRROR_Y, S2CK_MIRROR_Y + S2CK_MIRROR_ROWS - 1);
+}
+
 /* ---------------------------------------------------------------------------------------- the recording */
 
 #define REC 0xCC0
@@ -232,6 +284,7 @@ int main(int argc, char **argv)
     if(argc < 2) return 2;
     negative = getenv("NEGATIVE") != 0;
     pictures_and_dashboards(argv[1]);
+    glass();
     CHECK(s2ck_hides_car(S2CK_INCAR) && s2ck_hides_car(S2CK_INSIDE) && s2ck_hides_car(S2CK_MIRROR) && !s2ck_hides_car(S2CK_BACK) && !s2ck_hides_car(S2CK_NEAR) &&
           !s2ck_hides_car(S2CK_EXTERNAL), "which views take the car off the draw list");
     const struct s2_pick p[4] = { { 1, 1 }, { 2, 4 }, { 3, 5 }, { 4, 5 } };

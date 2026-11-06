@@ -104,6 +104,18 @@ void s2ck_camera(const struct s2car_state *c, int view, int body, struct s2ck_st
     if(view != S2CK_MIRROR) k->last_view = view;           /* (the mirror's camera is a record of its own in the game) */
 }
 
+void s2ck_glass(const volatile uint32_t *fb, uint8_t *strip)
+{
+    uint32_t *dst = (uint32_t *)strip;
+    for(int y = 0; y < S2CK_MIRROR_ROWS; y++) {
+        const volatile uint32_t *row = fb + y * (320 / 4);
+        for(int s = 0; s < S2CK_MIRROR_W / 4; s++) {
+            const uint32_t a = row[79 - 2 * s], b = row[78 - 2 * s];
+            *dst++ = (a >> 16 & 0xFF) | (a & 0xFF) << 8 | (b >> 16 & 0xFF) << 16 | (b & 0xFF) << 24;
+        }
+    }
+}
+
 int s2ck_rows(int view, const struct s2ck_dash *dash)
 {
     if(view == S2CK_MIRROR) return S2CK_MIRROR_ROWS;

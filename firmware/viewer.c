@@ -496,15 +496,7 @@ static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const 
         ;
     while (RS_DRAW & RS_BUSY)
         ;
-    volatile uint32_t *src = (volatile uint32_t *)FB(buffer);          /* strip[y][j] = row[2 (159 - j)]: the words (a, b) = (79 - 2s, 78 - 2s) make the strip's word s from the bytes 2, 0 of a and of b */
-    uint32_t *dst = (uint32_t *)mirror_strip;
-    for (int y = 0; y < S2CK_MIRROR_ROWS; y++) {
-        const volatile uint32_t *row = src + y * (FB_W / 4);
-        for (int s = 0; s < S2CK_MIRROR_W / 4; s++) {
-            const uint32_t a = row[79 - 2 * s], b = row[78 - 2 * s];
-            *dst++ = (a >> 16 & 0xFF) | (a & 0xFF) << 8 | (b >> 16 & 0xFF) << 16 | (b & 0xFF) << 24;
-        }
-    }
+    s2ck_glass((volatile uint32_t *)FB(buffer), mirror_strip);
     while (!(MEM_STATUS & MEM_WRITES_IDLE))                             /* (the blitter reads the strip from the SDRAM) */
         ;
 }

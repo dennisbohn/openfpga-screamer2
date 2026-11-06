@@ -48,6 +48,11 @@ int s2ck_rows(int view, const struct s2ck_dash *dash);
 /* The model of the car's dashboard (COCKn_L.PKC is n = model + 1; the table row is the model): 0 .. 3 for a team's four cars, 4 .. 7 for the bonus car of team 1 .. 4 */
 int s2ck_model(const struct s2_pick *p);
 
+/* The glass out of the mirror's pass (0x756df, the loop that copies it to the screen): fb the pass's S2CK_MIRROR_ROWS rows of 320 bytes (4-aligned: the framebuffer's top rows), strip (4-aligned,
+   S2CK_MIRROR_W x S2CK_MIRROR_ROWS) gets strip[y][j] = row[y][2 (159 - j)], every other pixel of a row from the right: the game's pixel 2k goes to x 240 - k, which is the strip's j = 159 - k at
+   x S2CK_MIRROR_X + j. By words: the strip's word s is the bytes 2 and 0 of the row's words 79 - 2s and 78 - 2s. */
+void s2ck_glass(const volatile uint32_t *fb, uint8_t *strip);
+
 /* The height the camera adds to the body's (record +0x218): block "MV_mauto" of the car's model mesh (the track image's model slot, track_model_mesh), its position record's third
    number as the game keeps it */
 int s2ck_body_height(int slot);
