@@ -32,6 +32,12 @@ int s2showroom_chosen(void);
 /* The cars into the back buffer: the picture is in the list l, which is handed to the blitter first; afterwards l is empty again for the page's sprites */
 void s2showroom_draw(struct blit_list *l);
 
+/* The cars at places of the page's own (the ARCADE title's cars drive along their paths, s2arcscene.h): car i (0 .. n - 1) to (x, y up, z) and the heading a1 (2048ths; the places are the engine's, as s2showroom_init
+   keeps them), and the cars drawn as s2showroom_draw() does but from the camera cam */
+struct track_cam;
+void s2showroom_place(int i, const int32_t pos[3], int a1);
+void s2showroom_draw_cam(struct blit_list *l, const struct track_cam *cam);
+
 /* What the plate shows (CARS.DTR through DATA/GAME.DAT): the car's top speed in km/h as the file has it and its drive: 0 four-wheel, 1 front,
    2 rear (from the shares of the two left wheels, 0x4176c ..). 0 if the file could not be read. */
 struct s2show_plate { float max_speed; int drive; };

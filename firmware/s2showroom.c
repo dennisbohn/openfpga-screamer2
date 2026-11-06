@@ -168,7 +168,14 @@ int s2showroom_chosen(void)
     return chosen_car;
 }
 
-void s2showroom_draw(struct blit_list *l)
+void s2showroom_place(int i, const int32_t pos[3], int a1)
+{
+    if (i < 0 || i >= n_cars) return;
+    memcpy(car[i].pos, pos, sizeof car[i].pos);
+    car[i].a1 = a1;
+}
+
+void s2showroom_draw_cam(struct blit_list *l, const struct track_cam *camera)
 {
     const int buffer = l->buffer;
     if (!n_cars) {                                          /* (no cars: the picture alone) */
@@ -176,7 +183,7 @@ void s2showroom_draw(struct blit_list *l)
         blit_start(l, buffer);
         return;
     }
-    const struct track_cam cam = s2scene_camera(0.0f, 600.0f, 4000.0f, -0.39269908f);
+    const struct track_cam cam = *camera;
     int order[S2SHOW_MAX];
     float key[S2SHOW_MAX];
     int m = 0;
@@ -203,6 +210,12 @@ void s2showroom_draw(struct blit_list *l)
     }
     s2scene_end();
     blit_start(l, buffer);
+}
+
+void s2showroom_draw(struct blit_list *l)
+{
+    const struct track_cam cam = s2scene_camera(0.0f, 600.0f, 4000.0f, -0.39269908f);
+    s2showroom_draw_cam(l, &cam);
 }
 
 /* ------------------------------------------------------------------------------------------------ the plate */
