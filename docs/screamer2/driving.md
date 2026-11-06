@@ -70,7 +70,7 @@ each: nothing missing, no change); the page and `s2car.c` hold the numbers to th
 state only. The CAR page of the championship and of time attack (0x3cc2c) has three steps: the cars; **Standard / Custom 1 .. 4** (a car of the first four only; ENTER on Standard in the
 championship starts the race at once); then the championship's **RACE / CUSTOMIZE** (for a Custom), time attack's **3 LAPS / FREE RUN** (and, for a Custom, **CUSTOMIZE**). The choice (Standard 0, Custom 1 .. 4)
 is a variable of the program that is not saved (0x13237c): it stays what it was while the program runs. At the start of the race the six of the chosen Custom go into the player's entry of the race record
-(0x339e7: championship, time attack, free run), the others' entries stay `2 2 -1 2 2 2`; with Standard every entry is `2 2 -1 2 2 2`. (One slip of the original, not copied: a bonus car in the
+(0x339e7: championship, time attack, free run), the others' entries are left as the race before left them (the standard set-up, or what 0x14e20 made of it: the computers come out the same); with Standard every entry is `2 2 -1 2 2 2`. (One slip of the original, not copied: a bonus car in the
 championship takes the chosen number from the page's variable as it was left, which then reads the record next to its own: with Standard chosen last, nothing; ours: the standard set-up.)
 
 **What each number does** (0x14e20 makes the car's record of them; CARS.DTR's numbers are the car's own, TRACK_DATA the track's, `best[tyre]` the best pressure of the tyres on that track):
@@ -95,7 +95,7 @@ race's cars; the ghost's block holds the set-up of its run (version 2, s2ghost.h
 race it runs again, as it does the gearbox. The standard set-up (`custom` 0, `tuned` 0) is the car as it was: `check_car.sh` gives the same 173 cases to the digit.
 
 **Checks.** `tools/s2/check_car.sh`: 22 traces of set-ups from the original's own routines (`tools/s2/ref_trace/ref_run.sh setups`: level asphalt and the roughest road kind of track 1; each number at the ends of its range, all
-least, all most, a mix; the standard set-up too) run through the firmware's float32 car with the place cut as the game does: 9 follow the reference to 1e-5 km/h for all 500 steps, the others to its one-unit
+least, all most, a mix; the standard set-up too) run through the firmware's float32 car with the place cut as the game does: 10 follow the reference to 1e-5 km/h for all 500 steps, the others to its one-unit
 cuts of a place (the speed off by 0.3 from some step on, the same as `a_flat`, `b_origin`, `g_manual` show), and each case also with the set-up left out (the negative control): the standard car leaves the
 reference by 15 to 106 km/h (`tools/s2/check_setup_s2.py` is the verdict: 23 cases, 0 failures). `tools/s2/check_setup_ai_s2.sh`: all 22 fields of a car's record that the set-up makes, for all four cars of a race,
 equal the original's on all seven tracks in the arcade and in the championship, and the two modes differ in 21 to 60 places (the control). `tools/s2/check_ghost_s2.sh` and `check_replay_s2.sh`: a run with a set-up
