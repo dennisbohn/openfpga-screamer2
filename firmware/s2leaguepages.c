@@ -14,8 +14,8 @@
  *       (10, 172) and (298, 172)) where there are more leagues to the left or right, while (clock & 0x7f) < 0x40; the title (font 0) at y 2.
  *       LEFT / RIGHT move without wrapping (sound 0, the clock set back); ENTER: on an open league sound 6, fade, on; ESC: back to the options room at once.
  *   WELCOME TO LEAGUE n (0x39569): LEAG_nL.BKK, the league's track plates flying over it (s2plates.h), the top 42 rows darkened once, WELCOME TO (STRINGS.TXT 49) at y 2 and
- *       the league's name at y 20 in font 1. The page ends by itself when the last plate has flown out (6.4 s for league 1, 8.5 s for league 4's six: the TRACK page follows
- *       after the same 25-frame fade as for ENTER, 0x3976a); ENTER: fade, on; ESC: back to the selection at once. No sounds.
+ *       the league's name at y 20 in font 1. The page ends by itself when the last plate is on its way out (6.0 s for league 1's four plates, 7.1 s for league 2's five, 8.2 s for the six of leagues
+ *       3 and 4: the TRACK page follows after the same 25-frame fade as for ENTER, 0x3976a); ENTER: fade, on; ESC: back to the selection at once. No sounds.
  *   LEAGUE REPORT (0x43ade): LEAG_nL.BKK, the title LEAGUE REPORT (font 0) at y 4, the four cars by points (the most first, equal points in the order of the cars: the
  *       player first) in rows 24 apart from y 56: the team's mark (MENUL.SPR 0x51 + team) at x 104 and "n.  NAME  points" centred in font 1 (fixed pitch, one space less
  *       from 10 points up; the name the player's or CPU), then, while races are left, RACES COMPLETED: n at y 152 and RACES TO GO: m at 164 in font 2; ACCELERATE TO
