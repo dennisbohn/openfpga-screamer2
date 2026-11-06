@@ -63,3 +63,7 @@ void s2props_set(int spark, int i, const struct s2props_rec *r);
 /* For the tests: the step and the raw frame time the game worked with in a frame (0x133350, 0x133354; the firmware's are both 20 ms, the original's step is 1.1 x the time of its
    last pictures) */
 void s2props_time(float step, float raw);
+
+/* For the tests: how often the branches of an obstacle's flight were taken since the program began: a step off the ground (no face under it), of which it met a wall and of which there
+   was none, a landing, a stop on the ground (leant to it) */
+void s2props_coverage(int out[5]);

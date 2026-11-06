@@ -35,11 +35,12 @@ static uint8_t mesh_mem[MESH_BYTES] __attribute__((aligned(4)));
 static int nkinds, spark_kind[2];       /* the sparks' sets' meshes: [1] AZTRI (set 1, the touching cars'), [0] AZ1TRI (the walls'); -1 if the track has none */
 static struct prop obst[S2PROPS_OBSTACLES], spark[S2PROPS_SPARKS];
 static struct track_block block[S2PROPS_OBSTACLES];   /* an obstacle's picture as it lies (made when it is drawn, again after it moved) */
-static int nobst;
+static int nobst, nlive;                /* the obstacles; the sparks flying */
 static float lo[3], hi[3];              /* the obstacles' extent in x, height and z: a car further than 2,000 / 200 outside it knocks none */
 static uint32_t steps;                  /* the steps the race has run: the game's 100 Hz counter is two of them */
 static uint32_t seed;                   /* the game's rand (0xb3dd9) */
 static int knocked;                     /* the player's car knocked an obstacle (s2props_hit_take) */
+static int cover[5];                    /* for the tests: how often the branches of fly() were taken: off the ground, against a wall, no wall, a landing, a stop on the ground */
 static float step_dt = DT, raw_dt = DT; /* the game's step (0x133350: everything flies by it) and raw frame time (0x133354: the sparks' life); the firmware's are both 20 ms */
 
 static uint32_t rd32(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
@@ -79,6 +80,7 @@ int s2props_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t
     uint32_t used = 0;
     nkinds = nobst = 0;
     spark_kind[0] = spark_kind[1] = -1;
+    nlive = 0;
     memset(spark, 0, sizeof spark);
     if(!gfx || !data || !misc_delta) return 0;          /* (the simulation takes a finished image: no containers) */
     spark_kind[1] = kind_of(gfx, gfx_size, "AZTRI", misc_delta, &used);
@@ -145,6 +147,7 @@ void s2props_begin(void)
 {
     steps = 0;
     knocked = 0;
+    nlive = 0;
     memset(spark, 0, sizeof spark);
     s2car_sparks = s2props_spark;
     race_step_hook = s2props_step;
@@ -179,9 +182,12 @@ static void fly(struct prop *o)
     if(off) {
         int wx, wz;
         float wa;
+        cover[0]++;
         if(!s2car_wall_near(x, z, &wx, &wz, &wa)) {
             g = (int)o->p[1];
+            cover[2]++;
         } else {
+            cover[1]++;
             float a = s2car_ang_diff(PI_F, wa);
             const int32_t v[3] = { x - wx, 0, z - wz };
             int32_t o1[3], o2[3];
@@ -206,12 +212,14 @@ static void fly(struct prop *o)
         }
     }
     if((float)g >= o->p[1]) {
+        cover[3]++;
         o->p[1] = (float)g;
         o->v[0] = (float)((double)o->v[0] * 0.7);
         o->v[2] = (float)((double)o->v[2] * 0.7);
         o->v[1] = fabsf((float)((double)o->v[1] * 0.7));
         if(sqrtf(o->v[1] * o->v[1] + o->v[0] * o->v[0] + o->v[2] * o->v[2]) < 300.0f) {
             o->on = 0;
+            cover[4] += !off;
             if(!off) lean(o, n);
         }
     }
@@ -263,6 +271,7 @@ void s2props_spark(const float at[3], const float dir[3], float hit, int set)
     if(n > 30) n = 30;
     for(int i = 0; i < n; i++) {
         struct prop *s = &spark[set == 1 ? i : i + 30];
+        nlive += !s->on;
         s->life = 2.0f;
         s->p[0] = at[0];
         s->p[1] = at[1] + 100.0f;
@@ -285,12 +294,12 @@ void s2props_step(struct s2car_state *cars, int n, int attack)
     steps++;
     for(int i = 0; i < nobst; i++)
         if(obst[i].on) fly(&obst[i]);
-    for(int i = 0; i < S2PROPS_SPARKS; i++) {
+    for(int i = 0; nlive && i < S2PROPS_SPARKS; i++) {
         struct prop *s = &spark[i];
         if(!s->on) continue;
         move(s);
         s->life -= raw_dt;
-        if(!(0.0f < s->life)) s->on = 0;
+        if(!(0.0f < s->life)) { s->on = 0; nlive--; }
         s->dirty = 1;
     }
     if(!nobst) return;
@@ -366,7 +375,7 @@ int s2props_objects(const struct track_cam *cam, struct track_object *objs, int 
         if(dx * dx + dy * dy > far * far) continue;
         objs[n++] = (struct track_object){ o->p[0], o->p[2], o->p[1], (float)kinds[o->kind].radius, 0, 0, make_obst, i, kinds[o->kind].key, 0, 0 };
     }
-    for(int i = 0; i < S2PROPS_SPARKS && n < max; i++) {
+    for(int i = 0; nlive && i < S2PROPS_SPARKS && n < max; i++) {
         const struct prop *s = &spark[i];
         const int k = spark_kind[i < 30];
         if(!s->on || k < 0) continue;
@@ -380,6 +389,11 @@ int s2props_objects(const struct track_cam *cam, struct track_object *objs, int 
 int s2props_obstacles(void)
 {
     return nobst;
+}
+
+void s2props_coverage(int out[5])
+{
+    memcpy(out, cover, sizeof cover);
 }
 
 void s2props_time(float step, float raw)
@@ -406,7 +420,9 @@ void s2props_set(int is_spark, int i, const struct s2props_rec *r)
     memcpy(o->a, r->a, sizeof o->a);
     memcpy(o->v, r->v, sizeof o->v);
     o->life = r->life;
+    if(is_spark) nlive += r->on - o->on;
     o->on = (uint8_t)r->on;
     o->hit = (uint8_t)r->hit;
     o->dirty = 1;
+    if(!is_spark) widen(o->p);
 }
