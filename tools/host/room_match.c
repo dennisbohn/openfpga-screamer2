@@ -109,13 +109,12 @@ static void render(int at, const int32_t pos[3], int a0, int a1, int anim, int a
     R.title = s2gfx_line("OPTIONS ROOM", 0, "OPTIONS ROOM");
     static const char *const names[S2ROOM_STATIONS] = { "ARCADE", "CHAMPIONSHIP", "TIME ATTACK", "MULTIPLAYER", "GAME SETTINGS" };
     for (int k = 0; k < S2ROOM_STATIONS; k++) R.name[k] = s2gfx_line("MAIN MENU", 1 + k, names[k]);
-    static int dark_made;
-    if (!dark_made++) s2gfx_dark_table(track_palette(), R.dark, 256);
     track_clock_set(((float)anim + 0.5f) / 65535.0f);
     const struct track_cam cam = s2scene_camera_of(R.cam.pos, R.cam.a0, R.cam.a1);
     struct blit_list *l = s2gfx_begin_on(0);
     pieces_drawn = faces_drawn = 0;
-    room_scene(&R, l, &cam);
+    const struct s2room_view view = { &cam, 0, 0, 0, 1, s2room_dark(), 0, BAND_Y, FB_W, BAND_H };
+    s2room_scene(l, &view);
     if (texts) room_texts(&R, l, at, arrows ? 0 : 0x40);
     s2gfx_flush();
 }
