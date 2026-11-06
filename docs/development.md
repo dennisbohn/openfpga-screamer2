@@ -293,7 +293,7 @@ comes over the race ("End of the race and the two pages" below).
 
 ### The views from the car
 
-The race starts in the view the player left the last one in (the save's `S2S_VIEW`, the view number + 1: 2 INCAR, 3 BACK the chase camera, 4 NEAR, 6 INSIDE with the cockpit; none chosen, the default, is the chase camera) and the player changes it with Select + X; the rear-view
+The race starts in the view the player left the last one in (the save's `S2S_VIEW`: 2 INCAR, the original's default, 3 BACK the chase camera, 4 NEAR, 6 INSIDE with the cockpit) and the player changes it with Select + X; the rear-view
 mirror (Select + Y) is a second pass of the scene into 320 x 35 rows, squeezed to a 160 x 35 glass at (81, 14), with `MIRROR_L.PKC`'s frame over it. The cameras, the cockpits (`COCK1..8_L.PKC`, the dashboards' numbers `CRUSC.DTR`: gear lamp,
 speed and revs needles) and the mirror are read from `STARTL.EXE` and held against the running original: docs/screamer2/hud.md section 5 has the rules, the numbers and what was compared. In short: INCAR and INSIDE sit in the car (400 and 300
 above the body, the car and its shadow are not drawn), INSIDE draws the scene only above the dashboard (127 to 143 rows) and the dashboard's picture over the rest, NEAR is the camera of `CARS.DTR`'s POSIZIONE TELECAMERA with eased
