@@ -136,9 +136,11 @@ static void run_states(void)
     }
 }
 
+static int control_heading;                                 /* the negative control: the model's headings turned by this many 2048ths */
+
 static int car_is(const struct row *r, int i, const struct state *s)
 {
-    return r->car[i][0] == s->car[i][0] && r->car[i][1] == s->car[i][1] && r->car[i][2] == s->car[i][2] && r->ca1[i] == s->a1[i] && !r->ca0[i] && !r->ca2[i];
+    return r->car[i][0] == s->car[i][0] && r->car[i][1] == s->car[i][1] && r->car[i][2] == s->car[i][2] && r->ca1[i] == ((s->a1[i] + control_heading) & 0x7FF) && !r->ca0[i] && !r->ca2[i];
 }
 
 static int cam_is(const struct row *r, const struct state *s)
@@ -156,7 +158,7 @@ static int match_row(const struct row *r, int *torn)
         for (int i = 0; i < 4; i++) {
             all &= car_is(r, i, &states[f]);
             for (int k = 0; k < 3; k++) mixed &= r->car[i][k] == states[f].car[i][k] || r->car[i][k] == states[f + 1].car[i][k];
-            mixed &= r->ca1[i] == states[f].a1[i] || r->ca1[i] == states[f + 1].a1[i];
+            mixed &= r->ca1[i] == ((states[f].a1[i] + control_heading) & 0x7FF) || r->ca1[i] == ((states[f + 1].a1[i] + control_heading) & 0x7FF);
             mixed &= !r->ca0[i] && !r->ca2[i];
         }
         if (all) return f;
@@ -287,6 +289,15 @@ int main(int argc, char **argv)
         const struct row *r = &rows[first_wrong];
         printf("  first: row %d: car 0 (%d, %d, %d) a1 %d, camera (%d, %d, %d) a0 %d a1 %d\n", first_wrong, r->car[0][0], r->car[0][1], r->car[0][2], r->ca1[0], r->cam[0], r->cam[1], r->cam[2], r->a0, r->a1);
     }
+    /* the negative control: the model's headings one 2048th off must find none of the rows (else the comparison cannot tell a heading) */
+    control_heading = 1;
+    int control_hits = 0;
+    for (int k = 0; k < nrows; k++) {
+        int t;
+        control_hits += match_row(&rows[k], &t) >= 0 || t >= 0;
+    }
+    control_heading = 0;
+    printf("states: negative control: with every heading of the model one 2048th off, %d of the rows are found (%s)\n", control_hits, control_hits ? "the comparison cannot tell a heading: the control fails" : "none: it tells every heading");
     /* the length of a take in the original's own clock: the hundredths (2 a frame) between the rows where the cars jump back to the start of a path */
     int ticks_seen[8], nseen = 0, last_take = -1;
     for (int k = 0; k < nrows && nseen < 8; k++) {
@@ -369,5 +380,5 @@ int main(int argc, char **argv)
     printf("%d screenshots compared, %d identical; %.1f pixels differ on average, %.1f of them in one silhouette only; where either picture shows a car: %ld pixels, %.1f %% equal, %.1f %% of the others within a pixel; "
            "%.1f pieces and %.0f faces handed to the geometry unit a frame\n", compared, perfect, compared ? (double)sum_diff / compared : 0.0, compared ? (double)sum_miss / compared : 0.0, sum_cars, sum_cars ? 100.0 * sum_eq / sum_cars : 0.0,
            sum_cars - sum_eq ? 100.0 * sum_near / (sum_cars - sum_eq) : 0.0, compared ? (double)sum_pieces / compared : 0.0, compared ? (double)sum_faces / compared : 0.0);
-    return wrong ? 1 : 0;
+    return wrong || control_hits ? 1 : 0;
 }

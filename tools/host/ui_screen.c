@@ -1034,6 +1034,9 @@ static void draw_banner(int track, uint8_t *out)
 /* the options room: room_screen.c */
 #include "room_screen.c"
 
+/* the ARCADE title's cars: scene_screen.c */
+#include "scene_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -1062,6 +1065,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_pages3d(prefix);
     check_trackpages(prefix);
     check_room(ref, prefix);
+    check_scene(ref, prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
     int stored_banners = s2gfx_banner(1) != 0x13;
