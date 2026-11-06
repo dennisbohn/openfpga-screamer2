@@ -138,10 +138,11 @@ void pal_faded(const uint32_t *pal, int32_t f)         /* main.c's */
 
 /* the music and the effects: what the pause asks of them */
 static int music_frames, effects_calls, clicks[64], nclicks;
-static int32_t effects_last, effects_min = 0x8000;
+static int32_t effects_last, effects_min = 0x8000, effects_log[512];       /* (every level asked for, in order, while the end screen is tested) */
 void music_frame(void) { music_frames++; }
 void s2sound_effects(int32_t f)
 {
+    if (effects_calls < 512) effects_log[effects_calls] = f;
     effects_calls++;
     effects_last = f;
     if (f < effects_min) effects_min = f;
@@ -357,7 +358,7 @@ static void check_pause(const char *ref, const char *prefix)
         CHECK(nclicks == 4 && clicks[0] == S2PAGE_SND_MOVE && clicks[1] == S2PAGE_SND_MOVE && clicks[2] == S2PAGE_SND_MOVE &&
               clicks[3] == S2PAGE_SND_SELECT, "%s: clicks: %d", frames[k], nclicks);
         CHECK(music_frames == (int)calls, "%s: the music ring was kept fed %d times in %u frames", frames[k], music_frames, calls);
-        CHECK(effects_last == 0x8000 && effects_min < 0x8000 && effects_min > 0x8000 - 18 * 700, "%s: the effects ease to %d, end at %d", frames[k], effects_min, effects_last);
+        CHECK(effects_last == 0x8000 && effects_min < 0x8000 - 10 * 874 && effects_min > 0x8000 - 20 * 874, "%s: the effects ease to %d, end at %d", frames[k], effects_min, effects_last);
 
         /* the still: the picture on show through the darkening table, the box under the items twice */
         s2gfx_dark_table(pal, dark, 241);
@@ -963,6 +964,47 @@ static void check_end(const char *ref, const char *prefix)
     printf("ui: end of the race: seven runs of frames (D is time attack's, E to G have REPLAY in thirds and the replay's own screen) equal to the reference, ENTER, the best times and the loading screen's records checked\n");
 }
 
+/* the effects' levels the end screen asked for against the original's rule, read from 0xaee60 and its callers 0x4778b, 0x48196, 0x48c9c: once the clock has passed 4.0 s every frame
+   takes (int)(dt x 16383) off the sound manager's master (0x5fff at the start: the default effects volume, measured in the running original) down to 0, nothing is asked before. Frames of 20 ms: the step is 328 (327.66,
+   fistp rounds to nearest), 75 frames to nothing. The firmware's levels are of 0x8000 whole: level x 0x5fff / 0x8000 must be the master within 20 (the step 437 of 0x8000 is 327.7 of
+   0x5fff). `step` is the model's, so that a model with another rate (the control) has to fail. */
+static int fade_matches(int step)
+{
+    int master = 0x5FFF, k = 0;
+    while (master > 0) {
+        master -= step;
+        if (master < 0) master = 0;
+        if (k >= effects_calls || k >= 512) return 0;
+        const int ours = (int)((int64_t)(effects_log[k] < 0 ? 0 : effects_log[k]) * 0x5FFF / 0x8000);
+        if (abs(ours - master) > 20) return 0;
+        k++;
+    }
+    return k == effects_calls;
+}
+
+static void check_end_fade(const char *ref)
+{
+    static uint32_t pal[256];
+    uint8_t *pb = ref_file(ref, "frame_s2_track4_city", "pal", 1024), *base = ref_file(ref, "frame_s2_track4_city", "idx", S2G_PIC_BYTES);
+    if (!pb || !base) return;
+    memcpy(pal, pb, 1024);
+    struct s2_end_in in = { 4, 3, 2, 9999.0f, 0.0f, 1, 1 };         /* (a time slower than the fifteenth: the lists stay as they are) */
+    effects_calls = 0;
+    int first = -1;
+    for (int j = 0; j < 400; j++) {
+        memcpy((void *)FB(0), base, S2G_PIC_BYTES);
+        s2end_frame(FB(0), 0, pal, &in, (uint32_t)j, 20000 + (uint32_t)j, 0);
+        if (first < 0 && effects_calls) first = j;
+    }
+    CHECK(first == 200, "the effects are first asked for at frame %d (the clock passes 4.0 s at 200)", first);
+    CHECK(effects_calls == 75 && effects_log[0] == 0x8000 - 437 && effects_log[74] <= 0, "75 frames of ease, then no more calls: %d calls, the first %d, the last %d", effects_calls, effects_log[0], effects_log[74]);
+    CHECK(fade_matches(328), "the effects' levels follow the original's ease (328 a frame of 0x5fff)");
+    CHECK(!fade_matches(655) && !fade_matches(164) && !fade_matches(0x5FFF), "the negative control: a model with the pause's rate (655 a frame), half the rate, or a cut is not the end screen's");
+    printf("ui: the end screen's sound: nothing asked for 4 s, then the effects ease to 0 in 75 frames (1.5 s), the original's 16383 a second of the master; models with other rates fail the same comparison\n");
+    free(pb);
+    free(base);
+}
+
 /* the menu's room is a stand-in in these tests (room_screen.c tests the room itself): it answers what the test says, one answer a visit */
 static int answers[8], answered, asked;
 
@@ -1067,6 +1109,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_settings(ref, prefix);
     check_hiscores(ref, prefix);
     check_end(ref, prefix);
+    check_end_fade(ref);
     check_menu_hook(prefix);
     check_runner();
     check_arcade_cases(ref, prefix);
