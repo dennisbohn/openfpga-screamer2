@@ -393,9 +393,11 @@ void s2gfx_end(const uint32_t *pal, int32_t fade)
     VID_SWAP = 1;
 }
 
-/* an image w wide, cut to the rows [y0, y1) */
+/* an image w wide, cut to the rows [y0, y1); one wholly right of or left of the screen is not sent (the blitter's x is 10 bits wide, signed:
+   a sprite sliding in from x 1000 would come in at the left edge, wrapped); the blitter cuts what hangs over an edge itself */
 static void copy_clipped(struct blit_list *l, const uint8_t *src, int w, int h, int x, int y, int kind, int colour, int y0, int y1)
 {
+    if (x >= FB_W || x + w <= 0) return;
     if (y < y0) {
         src += (y0 - y) * w;
         h -= y0 - y;
