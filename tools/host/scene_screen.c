@@ -128,35 +128,42 @@ static void check_scene(const char *ref, const char *prefix)
         orig_ok &= scene_rec[193].car[i][0] == orig[i].x && scene_rec[193].car[i][1] == orig[i].y && scene_rec[193].car[i][2] == orig[i].z && scene_rec[193].a1[i] == orig[i].a1;
     CHECK(orig_ok, "frame 193 is not the original's (car 0 at %d, %d, %d heading %d)", scene_rec[193].car[0][0], scene_rec[193].car[0][1], scene_rec[193].car[0][2], scene_rec[193].a1[0]);
 
-    /* the title's cost: a whole round of the four takes drawn (the picture, the cars): what the geometry unit is handed, a frame */
-    unsigned long pieces = 0, faces = 0, vertices = 0, pixels = 0;
-    unsigned max_pieces = 0, max_faces = 0, max_pixels = 0, visible = 0, blank = 0;
-    s2arcscene_frame(0);
-    for (int f = 0; f < SCENE_ROUND; f++) {
-        if (f) s2arcscene_frame((uint32_t)f);
-        struct blit_list *l = s2gfx_begin_on(0);
-        s2gfx_picture(l, s2gfx_pic(0));
-        pieces_drawn = faces_drawn = 0;
-        pixels_drawn = vertices_drawn = 0;
-        s2arcscene_draw(l);
-        s2gfx_flush();
-        pieces += pieces_drawn;
-        faces += faces_drawn;
-        vertices += vertices_drawn;
-        pixels += pixels_drawn;
-        max_pieces = pieces_drawn > max_pieces ? pieces_drawn : max_pieces;
-        max_faces = faces_drawn > max_faces ? faces_drawn : max_faces;
-        max_pixels = pixels_drawn > max_pixels ? pixels_drawn : max_pixels;
-        int differ = 0;
-        for (int i = 0; i < S2G_PIC_BYTES && !differ; i++) differ = FB(0)[i] != s2gfx_pic(0)[i];
-        visible += differ;
-        blank += !differ;
-        if (f % 201 == 0) CHECK(!differ, "frame %d (a take's first): a car is in view at the start of its path", f);
+    /* the title's cost: a whole round of the four takes drawn (the picture, the cars), for each of the four teams' cars (the loader reads each team's own container; every team's blocks
+       are far under the unit's limits: gu_cut_failures stays 0 and no piece is left out): what the geometry unit is handed, a frame */
+    for (int team = 1; team <= 4; team++) {
+        CHECK(s2arcscene_load(s2gfx_zip(), team, 4), "team %d's cars and the paths", team);
+        s2showroom_init(S2ARCSCENE_CARS, 0);
+        unsigned long pieces = 0, faces = 0, vertices = 0, pixels = 0;
+        unsigned max_pieces = 0, max_faces = 0, max_pixels = 0, visible = 0, blank = 0;
+        const uint32_t cut_before = gu_cut_failures;
+        s2arcscene_frame(0);
+        for (int f = 0; f < SCENE_ROUND; f++) {
+            if (f) s2arcscene_frame((uint32_t)f);
+            struct blit_list *l = s2gfx_begin_on(0);
+            s2gfx_picture(l, s2gfx_pic(0));
+            pieces_drawn = faces_drawn = 0;
+            pixels_drawn = vertices_drawn = 0;
+            s2arcscene_draw(l);
+            s2gfx_flush();
+            pieces += pieces_drawn;
+            faces += faces_drawn;
+            vertices += vertices_drawn;
+            pixels += pixels_drawn;
+            max_pieces = pieces_drawn > max_pieces ? pieces_drawn : max_pieces;
+            max_faces = faces_drawn > max_faces ? faces_drawn : max_faces;
+            max_pixels = pixels_drawn > max_pixels ? pixels_drawn : max_pixels;
+            int differ = 0;
+            for (int i = 0; i < S2G_PIC_BYTES && !differ; i++) differ = FB(0)[i] != s2gfx_pic(0)[i];
+            visible += differ;
+            blank += !differ;
+            if (f % 201 == 0) CHECK(!differ, "team %d, frame %d (a take's first): a car is in view at the start of its path", team, f);
+        }
+        printf("scene: team %d's cars over four takes (%d frames): the geometry unit is handed %.1f pieces, %.1f faces, %.1f vertices and fills %.0f pixels a frame on average, "
+               "%u pieces, %u faces and %u pixels at most; cars are in view in %u of the frames (none in %u)\n", team, SCENE_ROUND, (double)pieces / SCENE_ROUND, (double)faces / SCENE_ROUND,
+               (double)vertices / SCENE_ROUND, (double)pixels / SCENE_ROUND, max_pieces, max_faces, max_pixels, visible, blank);
+        CHECK(max_pieces <= 64 && max_faces <= 700, "team %d: a frame of the title hands the unit %u pieces and %u faces", team, max_pieces, max_faces);
+        CHECK(visible > 600 && gu_cut_failures == cut_before, "team %d: cars in view in %u frames, %u blocks over the unit's limits", team, visible, gu_cut_failures - cut_before);
     }
-    printf("scene: the title's cars over four takes (%d frames): the geometry unit is handed %.1f pieces, %.1f faces, %.1f vertices and fills %.0f pixels a frame on average, "
-           "%u pieces, %u faces and %u pixels at most; cars are in view in %u of the frames (none in %u)\n", SCENE_ROUND, (double)pieces / SCENE_ROUND, (double)faces / SCENE_ROUND,
-           (double)vertices / SCENE_ROUND, (double)pixels / SCENE_ROUND, max_pieces, max_faces, max_pixels, visible, blank);
-    CHECK(max_pieces <= 64 && max_faces <= 700, "a frame of the title hands the unit %u pieces and %u faces", max_pieces, max_faces);
 
     /* a team that has no cars to show: the loader says so and the title is the picture and the prompt as before */
     CHECK(!s2arcscene_load(s2gfx_zip(), 9, 4), "a team 9's cars were found");
