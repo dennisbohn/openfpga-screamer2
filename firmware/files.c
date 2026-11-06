@@ -252,6 +252,14 @@ void files_draw(volatile uint8_t *fb, int failed)
     static const uint32_t pal[5] = { 0x000000, 0xFFFFFF, 0x40D070, 0xF04848, 0x909090 };
     for (int i = 0; i < 5; i++) VID_PAL[i] = pal[i];
     fb_fill(fb, 0, 0, FB_W, FB_H, BLACK);
+    if (!needed && !failed && !zip_text() && load_state != 2) {         /* all in order: a loading screen, not the list (the list is what tells what is wrong) */
+        const char *const title = "SCREAMER 2", *const wait = "LOADING...";
+        con_text(fb, (CON_COLS - (int)__builtin_strlen(title)) / 2, 11, title, WHITE, BLACK);
+        con_text(fb, (CON_COLS - (int)__builtin_strlen(wait)) / 2, 13, wait, GREY, BLACK);
+        if (req_deflated)                   /* (the ZIP is compressed: it takes long, say so) */
+            for (int i = 0; i < 3; i++) con_text(fb, 1, 22 + i, slow_text[i], WHITE, BLACK);
+        return;
+    }
     fb_fill(fb, 0, 0, FB_W, 8, WHITE);
     con_text(fb, 1, 0, "SCREAMER 2 - GAME FILES", BLACK, WHITE);
 

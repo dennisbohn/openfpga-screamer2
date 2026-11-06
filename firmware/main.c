@@ -1588,14 +1588,12 @@ static void championship(int resume, int *car)
    but loading them failed (then for ever) */
 static void __attribute__((noreturn)) files_loop(int failed)
 {
-    uint32_t drawn = 0, keys_before = in_keys();
+    uint32_t drawn = 0;
     for (;;) {
         uint32_t st = wait_swap_done();
         frames_shown = drawn;       /* every frame drawn so far has been swapped in */
-        uint32_t keys = in_keys(), press = keys & ~keys_before;
-        keys_before = keys;
         int go = !failed && files_ready();
-        if (go && drawn >= 3 && ((SYS_FLAGS & FLAG_SIM) || (press & (KEY_A | KEY_B | KEY_START)) || drawn >= 5 * VID_HZ))
+        if (go && drawn >= 3)       /* the first pictures are up (the LOADING screen of files_draw) and the read test passed: on at once, the viewer brings up its own loading picture and starts with the intro */
             viewer_run(results);
         if (drawn == 3 && !go) {    /* three frames drawn and swapped */
             SYS_SIM = SIM_DONE | results;

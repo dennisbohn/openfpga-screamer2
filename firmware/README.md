@@ -15,9 +15,9 @@ tests the CPU (integer multiply, divide and shifts, floating point, the CFU). A 
 test of the SDRAM follows; only a failure leaves its results on the screen. Then `program.bin`
 reads the game's ZIP from its data slot (`zip.c`) and shows the list of the game's files (`files.c`):
 green where they are, red where a needed one is missing, grey for the optional ones, and in plain words
-what is wrong with the ZIP. When nothing is missing it says "ready" and reads the first race's small
-files whole as a test, logging the time of each (`zip: <name> method <m> <bytes> bytes in <ms> ms`).
-When the files are all there the menu (the options room, `s2room.c`, run by `s2menu.c`) follows and then the viewer and the race (`viewer.c`); the Screamer 1 game code
+what is wrong with the ZIP. When nothing is missing the screen is a LOADING screen (with a notice if the ZIP is compressed): the first race's small
+files are read whole as a test, logging the time of each (`zip: <name> method <m> <bytes> bytes in <ms> ms`), and the program goes on at once. Where something is missing the list stays.
+When the files are all there the viewer brings up the original's LOADING picture of the intro's track as soon as the 2D toolkit can draw it, and the intro follows (the attract sequence, `s2attract.c`); any button leads to the menu (the options room, `s2room.c`, run by `s2menu.c`) and then the viewer and the race (`viewer.c`); the Screamer 1 game code
 is still in the tree and not reached. A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
 
 ## Building

@@ -1140,14 +1140,14 @@ static void attack_run(struct zip *z, int *cars, int *overlay)
    black: the original shows nothing either while the race is set up), four computer cars, the default grid (team n, car n), at the level 0 (pro), no laps that count, the track's
    song cued for the third stage; visit() runs it as any race, with the cameras of the replay from the first frame and the sequence's screen in the race screen's place, until the screen's
    step says it is over (any button, or the last credit). Nothing of it is kept: no ghost or replay is recorded (race_attract), no best time or unlock, nothing is written to the save. */
-static void attract_run(struct zip *z, int *cars)
+static void attract_run(struct zip *z, int *cars, int at_start)
 {
     if (!ui_ready || !s2hud_ready() || !s2att_load(&att, z)) {      /* (the sequence needs the race screen's sprites and fonts and its text) */
         dlog_str("attract: not shown (no sprites or text)\n");
         return;
     }
     const int n = s2att_track();
-    {                                                   /* a cut to black (0x4085d: the fade is set to 1.0): the page that was up must not stay for the seconds the track takes */
+    if (!at_start) {                                    /* a cut to black (0x4085d: the fade is set to 1.0): the page that was up must not stay for the seconds the track takes (at the program's start the LOADING picture is up instead and visit() fades it out) */
         static const uint32_t black[256];
         struct blit_list *l = s2gfx_begin();
         blit_fill(l, 0, 0, FB_W, FB_H, 0);
@@ -1189,7 +1189,6 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     int n = sim && slot_size(TRACK_SLOT) ? (int)slot_size(TRACK_SLOT) : 1, cars = 4, overlay = 1;
     int drive = sim && (in_keys() & KEY_START);         /* in the simulation Start held (SIM_KEYS=8000): the driving mode */
     dlog_str("viewer: start\n");
-    s2snd_init(z);
     s2menu_init(z);
     s2menu_load(&cfg);
 #ifdef S2_SIM_END
@@ -1197,9 +1196,16 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
 #else
     ui_ready = !sim && s2gfx_init(z);                   /* (the simulation has no menus) */
 #endif
+    int intro = !sim && ui_ready;                       /* the program starts with the intro (the attract sequence), then the menu */
+    if (intro) s2load_show_kind(S2S_KINDS, s2att_track(), 1);     /* the LOADING picture of the intro's track, up as soon as the toolkit can draw it: it stays through the rest of the start-up and the track's build, visit() fades it out */
+    s2snd_init(z);
     s2hud_init(z);                                      /* the race screen (the simulation has it: its cost is measured there) */
     for (;;) {
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
+            if (intro) {                                /* the intro: any button ends it, the menu follows (on a first start TEAM SELECTION first) */
+                intro = 0;
+                attract_run(z, &cars, 1);
+            }
             int go = s2menu_run(&cfg);
             if (go == S2M_CHAMP) {                      /* the championship needs the toolkit's pages; without it the row does nothing */
                 if (ui_ready) league_run(z, &cars, &overlay);
@@ -1210,7 +1216,7 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
                 continue;
             }
             if (go == S2M_ATTRACT) {                    /* the menu was left alone for 30 s */
-                attract_run(z, &cars);
+                attract_run(z, &cars, 0);
                 continue;
             }
             n = cfg.track;
