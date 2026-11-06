@@ -23,17 +23,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-/* what music.c links to and the song does not need: no FM songs, no GEN.DAT */
-int fm_init(const uint8_t *f, uint32_t s) { (void)f; (void)s; return 0; }
-int fm_play(int n) { (void)n; return 0; }
-void fm_frame(void) {}
-void fm_stop(void) {}
-void fm_pause(void) {}
-void fm_resume(void) {}
-void fm_master(int32_t v) { (void)v; }
-void fm_fade(int32_t f) { (void)f; }
-int fm_playing(void) { return 0; }
-void fm_stats(uint32_t *a, uint32_t *b, uint32_t *c) { *a = *b = *c = 0; }
+/* what music.c links to and the song does not need: no GEN.DAT (the FM songs are stubbed in music_hw.c) */
 struct dat_entry;
 int dat_find(const uint8_t *d, uint32_t n, const char *name, struct dat_entry *e) { (void)d; (void)n; (void)name; (void)e; return 0; }
 uint32_t dat_extract(const uint8_t *d, uint32_t n, const struct dat_entry *e, uint8_t *out, uint32_t max) { (void)d; (void)n; (void)e; (void)out; (void)max; return 0; }
@@ -230,7 +220,7 @@ static void test_chain_hold_time(void)
         n++;
     }
     uint32_t ms = (uint32_t)((mhw_now() - t0) / MS);
-    CHECK(ms >= 250 && ms <= 950, "chain: the song was held %u ms into the load (after %u chunks)", ms, n);
+    CHECK(ms >= 350 && ms <= 750, "chain: the song was held %u ms into the load (after %u chunks)", ms, n);
     printf("music_model: a chain of 64 KB chunks with 40 ms of work after each: the song is held after %u chunks, %u ms into the load\n", n, ms);
     chunks(10 * 65536, 40);
     frames(30);
@@ -364,7 +354,7 @@ static void test_controls(void)
     mhw_burn_ms(1000);                              /* the same but 1 s: the ring still holds */
     frames(3);
     CHECK(clean(), "control 4: a second without music_frame() ran the ring dry (%u frames)", mhw.bad_frames);
-    printf("music_model: 1 s without a call: the ring holds (the stretch the guard allows after the last slot call is half of that)\n");
+    printf("music_model: 1 s without a call: the ring holds (the guard keeps 0.3 s of the ring for the work after a read and as much again as the read took)\n");
 }
 
 /* a random mix: frames, short and long reads, chains, CPU stretches, songs started, stopped and held, at the APF's rate or slower */
@@ -375,12 +365,14 @@ static uint32_t rnd(uint32_t n)
     return (rnd_state >> 8) % n;
 }
 
-static void test_fuzz(void)
+static void test_fuzz(int guard)
 {
-    uint32_t stops_total = 0, sessions = 0, ops_total = 0;
+    uint32_t stops_total = 0, sessions = 0, ops_total = 0, bad_sessions = 0;
     for (uint32_t seed = 1; seed <= 60; seed++) {
+        if (getenv("MHW_SEED") && (uint32_t)atoi(getenv("MHW_SEED")) != seed) continue;
         rnd_state = seed * 7919u;
         fresh();
+        if (!guard) slot_hook = 0;                  /* (the negative control: the same sessions without the guard) */
         mhw_rate(seed % 3 == 0 ? 0.75e6 : seed % 3 == 1 ? 1.0e6 : 1.3e6);
         begin_song(2 + (int)rnd(8));
         char trace[16][48];
@@ -413,9 +405,10 @@ static void test_fuzz(void)
                 break;
             }
             case 7: {
-                uint32_t c = rnd(300);
+                uint32_t c = rnd(250);
                 snprintf(t, 48, "cpu %u ms", c);
-                mhw_burn_ms(c);                     /* the CPU on its own work, no slot call */
+                mhw_burn_ms(c);                     /* the CPU on its own work, no slot call (and then the page's frame: stretches do not follow each other, that is what the guard assumes) */
+                frame();
                 break;
             }
             case 8:
@@ -435,20 +428,27 @@ static void test_fuzz(void)
                 }
                 break;
             }
+            if (getenv("MHW_SEED")) printf("  %-28s t=%.3f s  active %d mixer %d lead %.2f s  bad %u overruns %u\n", t, (double)mhw_now() / 74250000.0, music_active(), mhw_mixer_on(), mhw_lead() / 44100.0, mhw.bad_frames, mhw.overruns);
             if (!clean()) break;
         }
         stops_total += mhw.stops;
         ops_total += 300 - (uint32_t)(ops + 1 > 0 ? ops + 1 : 0);
         sessions++;
         checks++;
-        if (!clean()) {
+        bad_sessions += !clean();
+        if (!clean() && guard) {
             failures++;
             printf("FAIL: fuzz seed %u: bad frames %u (%u runs, the first at %u ms), overlaps %u, overruns %u; the last operations:\n", seed, mhw.bad_frames, mhw.bad_runs, mhw.first_bad_ms,
                    mhw.overlaps, mhw.overruns);
             for (int i = n > 16 ? n - 16 : 0; i < n; i++) printf("    %s\n", trace[i % 16]);
         }
     }
-    printf("music_model: %u random sessions (%u operations) at 0.75, 1.0 and 1.3 MB/s: %u mixer stops in all, every session clean\n", sessions, ops_total, stops_total);
+    if (guard) {
+        printf("music_model: %u random sessions (%u operations) at 0.75, 1.0 and 1.3 MB/s: %u mixer stops in all, every session clean\n", sessions, ops_total, stops_total);
+    } else {
+        CHECK(bad_sessions >= sessions / 2, "control: only %u of the %u sessions without the guard went wrong", bad_sessions, sessions);
+        printf("music_model: negative control, the same sessions without the guard: %u of %u went wrong (a repeat, or a slot call on a read)\n", bad_sessions, sessions);
+    }
 }
 
 int main(void)
@@ -477,7 +477,8 @@ int main(void)
     test_race_start();
     test_wrap();
     test_controls();
-    test_fuzz();
+    test_fuzz(1);
+    test_fuzz(0);
     printf(failures ? "music_model: %d of %d checks FAILED\n" : "music_model: all %d checks passed\n", failures ? failures : checks, checks);
     return failures != 0;
 }

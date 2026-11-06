@@ -2,8 +2,21 @@
  * A model of the data slot, the mixer's music ring and the CPU's clock (music_hw.h)
  */
 #include "music_hw.h"
+#include "../slot.h"
 #include <stdio.h>
 #include <string.h>
+
+/* what music.c links to and the song does not need: no FM songs */
+int fm_init(const uint8_t *f, uint32_t s) { (void)f; (void)s; return 0; }
+int fm_play(int n) { (void)n; return 0; }
+void fm_frame(void) {}
+void fm_stop(void) {}
+void fm_pause(void) {}
+void fm_resume(void) {}
+void fm_master(int32_t v) { (void)v; }
+void fm_fade(int32_t f) { (void)f; }
+int fm_playing(void) { return 0; }
+void fm_stats(uint32_t *a, uint32_t *b, uint32_t *c) { *a = *b = *c = 0; }
 
 #define CPU_HZ      74250000ull
 #define RING_FRAMES 65536u
@@ -82,6 +95,21 @@ uint32_t mhw_slot_size(uint32_t id)
     return id == 21 ? cue_len : id == 22 ? image_sectors() * SECTOR : 0;
 }
 
+void mhw_serve_cue(void *to)
+{
+    memcpy(to, cue_text, cue_len);
+}
+
+uint64_t mhw_last_service;
+uint32_t mhw_chopped;
+uint32_t mhw_class_reads[MHW_CLASSES], mhw_class_holds[MHW_CLASSES], mhw_class_bytes[MHW_CLASSES];
+
+const char *mhw_class_name(int c)
+{
+    static const char *const n[MHW_CLASSES] = { "up to 4 KB", "up to 64 KB", "up to 256 KB", "up to 1 MB", "over 1 MB" };
+    return n[c];
+}
+
 static void play_frames(uint64_t frames)
 {
     for (; frames; frames--) {
@@ -150,6 +178,7 @@ static void mixer_start(void)
 {
     mhw.starts++;
     mhw.last_start = tag[0];
+    if (mhw_trace > 1) printf("  mixer start at %.3f s, ring frame 0 holds %d\n", (double)now / CPU_HZ, (int)tag[0]);
     mix_on = 1;
     mix_pos = 0;
     mix_acc = 0;
@@ -174,6 +203,7 @@ static void sync(void)
         else if (mix_on) {
             mhw.stops++;
             mhw.last_stop = mix_expect;
+            if (mhw_trace > 1) printf("  mixer stop at %.3f s\n", (double)now / CPU_HZ);
             mix_on = 0;
         }
     }
@@ -213,6 +243,25 @@ uint32_t mhw_cycle(void)
 uint64_t mhw_now(void)
 {
     return now;
+}
+
+void mhw_zip_read(uint32_t len, uint32_t cpu_cycles_per_byte)
+{
+    sync();                                     /* (what the CPU wrote before is seen first: a stop of the mixer by music_stop() is not this read's) */
+    uint32_t stops = mhw.stops, lead = mhw_trace ? mhw_lead() : 0;
+    if (slot_hook) slot_hook(len);
+    sync();
+    if (busy) mhw.overlaps++;                   /* the slot is in use by a read of the ring: the guard should have waited for it */
+    int c = len <= 4096 ? 0 : len <= 65536 ? 1 : len <= 262144 ? 2 : len <= 1048576 ? 3 : 4;
+    mhw_class_reads[c]++;
+    mhw_class_bytes[c] += len;
+    mhw_class_holds[c] += mhw.stops != stops;
+    if (mhw.stops != stops && len <= 65536 && now - mhw_last_service < CPU_HZ / 4) mhw_chopped++;
+    if (mhw.stops != stops && mhw_trace) printf("  held by a read of %u bytes, %.0f ms after the last music_frame, the ring held %.2f s\n", len, (double)(now - mhw_last_service) / (CPU_HZ / 1000), lead / 44100.0);
+    mhw.reads++;
+    mhw.bytes += len;
+    if (len > mhw.longest) mhw.longest = len;
+    mhw_burn(latency + (uint64_t)((double)len * (double)CPU_HZ / rate) + (uint64_t)len * cpu_cycles_per_byte);
 }
 
 void mhw_burn(uint64_t cycles)
@@ -264,6 +313,10 @@ uint32_t mhw_lead(void)
 void mhw_reset(void)
 {
     memset(&mhw, 0, sizeof mhw);
+    memset(mhw_class_reads, 0, sizeof mhw_class_reads);
+    memset(mhw_class_holds, 0, sizeof mhw_class_holds);
+    memset(mhw_class_bytes, 0, sizeof mhw_class_bytes);
+    mhw_chopped = 0;
     memset(regs, 0, sizeof regs);
     memset(tag, 0xFF, sizeof tag);
     now = 1000;

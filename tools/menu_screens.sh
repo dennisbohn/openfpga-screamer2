@@ -5,7 +5,11 @@
 # the real ZIP's DATA/LOCAL.DAT), of the toolkit against independent references made from the game's files (tools/ui_reference.py: .BKK
 # pictures, text and sprites, MENU.DTR; and the pages of row 3 drawn from the game's files), of the arcade pages against a model of them
 # (tools/ui_arcade_ref.py: scripted buttons, frames pixel for pixel, the chain) and pictures of the screens in several states, in
-# build/check/menu/*.png (never committed). Exit code 0 if all tests passed.
+# build/check/menu/*.png (never committed). The menus' music runs on these pages too: music.c, the page runner's calls and the slot hook are the
+# firmware's own, on the model of the APF, the mixer's ring and the clock of tools/host/music_hw.c (a frame is 20 ms, a read of the ZIP takes its
+# time and the CPU's work on it); the summary line says how many reads of which size held the song, and the test fails if the mixer plays a frame
+# that is not the song's next or a slot call meets a read of the ring (MHW_NOGUARD=1 leaves the guard out: the negative control, the test must fail;
+# MHW_TRACE=1 prints every hold). Exit code 0 if all tests passed.
 # Usage: tools/menu_screens.sh [game folder]    default $GAME_DIR or "C:/GOG Games/Screamer 2"
 set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -28,17 +32,8 @@ src="$root/build/host/menu"
 rm -rf "$src"
 mkdir -p "$src/host"
 cp "$root"/firmware/*.c "$root"/firmware/*.h "$src/"
-cp "$root/tools/host/menu_screen.c" "$root/tools/host/ui_screen.c" "$root/tools/host/pages3d_screen.c" "$root/tools/host/league_screen.c" "$root/tools/host/trackpage_screen.c" "$root/tools/host/room_screen.c" "$root/tools/host/scene_screen.c" "$root/tools/host/attract_screen.c" "$root/tools/host/custom_screen.c" "$root/tools/host/garage_screen.c" "$root/tools/host/desk_screen.c" "$src/host/"
-"$py" -I - "$src/hw.h" <<'PY'
-import sys
-p = sys.argv[1]
-t = open(p).read()
-t = t[:t.index("/* Cache maintenance")] + """static inline void dcache_invalidate(void) {}
-static inline void icache_sync(void) {}
-static inline uint32_t rdcycle(void) { return 0; }
-"""
-open(p, "w").write(t)
-PY
+cp "$root/tools/host/menu_screen.c" "$root/tools/host/ui_screen.c" "$root/tools/host/pages3d_screen.c" "$root/tools/host/league_screen.c" "$root/tools/host/trackpage_screen.c" "$root/tools/host/room_screen.c" "$root/tools/host/scene_screen.c" "$root/tools/host/attract_screen.c" "$root/tools/host/custom_screen.c" "$root/tools/host/garage_screen.c" "$root/tools/host/desk_screen.c" "$root/tools/host/music_hw.c" "$root/tools/host/music_hw.h" "$src/host/"
+"$py" -I "$root/tools/host/music_hw_patch.py" "$src/hw.h"      # (hw.h's RISC-V instructions made plain C, the data slot's and the music's registers and rdcycle() on the model)
 
 if command -v cygpath >/dev/null 2>&1; then
     mount=$(cygpath -wa "$root/build")
@@ -48,9 +43,11 @@ else
     game_mount=$game
 fi
 set +e
-MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
+MSYS_NO_PATHCONV=1 docker run --rm -e MHW_TRACE -e MHW_NOGUARD -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
     cd /b/host/menu && gcc -O2 -w -c -ffunction-sections -fdata-sections geom.c setup.c raster.c track.c car.c &&
-    gcc -O1 -g -ffunction-sections -fdata-sections -Wl,--gc-sections -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c host/ui_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c s2gfx.c s2page.c s2load.c s2pause.c s2arcade.c s2arcscene.c s2anim.c s2pages.c s2end.c s2league.c s2leaguepages.c s2snd.c s2params.c blit.c s2scene.c s2pages3d.c s2showroom.c s2trackmap.c s2trackpage.c s2room.c track_build.c smg.c s2env.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c s2attract.c s2custom.c s2garage.c s2plates.c s2desk.c geom.o setup.o raster.o track.o car.o -lm &&
+    gcc -O1 -g -w -c -Dmusic_frame=music_frame_real music.c -o music.o &&
+    gcc -O1 -g -w -c -Dslot_read=slot_read_real -Dslot_size=slot_size_real -Dslot_set_size=slot_set_size_real slot.c -o slot_real.o &&
+    gcc -O1 -g -ffunction-sections -fdata-sections -Wl,--gc-sections -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../menu_screen host/menu_screen.c host/ui_screen.c s2menu.c s2save.c champ.c console.c dlog.c zip.c dat.c crc32.c s2gfx.c s2page.c s2load.c s2pause.c s2arcade.c s2arcscene.c s2anim.c s2pages.c s2end.c s2league.c s2leaguepages.c s2snd.c s2params.c blit.c s2scene.c s2pages3d.c s2showroom.c s2trackmap.c s2trackpage.c s2room.c track_build.c smg.c s2env.c tb_mmp.c tb_spl.c tb_gfx.c tb_hud.c s2attract.c s2custom.c s2garage.c s2plates.c s2desk.c s2menumusic.c host/music_hw.c music.o slot_real.o geom.o setup.o raster.o track.o car.o -lm &&
     cd /b/check/menu && /b/host/menu_screen /game/SCREAMER2.zip /b/check/menu/menu /b/check/menu/ref /b/check/menu/ref/graf_deflated.zip"
 status=$?
 for f in "$out"/*.rgb; do

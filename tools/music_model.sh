@@ -22,6 +22,6 @@ if command -v cygpath >/dev/null 2>&1; then
 else
     mount=$root/build
 fi
-MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" --entrypoint sh "$image" -c "
+MSYS_NO_PATHCONV=1 docker run --rm -e MHW_SEED -e MHW_TRACE -v "$mount:/b" --entrypoint sh "$image" -c "
     cd /b/host/musicmodel && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -o ../music_model host/music_model.c host/music_hw.c music.c slot.c dlog.c console.c &&
     /b/host/music_model"

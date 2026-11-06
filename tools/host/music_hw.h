@@ -50,3 +50,14 @@ uint32_t mhw_image_frame(int track, uint32_t sector);   /* the image frame of a 
 
 /* the slot interface music.c calls, as slot.c has it; slot_read there is the real one, the tests use theirs */
 uint32_t mhw_slot_size(uint32_t id);
+void mhw_serve_cue(void *to);           /* the cue sheet (slot 21) into memory */
+
+/* For the page tests (tools/menu_screens.sh), whose slot_read serves the real ZIP from a file: the time a blocking read of `len` bytes takes
+   in the model (the APF's, and the CPU's work on the bytes, cpu_cycles_per_byte each), after the slot hook has been asked as slot.c's slot_read
+   does. The reads are counted by size class: reads, bytes, and how many held the song. */
+void mhw_zip_read(uint32_t len, uint32_t cpu_cycles_per_byte);
+extern uint64_t mhw_last_service;       /* the clock when the page last called music_frame() (the test's wrapper sets it): a short read soon after it that holds the song chops it */
+extern uint32_t mhw_chopped;            /* reads of 64 KB or less within 0.25 s of the last service that held the song */
+#define MHW_CLASSES 5                   /* up to 4 KB, 64 KB, 256 KB, 1 MB, more */
+extern uint32_t mhw_class_reads[MHW_CLASSES], mhw_class_holds[MHW_CLASSES], mhw_class_bytes[MHW_CLASSES];
+const char *mhw_class_name(int c);
