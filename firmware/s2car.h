@@ -89,6 +89,9 @@ struct s2car_state {
 /* GAME SETTINGS' DAMAGES (the original's 0x130d54): 0 and a knock from a wall marks nothing and hurts nothing (0x19aaa returns at once), 1 the
    marks and the damage. 1 until a menu sets it (the tools and tests), the viewer sets it from the save when a race is set up. */
 extern int s2car_damages;
+/* ... and what a knock's force is multiplied by before the damage goes by it: the level's row of MISC.DTR's DAMAGES (pro 5, normal 2.5, rookie 1, 0x19b7b), for every knock of every car,
+   race_init() sets it (1 until a race does) */
+extern float s2car_damage_scale;
 
 /* Car number 0 .. 4 of team 0 .. 3 (the fifth is the team's bonus car) on track 1 .. 7: CAR_PARAMS
    read (s2car_params()), the car put on the start line, heading along the road, wheels on the ground,
@@ -147,10 +150,10 @@ void s2car_finish(struct s2car_state *s, const struct s2car_input *in);
 void s2car_finish_driven(struct s2car_state *s, void (*driver)(struct s2car_state *s, void *ctx), void *ctx);
 
 /* A knock on side 0 .. 3 at corner 0 .. 3 (0x19aaa: the side's count and mark, with DAMAGES on the corner's and the car's damage), share of the edge 0 .. 1, force,
-   the damage's scale for the level (MISC.DTR's DAMAGES: pro 5, normal 2.5, rookie 1; the walls' knocks of the player's car are not scaled); and
+   (the force the damage goes by is scaled by s2car_damage_scale, above); and
    where two lines meet (0x20970: the line through p along d and the one through q along e, x at [0] and z at [2]; the distances along each; 0 when they
    run side by side). The touching cars' solver and push use them. */
-void s2car_knock(struct s2car_state *s, int side, int corner, float share, float force, float scale);
+void s2car_knock(struct s2car_state *s, int side, int corner, float share, float force);
 int s2car_lines_meet(const float p[3], const float d[3], const float q[3], const float e[3], float *s, float *u);
 
 /* A place after the game's cut to whole numbers towards zero (the game's fistp in chop mode), or not: the header of s2car.c says why the firmware keeps the

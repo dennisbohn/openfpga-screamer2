@@ -152,6 +152,14 @@ static void record(struct s2car_state *s, int row, const struct s2car_input *in)
     ours[row][C_WSPIN] = RI(0x58);
 }
 
+/* the damage a car has: the car's, the four corners', the four sides' counts and the marks (tools/s2/check_damage_s2.sh) */
+static void damage_line(const struct s2car_state *s)
+{
+    const union { uint32_t u; float f; int32_t i; } *w = (const void *)s->rec;
+    printf("damage: car %.9g corners %.9g %.9g %.9g %.9g sides %.9g %.9g %.9g %.9g marks %x\n", (double)w[8 >> 2].f, (double)w[0xc >> 2].f, (double)w[0x10 >> 2].f, (double)w[0x14 >> 2].f,
+           (double)w[0x18 >> 2].f, (double)w[0x1c >> 2].f, (double)w[0x20 >> 2].f, (double)w[0x24 >> 2].f, (double)w[0x28 >> 2].f, (unsigned)w[0xb8 >> 2].i);
+}
+
 int main(int argc, char **argv)
 {
     if(argc < 9) {
@@ -200,8 +208,20 @@ int main(int argc, char **argv)
         s.custom = 1;
         s.setup = (struct s2car_setup){ (int8_t)six[0], (int8_t)six[1], (int8_t)six[2], (int8_t)six[3], (int8_t)six[4], (int8_t)six[5] };
     }
+    if(getenv("CHECK_CAR_DAMAGE")) {                      /* tools/s2/check_damage_s2.sh: DAMAGES on, the level's row of MISC.DTR's DAMAGES given (1, 2.5, 5); the damage the run left is printed */
+        s2car_damages = 1;
+        s2car_damage_scale = (float)atof(getenv("CHECK_CAR_DAMAGE"));
+    }
     if(!s2car_init(&s, team, model, track, 0)) { fprintf(stderr, "s2car_init failed\n"); return 2; }
     if(put) s2car_put(&s, (int)px, (int)py, (float)ph);       /* the reference's s2_put() */
+#ifndef CHECK_CAR_BASE                                    /* (the commit before has another s2car_knock(): tools/s2/check_damage_s2.sh builds it with this) */
+    if(getenv("CHECK_CAR_KNOCK")) {                       /* two knocks on a fresh car, the second one a front corner's: the formulas of 0x19aaa one by one, at the scale CHECK_CAR_DAMAGE gives */
+        s2car_knock(&s, 0, 0, 0.0f, 40000.0f);
+        s2car_knock(&s, 1, 2, 0.4f, 15000.0f);
+        damage_line(&s);
+        return 0;
+    }
+#endif
     struct s2car_input none = { 0 };
     record(&s, 0, &none);
     for(int k = 1; k < rows; k++) {
@@ -219,6 +239,7 @@ int main(int argc, char **argv)
         s2car_step(&s, &in);
         record(&s, k, &in);
     }
+    if(getenv("CHECK_CAR_DAMAGE")) damage_line(&s);
     if(sanity) {
         printf("per step: sinf %.1f cosf %.1f atanf %.1f, ground queries %.1f%s", (double)n_sin / (rows - 1), (double)n_cos / (rows - 1),
                (double)n_atan / (rows - 1), (double)n_ground / (rows - 1), "\n");

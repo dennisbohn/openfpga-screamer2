@@ -235,6 +235,11 @@ static int rec_custom;                                  /* ... and the set-up it
 static struct s2car_setup rec_setup;
 int race_laps = RACE_LAPS;
 int race_level = 1;
+
+int race_damage_key(void)
+{
+    return s2car_damages ? 3 - (race_level < 0 ? 0 : race_level > 2 ? 2 : race_level) : 0;
+}
 int race_kind = RACE_NORMAL;
 const struct s2gh_head *race_ghost;
 int race_slot(void) { return R.slot; }
@@ -785,8 +790,8 @@ static float touch_solver(void)
         s2car_sparks(point, mid, knock, 1);
     }
     if((ca == 0 || cb == 0) && knock > knock_max) knock_max = knock;     /* heard (s2sound.c) */
-    s2car_knock(A, corner == 1 || corner == 3 ? 3 : 1, corner, 1.0f, knock, R.damages[race_level]);
-    s2car_knock(B, edge, s >= 0.5f ? ej : ei, fabsf(s + -0.5f) * 2.0f, knock, R.damages[race_level]);
+    s2car_knock(A, corner == 1 || corner == 3 ? 3 : 1, corner, 1.0f, knock);
+    s2car_knock(B, edge, s >= 0.5f ? ej : ei, fabsf(s + -0.5f) * 2.0f, knock);
     const float ra[3] = { -rel[0], -rel[1], -rel[2] };
     push_corners(A, point, ra);
     push_corners(B, point, rel);
@@ -978,6 +983,7 @@ int race_init(int track, float floor_z)
     }
     if(!load_line(track)) return 0;
     load_skills();
+    s2car_damage_scale = R.damages[race_level];         /* every knock of the race goes by the level's row (0x19b7b), the player's walls included */
     if(R.kind == RACE_FREE && !fr_ready) race_free_reset();
     for(int i = 0; i < ncars; i++) {
         struct s2car_state *c = &R.car[i];
@@ -996,7 +1002,7 @@ int race_init(int track, float floor_z)
         FR.list_left = 0.0f;
         FR.msg_left = 0.0f;
     }
-    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay && !R.attract)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, s2car_damages, custom, &setup);
+    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay && !R.attract)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, race_damage_key(), custom, &setup);
     return 1;
 }
 
