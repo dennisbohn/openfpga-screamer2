@@ -178,7 +178,7 @@ void s2desk_step(int frame, struct s2desk_state *st)
 
 int s2desk_scene(int league)
 {
-    return league < 0 ? 1 : league > 4 ? 4 : league == 3 ? 3 : league + 1;
+    return league < 0 ? 1 : league >= 4 ? 4 : league == 3 ? 3 : league + 1;        /* 0x3bcb2: 3 -> 2, 4 -> 3, then + 1 */
 }
 
 /* ------------------------------------------------------------------------------------------------ loading */
@@ -272,8 +272,8 @@ static int desk_load(struct zip *z, const struct s2room_mem *m, int scene, int t
 {
     if (scene < 1 || scene > S2DESK_SCENES || team < 1 || team > 4 || car < 1 || car > 5) return 0;
     const uint32_t t0 = rdcycle();
-    char path[24] = "ANIMS/SCENE011.DAT";
-    path[11] = (char)('0' + scene);
+    char path[24] = "ANIMS/SCENE011.DAT";                  /* (scene<nn><resolution>: nn the two digits at 11 and 12) */
+    path[12] = (char)('0' + scene);
     if (!s2scene_open(z, &scene_c, path)) {
         dlog_str("desk: ");
         dlog_str(path);
@@ -410,7 +410,7 @@ static void blank(void)
 int s2desk_run(struct zip *z, const struct s2room_mem *m, int scene, int team, int car)
 {
     char name[24] = "SCENE011.DAT";
-    name[7] = (char)('0' + scene);
+    name[6] = (char)('0' + scene);
     if (!s2gfx_ready() || scene < 1 || scene > S2DESK_SCENES || !zip_find(z, name)) return 0;      /* (ANIMS is optional in the ZIP: no scene, no black screen) */
     blank();
     loaded.valid = 0;                                           /* (the window's image is the scene's from now on) */
