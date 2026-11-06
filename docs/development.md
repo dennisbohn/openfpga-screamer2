@@ -181,7 +181,7 @@ the end screen comes again, REPLAY first) or at once with Start, A or Select (th
 | X | the timing overlay, as in the race |
 
 **How.** The race is a function of the player's controls: a step is 20 ms and every step is the player's and then the computers' (`viewer.c`: a late frame's extra steps used to run all the player's first, which is another race; `tools/s2/check_replay_s2.sh` counts it), so the recording is only what the
-player's car was given (`firmware/s2ghost.c`'s recorder, time attack's ghost: one byte a step, up to the step the car has done its laps, `S2GH_MAX` = 51,408 steps, 17 minutes; a longer race has no REPLAY, the original's limit is 93,750 frames) and the gearbox the car was set up with (`race.c`).
+player's car was given (`firmware/s2ghost.c`'s recorder, time attack's ghost: one byte a step, up to the step the car has done its laps, `S2GH_MAX` = 51,400 steps, 17 minutes; a longer race has no REPLAY, the original's limit is 93,750 frames) and the gearbox the car was set up with (`race.c`).
 `race_replay` set before `race_init()` runs the same race again: the grid, the level, the laps and the cars are the viewer's still (the end screen leads straight to REPLAY), the controls come from the recording, the computers are the same computers. The recording costs a call and a store a step (about 40 instructions; the
 pack of the byte included); the cameras (`firmware/s2cam.c`, no hardware: CAMERASn.MCM's five kinds and the choice of the nearest) cost a frame under 0.1 ms and only while the replay or the end of a race shows them.
 A stored replay (the original's `REPLAYS\*.RPL`, HI SCORES' VIEW REPLAY) is not built: it needs a data slot for the replays (`core/data.json`), see menus.md.
