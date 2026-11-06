@@ -18,10 +18,13 @@
 #include <stdint.h>
 #include "zip.h"
 #include "s2menu.h"
+#include "blit.h"
+#include "track.h"
 
 /* what the page ends with: the station's choice (the fade out is done), ESC, or S2ROOM_IDLE: 30 s without a button (s2attract.h; the fade out is done: the attract sequence follows) */
 enum { S2ROOM_FAIL = 0, S2ROOM_ARCADE, S2ROOM_CHAMP, S2ROOM_ATTACK, S2ROOM_MULTI, S2ROOM_SETTINGS, S2ROOM_IDLE, S2ROOM_BACK = -1 };
 #define S2ROOM_STATIONS 5
+#define S2ROOM_RECORDS  3                       /* the records of P_<t>.MCM: the options room's stations, the CAR pages' five places, the CAR CUSTOMIZATION page's eight stations */
 
 /* The SDRAM the room is built in (viewer.c's track window and the memory the track's containers are read to): the container GFX/MENU<t>1.DAT (0.8 to 0.9 MB),
    the image (3.0 to 3.6 MB), the build's scratch (72 KB) */
@@ -56,10 +59,15 @@ struct s2room_cam {
     int a0, a1;
     int row;                                    /* the easing row of the place: 0x5f at first, 0x55 after the first move */
 };
-/* P_<t>.MCM (252 bytes: records of a number n, n places and n points of three whole numbers each; the first record is the room's, n = 5; the second, which the CARS pages of
-   time attack and the league use, and the empty third are not read) into the five stations; 1, or 0 if the file is too short or has fewer than five */
+/* P_<t>.MCM as DATA/GEN.DAT has it (444 bytes; the room's container has the same file with the third record empty: 252 bytes): three records of [n], n places and n aims of three
+   32-bit whole numbers each: record 0 the options room's stations (n = 5), record 1 the CAR pages' cars (n = 5: the places are 0, the aims are the cars' places, the fifth is the
+   bonus car's), record 2 the CAR CUSTOMIZATION page (n = 8: aim 0 is the car's place, place k and aim k the camera of station k, place 0 is 0). Into the tables; 1, or 0 if the file is
+   too short or its first record has fewer than five stations */
 int s2room_stations(const uint8_t *file, uint32_t size);
-/* a station's camera place (aim 0) or the point it looks at (aim 1), the engine's x, y up, z */
+/* a station's camera place (aim 0) or the point it looks at (aim 1), the engine's x, y up, z: record r (0 .. 2), station k; 0 if the record has none */
+const int32_t *s2room_record(int r, int k, int aim);
+int s2room_record_count(int r);
+/* the options room's stations (record 0) */
 const int32_t *s2room_station(int k, int aim);
 /* the page's camera and station as of its last frame (what the tests look at) */
 const struct s2room_cam *s2room_camera(int *station);
@@ -68,3 +76,33 @@ void s2room_cam_start(struct s2room_cam *c, int station);
 /* one frame at the station: the place eased towards it (towards the aim point once the picture is fading out: fade is its level, 0.04 a frame from the frame after ENTER, 0
    before), the angles towards the look-at angles; the original's easing rows (0x3364d, 0x1016b) */
 void s2room_cam_step(struct s2room_cam *c, int station, float fade);
+
+/* ------------------------------------------------------------------------------------------------ for the CAR and CAR CUSTOMIZATION pages (s2garage.h)
+   The team's room is one for the whole menu: the options room, the CAR pages of time attack and the championship and the CAR CUSTOMIZATION page all draw the same image of
+   the track window (the original loads it once and its load lists keep it: 0x1132b0, 0x1132e0), built where the first of them is shown, and again after a race has taken the window. */
+
+/* The room of the team in the track window (built if it is not there: the screen goes black for the 1.5 s of the build) and the viewer told that its image is the window's. 1, 0 if it could not be built */
+int s2room_open(int team);
+/* The eased place (0x3364d): pos moves to target by the row's share of the distance (the easing table's: 0.5 + 0.005 row kept each frame), the sum cut towards zero */
+void s2room_ease_place(int32_t pos[3], const int32_t target[3], int row);
+/* The room's ASHADOW.3DX (one flat quad), read with the room, or 0 */
+const uint8_t *s2room_shadow(void);
+/* The table of darkening of the room's palette (s2gfx_dark_table), made on first use after the room was built, for the band and the boxes the pages darken */
+const uint8_t *s2room_dark(void);
+/* 1 once after the room was (re)built: the geometry unit must forget what it cached (meshes and materials by their place) */
+int s2room_fresh(void);
+
+/* One picture of the room's engine (the options room's, the CAR pages', the CAR CUSTOMIZATION page's): the backdrop (as the options room has it, the eye line at row 100) and the
+   ground colour, the room's pieces seen from cam with the objects (track.h: cars, their shadows) sorted in among them as the engine does, and a box of the picture (bx, by, bw, bh) darkened
+   through the table dark (0: none) once the units are done. piece is what takes each piece (track_hw_piece; 0: hw_piece: a page whose objects have material files of their
+   own switches the unit's). fresh: the unit forgets its caches first. The list l holds the picture's commands before and is empty (aimed at the same buffer) after, for the page's sprites and text. */
+struct s2room_view {
+    const struct track_cam *cam;
+    struct track_object *objs;
+    int nobj;
+    void (*piece)(const struct gu_piece *p);
+    int fresh;
+    const uint8_t *dark;
+    int bx, by, bw, bh;
+};
+void s2room_scene(struct blit_list *l, const struct s2room_view *v);

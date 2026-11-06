@@ -21,6 +21,8 @@
 #define S2FX_CARS   4                       /* the race's cars (race.h RACE_CARS) */
 #define S2FX_PUFFS  8                       /* records of a kind a car has */
 #define S2FX_MAX    (S2FX_CARS * (1 + 2 * S2FX_PUFFS))      /* objects: a shadow and every puff of every car */
+#define S2FX_SHADOW_RADIUS  900.0f          /* the shadow's culling radius and its change of the drawing key ("class 4 sorts 200 further back": the shadow is drawn before what stands round it): */
+#define S2FX_SHADOW_KEY     -200            /* also the room's (s2garage.c) */
 
 /* A new race (or a replay, a restart): no puffs, the timers at 0 */
 void s2fx_reset(void);

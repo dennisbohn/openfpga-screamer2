@@ -36,7 +36,9 @@ class Ref:
     def __init__(self, game, graf, spr, fnt, out, helpers):
         self.spr, self.fnt, self.out, self.h = spr, fnt, out, helpers
         bkk, container, datfile = helpers["bkk"], helpers["container"], helpers["datfile"]
-        self.pal = bkk(datfile.extract(graf, "BKG_2L.BKK"))[0]
+        room = container(game, "GFX/MENU11.DAT")                       # the pages are in the team's room, the palette is its MAP1.COL's (6-bit values x 4)
+        col = datfile.extract(room, "MAP1.COL")
+        self.pal = [col[3 * i] * 4 << 16 | col[3 * i + 1] * 4 << 8 | col[3 * i + 2] * 4 for i in range(256)]
         loc = container(game, "DATA/LOCAL.DAT")
         self.lines = [l for l in datfile.extract(loc, "STRINGS.TXT").decode("latin-1").replace("\r", "").split("\n") if l and not l.startswith("*")]
         self.cases, self.nframes = [], 0
@@ -55,6 +57,7 @@ class Ref:
             """state 0 the cars, 1 the list, 2 the choice; st: kind (0 the championship, 1 time attack), car (1 .. 5), setup, free_run, clicks. Every way out fades the page out
             over 13 frames (STARTL.EXE 0x3e056), ESC from the cars too: the result 3 here, the page's result is then -1"""
             fade_out = 13
+            fade_step = 2621                                    # 0.08 of the palette a frame (0x514c1: the colours times 1 - level, the level 0.08 x frames since ENTER): the last frame at 0.04
 
             def __init__(m, state=0):
                 m.state, m.choice, m.t0 = state, 0, 0
@@ -148,6 +151,7 @@ class Ref:
 
         class M:
             fade_out = 13
+            fade_step = 2621
 
             def __init__(m):
                 m.item, m.open, m.value, m.f, m.minus, m.plus, m.t0 = 0, 0, 0, 0.0, 0.0, 0.0, 0
@@ -256,7 +260,7 @@ class Ref:
             """one page from global frame `start`: its result and the first global frame after it; the wanted frames' overlays go into trace"""
             model = make()
             res, fade, local = 0, FULL, 0
-            step = (FULL + model.fade_out - 1) // model.fade_out
+            step = model.fade_step
             while True:
                 g = start + local
                 ch = script[g] if g < len(script) else "."

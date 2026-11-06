@@ -27,6 +27,11 @@ uint32_t s2page_press(struct s2_keys *k)
 
 int s2page_run(const struct s2_page *p, void *self)
 {
+    return s2page_run_step(p, self, 0);
+}
+
+int s2page_run_step(const struct s2_page *p, void *self, int fade_step)
+{
     struct s2_keys keys;
     s2page_keys_init(&keys);
     int32_t fade = p->fade_in ? 0 : FULL;
@@ -43,7 +48,7 @@ int s2page_run(const struct s2_page *p, void *self)
         if (p->draw) p->draw(self, l, tick);
         s2gfx_end(p->pal, fade);
         if (leaving) {
-            fade -= (FULL + p->fade_out - 1) / p->fade_out;
+            fade -= fade_step ? fade_step : (FULL + p->fade_out - 1) / p->fade_out;
             if (fade <= 0) return result;
         } else if (fade < FULL) {
             fade += (FULL + p->fade_in - 1) / p->fade_in;

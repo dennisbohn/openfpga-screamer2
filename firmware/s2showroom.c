@@ -18,6 +18,7 @@
 #include "dat.h"
 #include "dlog.h"
 #include "hw.h"
+#include "frame.h"
 #include <math.h>
 #include <string.h>
 
@@ -252,6 +253,56 @@ void s2showroom_draw_one(struct blit_list *l, int k, int32_t x, int32_t y, int32
     const struct track_cam cam = page_cam();
     const int32_t at[3] = { x, y, z };
     showroom_draw(l, &cam, k >= 0 && k < n_cars ? k : 0, at, a1, 0, 0, 0, 0, 0);
+}
+
+/* ------------------------------------------------------------------------------------------------ the cars as objects of a room */
+
+static struct track_block obj_blocks[S2SHOW_MAX][CAR_BLOCKS];
+static const uint8_t *unit_mlb;                             /* the material file the unit has now (s2showroom_piece) */
+
+/* the car's blocks, made when it comes up in the drawing (the engine's own order: far first, among the room's pieces) */
+static int make_car(int id, const struct track_cam *cam, struct track_object *o)
+{
+    const struct car *c = &car[id];
+    const struct car_look lk = { (float)c->pos[0], (float)c->pos[2], (float)c->pos[1], s2scene_rad(c->a1), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0 };
+    o->n = car_mesh_draw(c->mesh, &lk, cam, obj_blocks[id]);
+    o->b = obj_blocks[id];
+    return o->n;
+}
+
+int s2showroom_objects(int first, int count, struct track_object *objs, int max)
+{
+    int n = 0;
+    for (int i = first; i < first + count && i < n_cars && n < max; i++)
+        objs[n++] = (struct track_object){ (float)car[i].pos[0], (float)car[i].pos[2], (float)car[i].pos[1], 1200.0f, 0, 0, make_car, i, 0, &car[i].refl, 0 };
+    return n;
+}
+
+void s2showroom_scene_begin(void)
+{
+    unit_mlb = track_mlb();                                 /* (s2scene_begin sets the room's) */
+}
+
+void s2showroom_piece(const struct gu_piece *g)
+{
+    const uint8_t *want = track_mlb();
+    for (int k = 0; k < n_cars; k++)
+        if (g->obj >= car[k].mlb && g->obj < car[k].mlb + ROOM) {
+            want = car[k].mlb;
+            break;
+        }
+    if (want != unit_mlb) {
+        s2scene_mlb(want);
+        unit_mlb = want;
+    }
+    hw_piece(g);
+}
+
+int s2showroom_fresh(void)
+{
+    const int f = fresh;
+    fresh = 0;
+    return f;
 }
 
 /* ------------------------------------------------------------------------------------------------ the plate */

@@ -6,9 +6,8 @@
  * attack (0x3cc2c) with the car's Custom set-up in hand (the team's record at 0x128a9c + team x 0x188 + 8 + car x 0x60 + (Custom - 1) x 0x18, six words), left for the CAR page
  * again (its state 1, the same car and set-up).
  *
- * The scene: a 3D garage seen from eight camera stations (DATA/GEN's P_<team>.MCM, record 2: one for each item and the first for the way in) with the car turning in it; here
- * the CAR page's picture (BKG_2L.BKK) and the car turning in front of it at the carousel's place (a stand-in; the page's 2D parts are the original's).
- *
+ * The scene: the team's room, a garage with the car on its lift, seen from the camera station of the item under the cursor (s2garage.h: DATA/GEN's P_<team>.MCM, record 2: place and
+ * aim of each of seven stations, the car at aim 0 turned a quarter; the camera flies in from the last station and glides from one to the next, 95 % of the way a frame).
  * The 2D parts: MENUL.SPR 49 at (250, 30), the six pictures of the items (two columns, three rows of 28 x 32), and 50 at (250, 128), SAVE and EXIT (two buttons of 56 x 27);
  * the title CAR CUSTOMIZATION (STRINGS.TXT, font 0, colour 1, spacing 2) centred at y 0; the cursor, MENUL.SPR 51 (29 x 34) over the item's picture, 52 (56 x 29) over SAVE and EXIT
  * (the table at 0x113120: x 250 + 27 (item & 1), y 30 + 32 (item >> 1) for the six, (250, 126) and (250, 153)), always drawn; the item's name (STRINGS.TXT, font 1, colour 1,
@@ -26,15 +25,17 @@
  * ENTER on SAVE writes the six numbers into the team's record (sound 7) and leaves; ENTER on EXIT leaves (sound 13). Leaving fades the page out (0.08 a frame: 13 frames).
  */
 #include "s2custom.h"
+#include "s2garage.h"
 #include "s2gfx.h"
 #include "s2page.h"
+#include "s2room.h"
 #include "s2sound.h"
 #include "s2save.h"
-#include "s2showroom.h"
 #include "dlog.h"
 
 #define DT              0.02f
 #define FADE_FRAMES     13
+#define FADE_STEP       2621                    /* 0.08 of the palette a frame (0x514c1), as the CAR page leaves (s2arcade.c) */
 
 enum {
     SPR_CURSOR = 51, SPR_CURSOR_WIDE = 52, SPR_PANEL = 49, SPR_BUTTONS = 50, SPR_STRIP = 0x35, SPR_MARKER = 0x36, SPR_PLUS_LIT = 0x3b, SPR_MINUS_LIT = 0x3c, SPR_ICON = 0x3d,
@@ -53,7 +54,6 @@ struct page {
     int item, open, value;                  /* the cursor (0 .. 7), a picture open (0x1324c4), the value of the open item (the original's local copy) */
     float f, minus, plus;                   /* the picture's slide 0 .. 1, the flashes of the signs (the program's 1.0 that falls) */
     uint32_t now, t0;                       /* the frame, and the frame the blinking began at */
-    int32_t a1;                             /* the car's turn (of 2048) */
 };
 
 static int clamp(int v, int lo, int hi)
@@ -73,7 +73,6 @@ static void custom_frame(void *self, uint32_t tick)
 {
     struct page *p = self;
     p->now = tick;
-    p->a1 = (int32_t)((float)p->a1 + DT * 512.0f) & 0x7FF;                /* the car turns as the carousel's chosen car does: 10 of 2048 a frame */
 }
 
 static int custom_key(void *self, uint32_t press)
@@ -142,11 +141,9 @@ static int custom_key(void *self, uint32_t press)
     return 0;
 }
 
-static void custom_draw(void *self, struct blit_list *l, uint32_t tick)
+/* the 2D parts over the room (the tests draw them alone) */
+static void custom_overlay(struct page *p, struct blit_list *l)
 {
-    struct page *p = self;
-    (void)tick;
-    s2showroom_draw_one(l, p->cfg->car - 1, 0, 0, 2800, p->a1);        /* the picture and the car (the list is empty again for the sprites) */
     s2gfx_sprite(l, SPR_PANEL, 250, 30);
     s2gfx_sprite(l, SPR_BUTTONS, 250, 128);
     s2gfx_text_centred(l, S2G_FONT_TITLE, S2G_WHITE, 2, 0, s2gfx_line("CAR CUSTOMIZATION", 0, "CAR CUSTOMIZATION"));
@@ -177,20 +174,27 @@ static void custom_draw(void *self, struct blit_list *l, uint32_t tick)
     if (p->plus < 0.0f) p->plus = 0.0f;
 }
 
+static void custom_draw(void *self, struct blit_list *l, uint32_t tick)
+{
+    struct page *p = self;
+    (void)tick;
+    s2garage_cust_draw(l, p->item);                                    /* the room, the car and the camera at the item's station (the list is empty again for the sprites) */
+    custom_overlay(p, l);
+}
+
 int s2custom_page(struct s2_menu_cfg *c, int slot)
 {
-    static uint32_t pal[S2G_PALETTE];
-    if (!s2gfx_ready() || slot < 0 || slot > 3 || c->car < 1 || c->car > 4 || !s2gfx_bkk("BKG_2L.BKK", s2gfx_pic(0), pal)) return 0;
+    if (!s2gfx_ready() || slot < 0 || slot > 3 || c->car < 1 || c->car > 4) return 0;
+    const int n = 4 + (s2save_car5_open(c->team) ? 1 : 0);
+    if (!s2garage_open(c->team, n)) {                       /* (the team's room and cars: where the CAR page before this one has them, nothing is read) */
+        dlog_str("custom: the team's room or cars could not be had: the page is not shown\n");
+        return 0;
+    }
     struct page pg = { .cfg = c, .slot = slot };
     const int8_t *six = s2save_setup(c->team, c->car, slot);
     for (int k = 0; k < 6; k++) pg.six[k] = (int8_t)clamp(six ? six[k] : 2, 0, k == 2 ? 2 : 4);        /* (the save holds -1 .. 4: the page's ranges) */
-    const int n = 4 + (s2save_car5_open(c->team) ? 1 : 0);
-    if (!s2showroom_load(s2gfx_zip(), c->team, n)) {
-        dlog_str("custom: the team's cars could not be read: the page is not shown\n");
-        return 0;
-    }
-    s2showroom_init(n, c->car - 1);
-    struct s2_page page = { s2gfx_pic(0), pal, 0, FADE_FRAMES, custom_frame, custom_key, custom_draw };
-    s2page_run(&page, &pg);
+    s2garage_cust_begin(c->car - 1);
+    struct s2_page page = { 0, track_palette(), 0, FADE_FRAMES, custom_frame, custom_key, custom_draw };
+    s2page_run_step(&page, &pg, FADE_STEP);
     return 1;
 }

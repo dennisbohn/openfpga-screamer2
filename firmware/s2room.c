@@ -60,14 +60,30 @@
 #define SPR_ARROW_LEFT  1
 #define SPR_ARROW_RIGHT 2
 
-static int32_t mcm[2][S2ROOM_STATIONS][3];     /* [0] the places, [1] the points looked at */
+static void blank(void);
+
+#define REC_MAX         15                      /* stations a record of the game's table holds (0x16c bytes: a count, 15 places, 15 aims) */
+static struct { int n; int32_t at[2][REC_MAX][3]; } rec[S2ROOM_RECORDS];        /* P_<t>.MCM: [0] the places, [1] the points looked at */
 static int station;                            /* kept from one visit to the next */
 static int cached_team;                        /* the room in the track window (0: none) ... */
 static uint8_t cached_head[0x100];             /* ... with the header its image has: a track built there since has another */
+static uint32_t shadow_mesh[512];              /* ASHADOW.3DX of the room's container (572 bytes; 0 if it is not there) */
+static int shadow_ok, dark_ok, room_fresh;
+static uint8_t dark_table[256];                /* the room's palette's table of darkening (s2gfx_dark_table), made on first use after a load */
+
+const int32_t *s2room_record(int r, int k, int aim)
+{
+    return r >= 0 && r < S2ROOM_RECORDS && k >= 0 && k < rec[r].n ? rec[r].at[aim ? 1 : 0][k] : 0;
+}
+
+int s2room_record_count(int r)
+{
+    return r >= 0 && r < S2ROOM_RECORDS ? rec[r].n : 0;
+}
 
 const int32_t *s2room_station(int k, int aim)
 {
-    return mcm[aim ? 1 : 0][k];
+    return s2room_record(0, k, aim);
 }
 
 void s2room_forget(void)
@@ -75,18 +91,51 @@ void s2room_forget(void)
     cached_team = 0;
 }
 
-/* the menu's room (s2menu_room): the memory of the viewer's track window, and the viewer told that its image is gone */
-int s2room_menu(const struct s2_menu_cfg *c)
+const uint8_t *s2room_shadow(void)
+{
+    return shadow_ok ? (const uint8_t *)shadow_mesh : 0;
+}
+
+const uint8_t *s2room_dark(void)
+{
+    if (!dark_ok) {
+        s2gfx_dark_table(track_palette(), dark_table, 256);
+        dark_ok = 1;
+    }
+    return dark_table;
+}
+
+int s2room_fresh(void)
+{
+    const int f = room_fresh;
+    room_fresh = 0;
+    return f;
+}
+
+/* the menu's room: the memory of the viewer's track window, and the viewer told that its image is gone */
+static const struct s2room_mem *menu_mem(void)
 {
     static const struct s2room_mem mem = { GFX_MEM, GFX_MAX, (uint8_t *)(uintptr_t)TEX_BASE, TEX_MAX, SCRATCH_MEM, SCRATCH_MAX };
     loaded.valid = 0;                                   /* (what the window held is gone: time attack builds its track again) */
-    return s2room_run(files_zip(), &mem, c->team);
+    return &mem;
+}
+
+int s2room_menu(const struct s2_menu_cfg *c)
+{
+    return s2room_run(files_zip(), menu_mem(), c->team);
+}
+
+int s2room_open(int team)
+{
+    if (!s2gfx_ready()) return 0;
+    if (cached_team != team) blank();                   /* (the room is read and built: about 1.5 s on the Pocket) */
+    return s2room_load(files_zip(), menu_mem(), team);
 }
 
 /* ------------------------------------------------------------------------------------------------ the camera */
 
 /* the place eased towards a target (0x3364d): in the x87's own precision, the sum cut towards zero */
-static void ease_place(int32_t pos[3], const int32_t target[3], int row)
+void s2room_ease_place(int32_t pos[3], const int32_t target[3], int row)
 {
     const double f = (double)s2scene_easing(row);
     for (int k = 0; k < 3; k++) pos[k] = (int32_t)(((double)pos[k] - (double)target[k]) * f + (double)target[k]);
@@ -94,7 +143,7 @@ static void ease_place(int32_t pos[3], const int32_t target[3], int row)
 
 void s2room_cam_start(struct s2room_cam *c, int k)
 {
-    const int32_t *P = mcm[0][k], *A = mcm[1][k];
+    const int32_t *P = s2room_record(0, k, 0), *A = s2room_record(0, k, 1);
     for (int i = 0; i < 3; i++) c->pos[i] = P[i] + 4 * (P[i] - A[i]);
     s2scene_look_at(c->pos, A, &c->pitch, &c->head);
     c->a0 = s2scene_angle(c->pitch);
@@ -104,13 +153,13 @@ void s2room_cam_start(struct s2room_cam *c, int k)
 
 void s2room_cam_step(struct s2room_cam *c, int k, float fade)
 {
-    const int32_t *P = mcm[0][k], *A = mcm[1][k];
+    const int32_t *P = s2room_record(0, k, 0), *A = s2room_record(0, k, 1);
     float lp, lh;
     if (fade == 0.0f) {
-        ease_place(c->pos, P, c->row);
+        s2room_ease_place(c->pos, P, c->row);
         s2scene_look_at(P, A, &lp, &lh);
     } else {
-        ease_place(c->pos, A, ROW_FADE);
+        s2room_ease_place(c->pos, A, ROW_FADE);
         s2scene_look_at(c->pos, A, &lp, &lh);
     }
     const int row = (int)((double)fade * 12.0 + 85.0);
@@ -129,12 +178,42 @@ static int rd32s(const uint8_t *p)
 
 int s2room_stations(const uint8_t *file, uint32_t size)
 {
-    if (size < 4) return 0;
-    const int n = rd32s(file);
-    if (n < S2ROOM_STATIONS || n > 15 || size < 4 + 24 * (uint32_t)n) return 0;     /* (a record of the game's table holds at most 15 stations: 0x16c bytes) */
-    for (int a = 0; a < 2; a++)
-        for (int k = 0; k < S2ROOM_STATIONS; k++)
-            for (int i = 0; i < 3; i++) mcm[a][k][i] = rd32s(file + 4 + 4 * (3 * (a * n + k) + i));
+    uint32_t at = 0;
+    int n[S2ROOM_RECORDS];
+    for (int r = 0; r < S2ROOM_RECORDS; r++) {                  /* the count of each record first: the file is whole or it is not read */
+        n[r] = at + 4 <= size ? rd32s(file + at) : 0;
+        if (n[r] < 0 || n[r] > REC_MAX || at + 4 + 24 * (uint32_t)n[r] > size) return 0;      /* (a record of the game's table holds at most 15 stations: 0x16c bytes) */
+        if (r == 0 && n[r] < S2ROOM_STATIONS) return 0;
+        at += 4 + 24 * (uint32_t)n[r];
+    }
+    at = 0;
+    for (int r = 0; r < S2ROOM_RECORDS; r++) {
+        rec[r].n = n[r];
+        for (int a = 0; a < 2; a++)
+            for (int k = 0; k < n[r]; k++)
+                for (int i = 0; i < 3; i++) rec[r].at[a][k][i] = rd32s(file + at + 4 + 4 * (3 * (a * n[r] + k) + i));
+        at += 4 + 24 * (uint32_t)n[r];
+    }
+    return 1;
+}
+
+/* DATA/GEN.DAT's P_<t>.MCM (444 bytes: the room's five stations, the CAR pages' five places and the CAR CUSTOMIZATION page's eight; the container of the room has the same file
+   with its third record empty) and the room's shadow mesh */
+static int read_stations(struct zip *z, const struct s2room_mem *m, int team, const uint8_t *container, uint32_t container_size)
+{
+    static uint32_t buf[128];
+    char mcm_name[16] = "P_1.MCM";
+    mcm_name[2] = (char)('0' + team);
+    struct dat_entry d;
+    const struct zip_entry *g = zip_find(z, "DATA/GEN.DAT");
+    if (!g || g->size + ZIP_SLACK > m->scratch_max || zip_read(z, g, m->scratch, m->scratch_max) || !dat_find(m->scratch, g->size, mcm_name, &d) || d.size > sizeof buf ||
+        dat_extract(m->scratch, g->size, &d, (uint8_t *)buf, sizeof buf) != d.size || !s2room_stations((const uint8_t *)buf, d.size)) {
+        dlog_str("room: P_t.MCM of DATA/GEN.DAT is not usable\n");
+        return 0;
+    }
+    shadow_ok = dat_find(container, container_size, "ASHADOW.3DX", &d) && d.size <= sizeof shadow_mesh &&
+                dat_extract(container, container_size, &d, (uint8_t *)shadow_mesh, sizeof shadow_mesh) == d.size;
+    s2scene_settle();                                           /* (the geometry unit reads the mesh from the SDRAM) */
     return 1;
 }
 
@@ -165,17 +244,12 @@ int s2room_load(struct zip *z, const struct s2room_mem *m, int team)
         dlog_char('\n');
         return 0;
     }
-    char mcm_name[16] = "P_1.MCM";
-    mcm_name[2] = (char)('0' + team);
-    struct dat_entry d;
-    static uint32_t buf[64];                                    /* the file: 252 bytes */
-    if (!dat_find(m->container, e->size, mcm_name, &d) || d.size > sizeof buf || dat_extract(m->container, e->size, &d, (uint8_t *)buf, sizeof buf) != d.size ||
-        !s2room_stations((const uint8_t *)buf, d.size)) {
-        dlog_str("room: P_t.MCM is not usable\n");
-        return 0;
-    }
+    if (!read_stations(z, m, team, m->container, e->size)) return 0;
     cached_team = team;
     memcpy(cached_head, m->image, sizeof cached_head);
+    dark_ok = 0;                                                /* (the palette is this room's) */
+    room_fresh = 1;                                             /* (the unit caches meshes and materials by their place: the image is new) */
+    track_clock_set(0.0f);                                      /* (0x50043: the animation clock starts at 0 where a room is loaded; the pages after the options room leave it as it stands) */
     dlog_str("room: T");
     dlog_dec(team);
     dlog_char(' ');
@@ -197,7 +271,6 @@ static struct room {
     float idle;                                 /* seconds left of the 30 without a button (s2attract.h) */
     uint32_t before;                            /* the buttons held a frame ago */
     const char *title, *name[S2ROOM_STATIONS];
-    uint8_t dark[256];
 } R;
 
 const struct s2room_cam *s2room_camera(int *at)
@@ -241,27 +314,27 @@ static int room_key(void *self, uint32_t press)
     return 0;
 }
 
-/* the picture without the texts: the backdrop and the ground colour under it, the room, the band darkened */
-static void room_scene(struct room *p, struct blit_list *l, const struct track_cam *cam)
+/* the picture without the texts: the backdrop and the ground colour under it, the room with the objects among its pieces, a box of it darkened */
+void s2room_scene(struct blit_list *l, const struct s2room_view *v)
 {
     const int buffer = l->buffer;
     const struct rs_clip backdrop = { 0, 0, FB_W, BACKDROP_H }, cull = { 0, CULL_TOP, FB_W, CULL_BOTTOM };
-    struct track_cam sky = *cam;
+    struct track_cam sky = *v->cam;
     sky.yaw += 1.5707964f;                                      /* (the room's backdrop turns a quarter of a turn further than the race's: the column is (1023 - a1) / 2, measured) */
     track_backdrop_blit(l, &backdrop, &sky);
     blit_fill(l, 0, BACKDROP_H, FB_W, FB_H - BACKDROP_H, track_ground_colour());
+    const int fresh = v->fresh || s2room_fresh();
     struct track_fx fx;
-    if (p->fresh && track_fx(&fx)) smg_load(fx.table);          /* (the room's see-through table: the shadows on its floor) */
-    s2scene_begin(track_mlb(), buffer, p->fresh);
-    p->fresh = 0;
+    if (fresh && track_fx(&fx)) smg_load(fx.table);             /* (the room's see-through table: the shadows on its floor) */
+    s2scene_begin(track_mlb(), buffer, fresh);
     track_mode = TRACK_HW;
-    track_hw_piece = hw_piece;
+    track_hw_piece = v->piece ? v->piece : hw_piece;
     struct track_stats ts;
-    track_draw_cam(0, &cull, cam, 0, 0, &ts);
+    track_draw_cam(0, &cull, v->cam, v->objs, v->nobj, &ts);
     s2scene_end();
-    while (RS_DRAW & RS_BUSY)                                   /* (the band is darkened by the CPU: the units are done first) */
+    while (RS_DRAW & RS_BUSY)                                   /* (a box is darkened by the CPU: the units are done first) */
         ;
-    s2gfx_dark_fb(FB(buffer), 0, BAND_Y, FB_W, BAND_H, p->dark);
+    if (v->dark) s2gfx_dark_fb(FB(buffer), v->bx, v->by, v->bw, v->bh, v->dark);
     blit_start(l, buffer);
 }
 
@@ -282,7 +355,9 @@ static void room_draw(void *self, struct blit_list *l, uint32_t tick)
     (void)tick;
     s2room_cam_step(&p->cam, station, p->fade);
     const struct track_cam cam = s2scene_camera_of(p->cam.pos, p->cam.a0, p->cam.a1);
-    room_scene(p, l, &cam);
+    const struct s2room_view view = { &cam, 0, 0, 0, p->fresh, s2room_dark(), 0, BAND_Y, FB_W, BAND_H };
+    s2room_scene(l, &view);
+    p->fresh = 0;
     room_texts(p, l, station, p->clock);
     if (p->leaving) p->fade = (float)((double)0.02f * 2.0 + (double)p->fade);
 }
@@ -307,7 +382,6 @@ int s2room_run(struct zip *z, const struct s2room_mem *m, int team)
     static const char *const names[S2ROOM_STATIONS] = { "ARCADE", "CHAMPIONSHIP", "TIME ATTACK", "MULTIPLAYER", "GAME SETTINGS" };
     for (int k = 0; k < S2ROOM_STATIONS; k++) p->name[k] = s2gfx_line("MAIN MENU", 1 + k, names[k]);
     s2room_cam_start(&p->cam, station);
-    s2gfx_dark_table(track_palette(), p->dark, 256);
     s2att_idle_reset(&p->idle);
     p->fresh = 1;
     p->before = in_keys();

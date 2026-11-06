@@ -46,3 +46,14 @@ void s2showroom_draw_cam(struct blit_list *l, const struct track_cam *cam);
    2 rear (from the shares of the two left wheels, 0x4176c ..). 0 if the file could not be read. */
 struct s2show_plate { float max_speed; int drive; };
 int s2showroom_plate(struct zip *z, int team, int car, struct s2show_plate *out);
+
+/* The cars as objects of the track engine, for a room they stand in (s2garage.h): cars first .. first + count - 1 of the ring at the places s2showroom_place() gave them (the engine's
+   drawing makes their blocks when they come up, the windows' reflections go by the camera), at most max; how many. Each has its own material library: s2showroom_piece is the
+   track_hw_piece that switches the unit's material file to the car's for a car's pieces and back to the track's for the rest (the unit reads the file while it works: it waits for it to be idle
+   at each change); s2showroom_scene_begin() before every picture says the unit has the track's (s2scene_begin sets it). s2showroom_fresh(): 1 once after the cars were loaded. */
+struct track_object;
+struct gu_piece;
+int s2showroom_objects(int first, int count, struct track_object *objs, int max);
+void s2showroom_piece(const struct gu_piece *g);
+void s2showroom_scene_begin(void);
+int s2showroom_fresh(void);
