@@ -34,7 +34,7 @@ static inline float opaquef(float x) { return x; }
 open(p, "w").write(t)
 PY
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
-LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c s2ghost.c race.c s2cam.c"
+LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c s2ghost.c race.c s2cam.c s2cockpit.c"
 MSYS_NO_PATHCONV=1 docker run --rm -e PILOT_TRACE=${PILOT_TRACE:-} -e ASAN_OPTIONS=detect_leaks=0 -e S2_GAME=/game -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2/replaysrc && gcc -O2 -g -w -fsanitize=address,undefined -fno-sanitize-recover -o ../check_replay_s2 check_replay_s2.c $LIST -lm &&
     cd /b/s2 && ./check_replay_s2 /b/s2"

@@ -32,6 +32,9 @@ int s2ck_hides_car(int view);
 /* The camera record's state across frames (+0x54 pitch, +0x58 heading, +0x5c roll of NEAR, which eases them; +0x2c the view the last frame was drawn in: a view that is not the
    same snaps) */
 struct s2ck_state { float pitch, yaw, roll; int last_view; };
+/* The power the easing table's factors are raised to: 1 for 50 pictures a second, which is the Pocket's. The DOSBox of tools/s2/dosbox_cockpit.py ran at 1.1 (its step is 1.1 x the time of the last
+   pictures: measured, tools/s2/check_cockpit_s2.sh; the original builds its table for the rate it measures). */
+extern float s2ck_ease_power;
 void s2ck_reset(struct s2ck_state *k);
 
 /* The camera of `view` (2, 4, 5 or 6) from the car c in *cam, one call a picture. body: the car model's block height (0x218: 0 if unknown, s2ck_body_height()). NEAR eases k's angles and

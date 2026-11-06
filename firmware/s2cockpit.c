@@ -11,11 +11,28 @@
 
 #define PI_F        3.14159274f
 #define HALF_PI_F   1.57079637f
+#define TWO_PI_F    6.28318548f
 
 /* the car record's words (s2car.h keeps the game's layout) */
 union word { int32_t i; uint32_t u; float f; };
 #define RF(c, o) (((const union word *)(c)->rec)[(o) >> 2].f)
 #define RI(c, o) (((const union word *)(c)->rec)[(o) >> 2].i)
+
+float s2ck_ease_power = 1.0f;
+
+/* 0x1016b: an angle eased the short way round towards its target by the row of the game's easing table (0x1240c0: the game builds it for the frame rate it measures, 0x315a0: a row's factor
+   0.5 + 0.005 row to the power of 50 / the pictures a second; 1 at the Pocket's 50), kept in 0 .. 2 pi. s2car.c's is the same and static. */
+static void ease_angle(float *v, float target, int row)
+{
+    float factor = 0.5f + (float)row * 0.005f, a = *v;
+    if(s2ck_ease_power != 1.0f) factor = powf(factor, s2ck_ease_power);
+    if(a != target) {
+        if(a < target) *v = target - a >= PI_F ? -((target - a) + -TWO_PI_F) * factor + target : (a - target) * factor + target;
+        else *v = a - target >= PI_F ? -((target - a) + TWO_PI_F) * factor + target : (a - target) * factor + target;
+    }
+    if(*v < 0.0f) *v += TWO_PI_F;
+    else if(*v >= TWO_PI_F) *v += -TWO_PI_F;
+}
 
 int s2ck_hides_car(int view)
 {
@@ -70,9 +87,9 @@ void s2ck_camera(const struct s2car_state *c, int view, int body, struct s2ck_st
             k->roll = (roll + lean_r) * 0.5f;
             k->yaw = yaw + lean_y;
         } else {
-            s2car_ease_angle(&k->pitch, s2car_ang_diff(pitch, -lean_p) * 0.5f - 0.3f, 0x3c);
-            s2car_ease_angle(&k->roll, s2car_ang_diff(roll, -lean_r) * 0.5f, 0x3c);
-            s2car_ease_angle(&k->yaw, yaw + lean_y, 0x50);
+            ease_angle(&k->pitch, s2car_ang_diff(pitch, -lean_p) * 0.5f - 0.3f, 0x3c);
+            ease_angle(&k->roll, s2car_ang_diff(roll, -lean_r) * 0.5f, 0x3c);
+            ease_angle(&k->yaw, yaw + lean_y, 0x50);
         }
         {
             float along[3] = { 0.0f, 0.0f, (float)RI(c, 0xac) }, up[3] = { 0.0f, (float)RI(c, 0xb0), 0.0f };

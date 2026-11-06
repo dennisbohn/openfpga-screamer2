@@ -162,6 +162,7 @@ static void cameras(const char *recfile, const char *crusc_file)
     uint8_t *data = slurp(0, recfile, &total);
     uint8_t *cr = slurp(0, crusc_file, &csize);
     const long frames = (long)(total / FRAME);
+    s2ck_ease_power = 1.1f;                                     /* (DOSBox's frame rate: the original's easing table is built for the rate it measures) */
     struct { long n; float worst[6]; int rows_bad; } v[7];
     memset(v, 0, sizeof v);
     static struct s2car_state st;

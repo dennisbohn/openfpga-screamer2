@@ -43,7 +43,7 @@ else
 fi
 set +e
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
-    cd /b/host/hud && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../hud_screen host/hud_screen.c s2hud.c s2gfx.c blit.c console.c dlog.c zip.c dat.c crc32.c -lm &&
+    cd /b/host/hud && gcc -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined -w -D'ZIP_ADDR(p)=zip_addr(p)' -o ../hud_screen host/hud_screen.c s2hud.c s2dash.c s2cockpit.c s2params.c tb_hud.c s2gfx.c blit.c console.c dlog.c zip.c dat.c crc32.c -lm &&
     cd /b/check/hud && /b/host/hud_screen /game/SCREAMER2.zip /b/check/hud/hud /b/check/hud/ref /b/check/hud/ref/game_deflated.zip"
 status=$?
 for f in "$out"/*.rgb; do

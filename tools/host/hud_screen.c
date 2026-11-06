@@ -110,6 +110,12 @@ void race_get_hud(struct race_hud *h)
     h->best_lap = F(c, 0xc40) < 3599.0f ? F(c, 0xc40) : -1.0f;
 }
 
+/* what the views from the car (s2cockpit.c, s2dash.c) ask of the race and the track: no dashboards' table here (s2dash_begin finds no DATA/GAME.DAT), no meshes */
+const uint8_t *s2car_game_dat(uint32_t *size) { *size = 0; return 0; }
+float s2car_ang_diff(float a, float b) { return a - b; }
+void s2car_ease_angle(float *v, float target, int row) { (void)row; *v = target; }
+const uint8_t *track_model_mesh(int k) { (void)k; return 0; }
+
 /* the track's DATA container, for the bends (MAPnDIR.SPL) */
 static uint8_t *map_data;
 static uint32_t map_size;

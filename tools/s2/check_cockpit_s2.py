@@ -59,13 +59,14 @@ def needle(n, part):
     """0x46755: n = (x, y, len, a0, a1); angle = a0 - (a0 - a1) part (under 0.001: 0), the tip len / 2 away; a pixel to either side at a right angle"""
     x, y, ln, a0, a1 = n
     px, py = chop_half(x), chop_half(y)
-    a = a0 - (a0 - a1) * part
+    f32 = lambda v: struct.unpack("<f", struct.pack("<f", v))[0]      # the game keeps the angle in a 32-bit float (fstp dword [ebp-0xc]) and works the sine and cosine in double
+    a = f32(a0 - (a0 - a1) * part)
     if abs(a) < 0.001:
         a = 0.0
     tx, ty = trunc(ln * math.cos(a) * 0.5 + px), trunc(py - ln * math.sin(a) * 0.5)
-    b = a + math.pi / 2
+    b = f32(a + f32(1.5707963705062866))                              # + pi / 2 and then - pi (the constants at 0x111911, 0x111915 are 32-bit floats too)
     s = (trunc(math.cos(b) + px), trunc(py - math.sin(b)))
-    b -= math.pi
+    b = f32(b + f32(-3.1415927410125732))
     u = (trunc(math.cos(b) + px), trunc(py - math.sin(b)))
     return [(px, py, tx, ty), (s[0], s[1], tx, ty), (u[0], u[1], tx, ty)]
 
@@ -108,8 +109,8 @@ def main():
                 nl.append("needle %d %s %d " % (m, kind, k) + " ".join("%d %d %d %d" % l for l in ln))
         for gear in range(5):
             exp.append("lamp %d %d %d %d %d" % (m, gear, chop_half(row[12 + 2 * gear]), chop_half(row[13 + 2 * gear]), 0x46 + 5 * m + gear))
-    open(os.path.join(out, "expected.txt"), "w").write("\n".join(exp) + "\n")
-    open(os.path.join(out, "needles.txt"), "w").write("\n".join(nl) + "\n")
+    open(os.path.join(out, "expected.txt"), "w", newline="\n").write("\n".join(exp) + "\n")
+    open(os.path.join(out, "needles.txt"), "w", newline="\n").write("\n".join(nl) + "\n")
     print("%d pictures, 8 dashboards, %d needle positions" % (9, len(nl)))
 
 
