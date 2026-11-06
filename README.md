@@ -32,7 +32,7 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   the races with the LEAGUE REPORT after each, what winning opens; docs/development.md "The championship"), TIME ATTACK (TRACK SELECTION with the turning 3D map, 3 LAPS or FREE RUN with its five splits, the race
   against the ghost of the track's best run, re-simulated from recorded controls; docs/development.md "Time attack"), MULTIPLAYER (the MULTIPLAYER MENU as the original answers without a network) and GAME SETTINGS
   (laps, level, gearbox, ...; VIEW HIGH SCORES). Everything is open from the start. Start in the race opens the pause menu (RESUME, RESTART, EXIT); the end screen of an arcade or championship race offers REPLAY (the race run again from the player's recorded
-  controls, from the trackside cameras with the original's band; docs/development.md "Replay"). The choices are kept across power-ups.
+  controls, from the trackside cameras with the original's band; docs/development.md "Replay"). The choices are kept across power-ups. 30 s with no button in the room (or on TEAM SELECTION, as the original) starts its attract sequence: the Virgin and Milestone logos, then a race of four computer cars under the trackside cameras out of white with the credits of `ATTRACT.TXT` over it, a different track each time (`firmware/s2attract.c`; docs/development.md "The attract sequence"); any button ends it.
   Docs: docs/development.md, "The menu".
 - **Driving mode (a race):** a race from the menu puts you and three computer cars on the game's start grid, holds them for
   the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
