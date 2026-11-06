@@ -49,15 +49,18 @@
 #include "s2arcade.h"
 #include "s2arcscene.h"
 #include "s2custom.h"
+#include "s2garage.h"
 #include "s2gfx.h"
 #include "s2page.h"
+#include "s2room.h"
 #include "s2sound.h"
 #include "s2save.h"
 #include "s2showroom.h"
 #include "dlog.h"
 
 #define FADE_FRAMES     25
-#define SETS_FADE       13                          /* the CAR page of the championship and time attack fades out at 0.08 a frame (STARTL.EXE 0x3e056: dt x 4), on every way out, ESC too */
+#define SETS_FADE       13                          /* the CAR page of the championship and time attack fades out at 0.08 a frame (STARTL.EXE 0x3e056: dt x 4), on every way out, ESC too: the palette's */
+#define SETS_FADE_STEP  2621                        /* colours times 1 - level (0x514c1), the level 0 on the frame after the key, 0.08 more each: 13 frames, the last at 0.04 (0.08 x 32768) */
 #define SOUND_CURSOR    0                   /* MENU.DTR ids (MENU1 .. MENU15 are 0 .. 14) */
 #define SOUND_TITLE     1
 #define SOUND_TRACK     2
@@ -176,7 +179,7 @@ static float ease(float value, float target, int or_equal)
     return (or_equal ? d <= 0.5f : d < 0.5f) ? target : value;
 }
 
-static void track_draw(void *self, struct blit_list *l, uint32_t tick)
+static void tracks_draw(void *self, struct blit_list *l, uint32_t tick)
 {
     struct track_page *p = self;
     int last = p->n - 1, pos = p->pos;
@@ -209,11 +212,13 @@ struct car_page {
     struct zip *zip;
     int state, n, far_cars, miles, standalone;
     int sets, league;                       /* the page of the championship or of time attack; the championship's */
+    int room;                               /* ... drawn in the team's room (s2garage.h) and not on the arcade page's picture with its carousel (the stand-in if the room cannot be built) */
     int choice;                             /* state 2: the one under the cursor (the original's variable is not set back when the state is entered again) */
     int plate_ok;
     struct s2show_plate plate;
     char speed[8];
-    uint8_t dark[256];                      /* the picture's table of darkening: the box of the list */
+    uint8_t dark_own[256];                  /* the picture's table of darkening for the box of the list (the room has its own, s2room_dark()) */
+    const uint8_t *dark;
     uint32_t now, t0;                       /* the frame, and the frame the blinking began at (the clock is set back where a choice changes) */
 };
 
@@ -239,7 +244,19 @@ static void car_frame(void *self, uint32_t tick)
 {
     struct car_page *p = self;
     p->now = tick;
-    p->far_cars = s2showroom_step(p->sets ? p->state == 2 : p->state);       /* (the cars glide away for the choice after the list: a stand-in for the original's scene) */
+    if (!p->room) p->far_cars = s2showroom_step(p->sets ? p->state == 2 : p->state);       /* (the carousel: the cars glide away for the choice after the list; the room's cars stand still) */
+}
+
+/* LEFT / RIGHT: the next car round the team's four or five */
+static void car_move(struct car_page *p, int dx)
+{
+    if (p->room) {
+        p->cfg->car = ring(p->cfg->car - 1, dx, 0, p->n) + 1;
+        s2garage_car_choose(p->cfg->car - 1);
+    } else {
+        s2showroom_move(dx);
+        p->cfg->car = s2showroom_chosen() + 1;
+    }
 }
 
 /* the bonus car (the fifth) has no set-up list: STARTL.EXE 0x3d2d3 .. 0x3d47a */
@@ -291,8 +308,7 @@ static int sets_key(struct car_page *p, uint32_t press)
     if (!p->state) {
         int dx = ((press & KEY_RIGHT) ? 1 : 0) - ((press & KEY_LEFT) ? 1 : 0);
         if (dx && !p->far_cars) {
-            s2showroom_move(dx);
-            c->car = s2showroom_chosen() + 1;
+            car_move(p, dx);
             plate_numbers(p);
             s2sound_menu(SOUND_SETS_CARS);
             p->t0 = p->now;
@@ -332,8 +348,7 @@ static int car_key(void *self, uint32_t press)
     if (!p->state) {
         int dx = ((press & KEY_RIGHT) ? 1 : 0) - ((press & KEY_LEFT) ? 1 : 0);
         if (dx && !p->far_cars) {
-            s2showroom_move(dx);
-            c->car = s2showroom_chosen() + 1;
+            car_move(p, dx);
             plate_numbers(p);
             s2sound_menu(SOUND_CAR);
         }
@@ -386,20 +401,25 @@ static void car_draw(void *self, struct blit_list *l, uint32_t tick)
     const struct s2_menu_cfg *c = p->cfg;
     const int list = p->sets && p->state && !bonus(c);
     (void)tick;
-    if (list) s2showroom_draw_dark(l, p->dark, 100, 84, 120, 68);       /* the picture and the cars, the list's box darkened (the CPU does it before the text goes over it) */
-    else s2showroom_draw(l);                                            /* the picture is blitted, the cars drawn; the list is empty again for the sprites */
-    s2gfx_sprite(l, p->state && !p->sets ? SPR_TRANS_TITLE : SPR_CAR_TITLE, 28, 15);
-    s2gfx_sprite(l, SPR_BADGE + c->team - 1, 226, 1);
+    if (p->room) s2garage_car_draw(l, p->state, list ? p->dark : 0, 100, 84, 120, 68);       /* the room and the team's cars, the list's box darkened (the CPU does it before the text goes over it) */
+    else if (list) s2showroom_draw_dark(l, p->dark, 100, 84, 120, 68);                       /* the picture and the cars, the box darkened */
+    else s2showroom_draw(l);                                                                /* the picture is blitted, the cars drawn; the list is empty again for the sprites */
+    if (p->sets) {                                          /* the pages of the championship and of time attack: the title as text, no badge (0x3d969) */
+        s2gfx_text_centred(l, S2G_FONT_TITLE, S2G_WHITE, 2, 4, s2gfx_line("CAR SELECTION", 0, "CAR SELECTION"));
+    } else {
+        s2gfx_sprite(l, p->state ? SPR_TRANS_TITLE : SPR_CAR_TITLE, 28, 15);
+        s2gfx_sprite(l, SPR_BADGE + c->team - 1, 226, 1);
+    }
     if (list) list_draw(p, l);
-    if (p->sets && p->state == 2) {                         /* the choice: where the plate is, which stays off (a stand-in: the original has it in every state, 10 pixels lower) */
-        choice_draw(p, l);
-    } else if (!p->state || p->sets) {
-        s2gfx_sprite(l, c->car == S2M_CARS ? SPR_PLATE_BONUS + c->team - 1 : SPR_PLATE + c->car - 1, 18, 155);
-        s2gfx_sprite(l, SPR_MAXSPEED, 166, 170);
-        s2gfx_sprite(l, SPR_UNIT, 231, 171);
+    if (p->sets && p->state == 2) choice_draw(p, l);
+    if (p->sets || !p->state) {                             /* the plate with the car's name, the top speed and the drive: the sets' page has them in every state, 10 pixels lower (0x3da1b ..) */
+        const int dy = p->sets ? 10 : 0;
+        s2gfx_sprite(l, c->car == S2M_CARS ? SPR_PLATE_BONUS + c->team - 1 : SPR_PLATE + c->car - 1, 18, 155 + dy);
+        s2gfx_sprite(l, SPR_MAXSPEED, 166, 170 + dy);
+        s2gfx_sprite(l, SPR_UNIT, 231, 171 + dy);
         if (p->plate_ok) {
-            s2gfx_sprite(l, SPR_DRIVE + (p->plate.drive == 2 ? 1 : p->plate.drive == 1 ? 0 : 2), 251, 163);
-            s2gfx_text(l, S2G_FONT_DIGITS, 5, 1, 213, 169, p->speed);
+            s2gfx_sprite(l, SPR_DRIVE + (p->plate.drive == 2 ? 1 : p->plate.drive == 1 ? 0 : 2), 251, 163 + dy);
+            s2gfx_text(l, S2G_FONT_DIGITS, 5, 1, 213, 169 + dy, p->speed);
         }
     } else {
         const int manual = c->manual != 0, lit = !(((p->now - p->t0) * 2) & 0x20);
@@ -413,31 +433,46 @@ static const char *const picture[S2ARC_PAGES] = { "ARCADE_L.BKK", "BKG_1L.BKK", 
 /* one visit of the CAR page: from the cars, or (after CUSTOMIZE) from the list with the car it left */
 static int car_visit(int page, struct s2_menu_cfg *c, int state, int choice)
 {
-    if (!load_picture(picture[page])) return S2ARC_FAIL;
-    struct s2_page pg = { s2gfx_pic(0), pal, 0, FADE_FRAMES, 0, 0, 0 };
+    struct s2_page pg = { 0, 0, 0, FADE_FRAMES, 0, 0, 0 };
     struct car_page cp = { .cfg = c, .zip = s2gfx_zip(), .miles = (s2gfx_line("THIS LAP", 8, "MPH")[0] | 0x20) == 'm' };
     if (c->car > cars_of(c->team)) c->car = 1;
     cp.n = cars_of(c->team);
     cp.sets = page == S2ARC_ATTACK || page == S2ARC_LEAGUE;
-    if (cp.sets) pg.fade_out = SETS_FADE;
     cp.league = page == S2ARC_LEAGUE;
-    if (cp.sets) c->free_run = 0;
-    if (cp.sets && (c->setup < 0 || c->setup > 4)) c->setup = 0;
+    if (cp.sets) {
+        c->free_run = 0;
+        if (c->setup < 0 || c->setup > 4) c->setup = 0;
+        pg.fade_out = SETS_FADE;
+        cp.room = s2garage_open(c->team, cp.n);             /* (the team's room, built where the options room or the last page of this chain did not: one load for the menu) */
+        if (!cp.room) dlog_str("arcade: no room for the CAR page: the arcade page's picture and carousel instead\n");
+    }
+    if (cp.room) {
+        pg.pal = track_palette();
+        cp.dark = s2room_dark();
+    } else {
+        if (!load_picture(picture[page])) return S2ARC_FAIL;
+        pg.picture = s2gfx_pic(0);
+        pg.pal = pal;
+        if (cp.sets) {
+            s2gfx_dark_table(pal, cp.dark_own, 256);        /* (about 70 ms on the Pocket's CPU, with the cars' load before the page is shown; the arcade's page has no box) */
+            cp.dark = cp.dark_own;
+        }
+        if (!s2showroom_load(cp.zip, c->team, cp.n)) {
+            dlog_str("arcade: the team's cars could not be read: the CAR page without them\n");
+            cp.n = 0;
+        }
+    }
     cp.state = cp.standalone = page == S2ARC_TRANS;
     if (cp.sets) cp.state = state, cp.choice = choice;
-    if (cp.sets) s2gfx_dark_table(pal, cp.dark, 256);       /* (about 70 ms on the Pocket's CPU, with the cars' load before the page is shown; the arcade's page has no box) */
-    if (!s2showroom_load(cp.zip, c->team, cp.n)) {
-        dlog_str("arcade: the team's cars could not be read: the CAR page without them\n");
-        cp.n = 0;
-    }
-    s2showroom_init(cp.n, c->car - 1);
+    if (cp.room) s2garage_car_begin(c->car - 1);
+    else s2showroom_init(cp.n, c->car - 1);
     if (cp.state == 1 && !cp.sets)
         for (int i = 0; i < 300; i++) s2showroom_step(1);   /* (a page that starts in its second state has the cars settled) */
     plate_numbers(&cp);
     pg.frame = car_frame;
     pg.key = car_key;
     pg.draw = car_draw;
-    const int r = s2page_run(&pg, &cp);
+    const int r = s2page_run_step(&pg, &cp, cp.sets ? SETS_FADE_STEP : 0);
     return r == S2ARC_OUT ? S2ARC_BACK : r;
 }
 
@@ -472,7 +507,7 @@ int s2arcade_page(int page, struct s2_menu_cfg *c)
         c->track = s2save_track_at(tp.pos);                 /* (a track that is not open: the first) */
         pg.frame = track_frame;
         pg.key = track_key;
-        pg.draw = track_draw;
+        pg.draw = tracks_draw;
         self = &tp;
         break;
     }
