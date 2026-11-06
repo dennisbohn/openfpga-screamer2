@@ -484,9 +484,9 @@ static void check_frame(const struct expect *e)
     } else {
         const volatile uint8_t *fb = FB(front);
         int differ = 0, first = -1;
-        /* the CAR page has 3D cars the model does not draw: only the pixels where the model draws something (sprites, digits) are compared; where it shows
-           the picture the page may show a car (the sprites are drawn over the cars, and their see-through pixels let the cars show) */
-        const int masked = !strncmp(e->name, "car_", 4) || !strncmp(e->name, "trans_", 6);
+        /* the title and the CAR page have 3D cars the model does not draw: only the pixels where the model draws something (the prompt, sprites, digits) are compared; where it shows
+           the picture the page may show a car (the prompt and the sprites are drawn over the cars, and their see-through pixels let the cars show) */
+        const int masked = !strncmp(e->name, "title_", 6) || !strncmp(e->name, "car_", 4) || !strncmp(e->name, "trans_", 6);
         for (int i = 0; i < S2G_PIC_BYTES; i++)
             if ((!masked || idx[i] != s2gfx_pic(0)[i]) && fb[i] != idx[i] && differ++ == 0) first = i;
         CHECK(!differ, "%s: %d pixels differ from the model, first at x %d y %d (%02x, expected %02x)", e->name, differ, first % 320, first / 320,

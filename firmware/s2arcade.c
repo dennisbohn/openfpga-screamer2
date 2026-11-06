@@ -10,7 +10,7 @@
  *
  *   ARCADE title (0x3b6e8): ARCADE_L.BKK, "ACCELERATE TO CONTINUE" (STRINGS line 15) centred at y 184 in font 2, colour 1, spacing 2,
  *                           shown while (clock & 0x7f) < 0x40. ENTER: sound 1, fade, on to the TRACK page. ESC: the options room.
- *                           (The original also drives four cars of the team's over the picture: a 3D scene, not built.)
+ *                           Over the picture, under the prompt, four of the team's cars drive past a still camera (s2arcscene.h: the page has no scene, only these).
  *   TRACK (0x41a69):        BKG_1L.BKK, the sprite 105 "TRACK selection" at (28, 15); every open track is a sprite 92 x 116 at y 64 and
  *                           x = 105 i + scroll: 5 + track - 1 for the chosen one, 7 more for the others (they are pictures with the track's
  *                           name banner, in MENUL.SPR); the scroll eases to 8 - 105 k (k the first of the three shown: the chosen one, or
@@ -40,6 +40,7 @@
  *                           (no sound). s2arcade_page(S2ARC_TRANS) is the page started in this state with the cars settled, and its ESC leaves it (the tests').
  */
 #include "s2arcade.h"
+#include "s2arcscene.h"
 #include "s2gfx.h"
 #include "s2page.h"
 #include "s2sound.h"
@@ -81,6 +82,15 @@ static int load_picture(const char *name)
 
 /* ------------------------------------------------------------------------------------------------ the title */
 
+struct title_page {
+    int cars;                               /* the four cars of the title are loaded: s2arcscene_frame() / _draw() */
+};
+
+static void title_frame(void *self, uint32_t tick)
+{
+    if (((struct title_page *)self)->cars) s2arcscene_frame(tick);
+}
+
 static int title_key(void *self, uint32_t press)
 {
     (void)self;
@@ -94,7 +104,7 @@ static int title_key(void *self, uint32_t press)
 
 static void title_draw(void *self, struct blit_list *l, uint32_t tick)
 {
-    (void)self;
+    if (((struct title_page *)self)->cars) s2arcscene_draw(l);
     if (((tick * 2) & 0x7F) < 0x40)
         s2gfx_text_centred(l, S2G_FONT_SMALL, S2G_WHITE, 2, 184, s2gfx_line("ACCELERATE TO CONTINUE", 0, "ACCELERATE TO CONTINUE"));
 }
@@ -292,11 +302,17 @@ int s2arcade_page(int page, struct s2_menu_cfg *c)
     struct s2_page pg = { s2gfx_pic(0), pal, 0, FADE_FRAMES, 0, 0, 0 };
     struct track_page tp = { c, 0, s2arcade_tracks_open(), 0.0f, 0.0f, 0, 0 };
     struct car_page cp = { .cfg = c, .zip = s2gfx_zip(), .miles = (s2gfx_line("THIS LAP", 8, "MPH")[0] | 0x20) == 'm' };
+    struct title_page tt = { 0 };
     void *self = 0;
     switch (page) {
-    case S2ARC_TITLE:
+    case S2ARC_TITLE:                                       /* the team's cars as the CAR page will want them (a fifth one, if it is open, comes with them), and the take's paths */
+        if (c->car > cars_of(c->team)) c->car = 1;
+        tt.cars = s2arcscene_load(cp.zip, c->team, cars_of(c->team));
+        if (tt.cars) s2showroom_init(S2ARCSCENE_CARS, 0);
+        pg.frame = title_frame;
         pg.key = title_key;
         pg.draw = title_draw;
+        self = &tt;
         break;
     case S2ARC_TRACK:
         for (int i = 0; i < tp.n; i++)
