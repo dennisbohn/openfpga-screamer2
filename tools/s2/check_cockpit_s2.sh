@@ -41,3 +41,10 @@ if MSYS_NO_PATHCONV=1 docker run --rm -e NEGATIVE=1 -e ASAN_OPTIONS=detect_leaks
     echo "NEGATIVE CONTROL PASSED: the checks do not check"; exit 1
 fi
 tail -1 "$work/negative.txt"
+if [ -f "$root/build/check/dosbox_cockpit/cockpit_t1.shots.txt" ]; then
+    "$py" -I "$root/tools/s2/check_cockpit_shots.py" "$game" "$root/build/check/dosbox_cockpit" 1
+    if NEGATIVE=1 "$py" -I "$root/tools/s2/check_cockpit_shots.py" "$game" "$root/build/check/dosbox_cockpit" 1 > "$work/negative_shots.txt"; then
+        echo "NEGATIVE CONTROL OF THE SCREENSHOTS PASSED: the checks do not check"; exit 1
+    fi
+    echo "the screenshots' negative control (a needle at the wrong part) fails: $(grep -c FAIL "$work/negative_shots.txt") shots"
+fi

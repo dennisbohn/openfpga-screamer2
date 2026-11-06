@@ -71,6 +71,23 @@ def needle(n, part):
     return [(px, py, tx, ty), (s[0], s[1], tx, ty), (u[0], u[1], tx, ty)]
 
 
+def bresenham(x0, y0, x1, y1):
+    """the pixels of the blitter's line (docs/soc.md), the end points included"""
+    dx, dy = abs(x1 - x0), -abs(y1 - y0)
+    sx, sy, err = 1 if x1 >= x0 else -1, 1 if y1 >= y0 else -1, dx + dy
+    while True:
+        yield x0, y0
+        if x0 == x1 and y0 == y1:
+            return
+        e2 = 2 * err
+        if e2 >= dy:
+            x0 += sx
+            err += dy
+        if e2 <= dx:
+            y0 += sy
+            err += dx
+
+
 def main():
     game, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
@@ -114,4 +131,5 @@ def main():
     print("%d pictures, 8 dashboards, %d needle positions" % (9, len(nl)))
 
 
-main()
+if __name__ == "__main__":
+    main()
