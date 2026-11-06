@@ -16,8 +16,8 @@ clock 0x13335c moves again (tools/s2/dosbox_smoke_s2.py's way). Written to build
   cockpit_t<track>.shots.txt   each screenshot: its file, the label, the race clock just before and after the key
   cockpit_t<track>.crusc.bin / .data.bin   the dashboards' table the game loaded (0x1242b4, 8 x 0x58 bytes) and the game's data object (the palette is in it)
   cockpit_t<track>_<n>.png     the screenshots, in the order of the requests
-The keys go only to the DOSBox this script started and only while its window is in front (else it stops); it takes the lock folder of the other DOSBox scripts' rule by hand (see the
-agent rules: mkdir .dosbox_lock) and does not touch another DOSBox.
+The keys go only to the DOSBox this script started and only while its window is in front (else it stops); it does not touch another DOSBox (one DOSBox script at a time: the caller
+holds whatever lock the work is shared under).
 """
 import os
 import struct
