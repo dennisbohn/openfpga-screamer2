@@ -84,21 +84,6 @@ int s2room_menu(const struct s2_menu_cfg *c)
 
 /* ------------------------------------------------------------------------------------------------ the camera */
 
-/* 0x33905: the angles of the look from pos at aim (d = pos - aim), the floats it stores at 0x1324a8 (pitch) and 0x1324ac (heading) */
-static void look_at(const int32_t pos[3], const int32_t aim[3], float *pitch, float *head)
-{
-    const int32_t dx = pos[0] - aim[0], dy = pos[1] - aim[1], dz = pos[2] - aim[2];
-    const double horiz2 = (double)((int64_t)dx * dx + (int64_t)dz * dz);
-    /* 0x10d9e: the angle round the vertical, acos of dx over the length, 2 pi minus it for dz < 0 (the constants are the floats of the program) */
-    float v = (float)acos((double)dx / sqrt(horiz2));
-    if (dz < 0) v = (float)((double)6.2831855f - (double)v);
-    *head = (float)((double)v + (double)-1.5707964f);
-    const float horiz = (float)sqrt(horiz2), total = (float)sqrt((double)((int64_t)dx * dx + (int64_t)dy * dy + (int64_t)dz * dz));
-    const float ratio = (float)((double)horiz / (double)total);
-    const double a = fabs(acos((double)ratio));
-    *pitch = dy < 0 ? (float)a : (float)(6.283185482025146 - a);
-}
-
 /* the place eased towards a target (0x3364d): in the x87's own precision, the sum cut towards zero */
 static void ease_place(int32_t pos[3], const int32_t target[3], int row)
 {
@@ -106,19 +91,13 @@ static void ease_place(int32_t pos[3], const int32_t target[3], int row)
     for (int k = 0; k < 3; k++) pos[k] = (int32_t)(((double)pos[k] - (double)target[k]) * f + (double)target[k]);
 }
 
-/* the record's angle from the radians: x 1024 / pi, cut, & 0x7ff */
-static int angle_of(float rad)
-{
-    return (int)((double)rad * 1024.0 / 3.1415927410125732) & 0x7FF;
-}
-
 void s2room_cam_start(struct s2room_cam *c, int k)
 {
     const int32_t *P = mcm[0][k], *A = mcm[1][k];
     for (int i = 0; i < 3; i++) c->pos[i] = P[i] + 4 * (P[i] - A[i]);
-    look_at(c->pos, A, &c->pitch, &c->head);
-    c->a0 = angle_of(c->pitch);
-    c->a1 = angle_of(c->head);
+    s2scene_look_at(c->pos, A, &c->pitch, &c->head);
+    c->a0 = s2scene_angle(c->pitch);
+    c->a1 = s2scene_angle(c->head);
     c->row = ROW_FIRST;
 }
 
@@ -128,23 +107,16 @@ void s2room_cam_step(struct s2room_cam *c, int k, float fade)
     float lp, lh;
     if (fade == 0.0f) {
         ease_place(c->pos, P, c->row);
-        look_at(P, A, &lp, &lh);
+        s2scene_look_at(P, A, &lp, &lh);
     } else {
         ease_place(c->pos, A, ROW_FADE);
-        look_at(c->pos, A, &lp, &lh);
+        s2scene_look_at(c->pos, A, &lp, &lh);
     }
     const int row = (int)((double)fade * 12.0 + 85.0);
     s2scene_ease_angle(&c->pitch, lp, row);
     s2scene_ease_angle(&c->head, lh, row);
-    c->a0 = angle_of(c->pitch);
-    c->a1 = angle_of(c->head);
-}
-
-/* the camera as the track's engine takes it: place (x, y = the engine's z, height = its y), heading and pitch (+ up) from the record's angles (a0 1024 .. 2047 is down) */
-static struct track_cam track_cam_of(const struct s2room_cam *c)
-{
-    const int pitch = c->a0 >= 1024 ? c->a0 - 2048 : c->a0;
-    return (struct track_cam){ (float)c->pos[0], (float)c->pos[2], (float)c->pos[1], s2scene_rad(c->a1), s2scene_rad(pitch), 0.0f };
+    c->a0 = s2scene_angle(c->pitch);
+    c->a1 = s2scene_angle(c->head);
 }
 
 /* ------------------------------------------------------------------------------------------------ loading */
@@ -305,7 +277,7 @@ static void room_draw(void *self, struct blit_list *l, uint32_t tick)
     struct room *p = self;
     (void)tick;
     s2room_cam_step(&p->cam, station, p->fade);
-    const struct track_cam cam = track_cam_of(&p->cam);
+    const struct track_cam cam = s2scene_camera_of(p->cam.pos, p->cam.a0, p->cam.a1);
     room_scene(p, l, &cam);
     room_texts(p, l, station, p->clock);
     if (p->leaving) p->fade = (float)((double)0.02f * 2.0 + (double)p->fade);

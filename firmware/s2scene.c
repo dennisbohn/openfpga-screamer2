@@ -149,6 +149,34 @@ struct track_cam s2scene_camera(float x, float y, float z, float pitch)
     return (struct track_cam){ x, z, y, 0.0f, pitch, 0.0f };
 }
 
+/* 0x33905: the angles of the look from pos at aim (d = pos - aim), the floats it stores (pitch, heading) */
+void s2scene_look_at(const int32_t pos[3], const int32_t aim[3], float *pitch, float *head)
+{
+    const int32_t dx = pos[0] - aim[0], dy = pos[1] - aim[1], dz = pos[2] - aim[2];
+    const double horiz2 = (double)((int64_t)dx * dx + (int64_t)dz * dz);
+    /* 0x10d9e: the angle round the vertical, acos of dx over the length, 2 pi minus it for dz < 0 (the constants are the floats of the program) */
+    float v = (float)acos((double)dx / sqrt(horiz2));
+    if (dz < 0) v = (float)((double)6.2831855f - (double)v);
+    *head = (float)((double)v + (double)-1.5707964f);
+    const float horiz = (float)sqrt(horiz2), total = (float)sqrt((double)((int64_t)dx * dx + (int64_t)dy * dy + (int64_t)dz * dz));
+    const float ratio = (float)((double)horiz / (double)total);
+    const double a = fabs(acos((double)ratio));
+    *pitch = dy < 0 ? (float)a : (float)(6.283185482025146 - a);
+}
+
+/* the record's angle from the radians: x 1024 / pi, cut, & 0x7ff */
+int s2scene_angle(float rad)
+{
+    return (int)((double)rad * 1024.0 / 3.1415927410125732) & 0x7FF;
+}
+
+/* the camera as the track's engine takes it: place (x, y = the engine's z, height = its y), heading and pitch (+ up) from the record's angles (a0 1024 .. 2047 is down) */
+struct track_cam s2scene_camera_of(const int32_t pos[3], int a0, int a1)
+{
+    const int pitch = a0 >= 1024 ? a0 - 2048 : a0;
+    return (struct track_cam){ (float)pos[0], (float)pos[2], (float)pos[1], s2scene_rad(a1), s2scene_rad(pitch), 0.0f };
+}
+
 #define PI      3.1415927f
 #define TWO_PI  6.2831853f
 
