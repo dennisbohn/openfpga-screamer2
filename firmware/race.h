@@ -58,6 +58,15 @@ int race_replay_ok(void);
 int race_replaying(void);
 void race_replay_stop(void);
 
+/* The attract race (STARTL.EXE 0x3ca20: mode word 0x80; docs/screamer2/menus.md "The attract sequence"): set before race_init() it makes the arcade's race of four cars one with no player:
+   every car is a computer's (the game's driver from the start; a car with no controls record), stepped in the order the game steps its cars (all four's passes over the
+   ground, the cars touching, then all four's controls: race_others_slice() starts at car 0), the computers' pace the level's middle value (0x2dd26: no car has controls to pace the others
+   by), no car ends on its laps, nothing is recorded (no REPLAY is offered). race_step_player() still counts the clock, places and the lights; its argument is not read.
+   The viewer clears it again when the race is left. */
+extern int race_attract;
+/* The race's clock in seconds (0x13335c): 0 at the start, 0.02 a step (float, as the game adds it); the lights go out at 3 */
+float race_clock(void);
+
 /* RACE_ATTACK: the side (0 / 1) the player's car took on the first row (the other is the ghost's: the player takes the one the kept run did not start on) */
 int race_slot(void);
 
