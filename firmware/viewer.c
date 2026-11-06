@@ -1289,9 +1289,15 @@ static void __attribute__((noreturn)) sim_menumusic(uint32_t results)
 {
     static const uint32_t ms20 = 20 * MS_CYCLES;
     s2mm_song();
+    uint64_t sum = 0;
+    uint32_t worst = 0, steady_worst = 0;
     for (int f = 0; f < 480; f++) {
         uint32_t t0 = rdcycle();
         music_frame();
+        uint32_t dt = rdcycle() - t0;
+        sum += dt;
+        if (dt > worst) worst = dt;
+        if (f > 40 && f < 110 && dt > steady_worst) steady_worst = dt;
         if (f == 60) slot_read(3, 0, (uint32_t)(uintptr_t)SCRATCH_MEM, 65536);
         if (f == 120) slot_read(3, 0, (uint32_t)(uintptr_t)SCRATCH_MEM, 1000000);
         if (f == 220) slot_read(3, 0, (uint32_t)(uintptr_t)SCRATCH_MEM, 300000);
@@ -1307,6 +1313,13 @@ static void __attribute__((noreturn)) sim_menumusic(uint32_t results)
             ;
     }
     music_stop();
+    dlog_str("menumusic: music_frame ");
+    dlog_dec((int32_t)(sum / 480));
+    dlog_str(" cycles mean, ");
+    dlog_dec((int32_t)worst);
+    dlog_str(" worst, ");
+    dlog_dec((int32_t)steady_worst);
+    dlog_str(" worst in the steady frames 41 .. 109\n");
     dlog_str("menumusic: done\n");
     SYS_SIM = SIM_DONE | results;
     for (;;)
