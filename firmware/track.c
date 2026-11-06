@@ -499,6 +499,10 @@ int track_class_key(const uint8_t *obj)
     return obj ? -(int)(int16_t)rd32(obj + 0xC4) : 0;
 }
 
+/* The rear-view mirror's pass (track_draw_mirror): the picture is the glass's, turned over (the camera's right-hand side reversed, so every face is seen the other way round: the
+   geometry unit's mirror bit is toggled for every piece), and the level of detail is at least 1 (STARTL.EXE 0x756b0 sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
+static int mirror_pass;
+
 /* The original's level of detail per block (STARTL.EXE 0x7f148 for placed meshes, 0x7f010 for cars and
    other moving objects; docs/screamer2/performance.md, section 6): the distance of the block's middle
    from the camera, rounded to nearest (even). Placed: key = -(dist >> 1), level 0 above -3000 (dist <
@@ -514,7 +518,8 @@ int track_lod_level(float dist, int moving)
 #else
     int32_t d = (int32_t)lrintf(dist);
     int32_t key = moving ? -d : -(d >> 1);
-    return key > (moving ? -2000 : -3000) ? 0 : key > (moving ? -6000 : -4500) ? 1 : 2;
+    const int level = key > (moving ? -2000 : -3000) ? 0 : key > (moving ? -6000 : -4500) ? 1 : 2;
+    return level < mirror_pass ? mirror_pass : level;
 #endif
 }
 
@@ -1021,7 +1026,7 @@ static void block_piece(const float c[3], const float f[3], const float r[3], co
     for(int j = 0; j < 3; j++) e[j] = m[j] * (c[0] - o[0]) + m[3 + j] * (c[1] - o[1]) + m[6 + j] * (c[2] - o[2]);
     face_eye(blk, e[0], e[1], e[2], g);
     g->blk = blk;
-    g->mirror = 0;
+    g->mirror = mirror_pass;
     g->refl = 0;
 }
 
@@ -1073,7 +1078,7 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
         block_piece(c, f, r, u, m, o, blk, g);
         g->obj = obj;
         g->phase = piece_phase;
-        g->mirror = moving;
+        g->mirror = moving ^ mirror_pass;
         float w[3];
         for(int i = 0; i < 3; i++)
             w[i] = o[i] + m[3 * i] * rd16(blk + 4) + m[3 * i + 1] * rd16(blk + 6) + m[3 * i + 2] * rd16(blk + 8) - c[i];
@@ -1083,7 +1088,7 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
             int32_t off = rd32(obj + 0x18 + 4 * (b + 13 * lvl));
             if(!off) continue;
             block_piece(c, f, r, u, m, o, obj + off, g);
-            g->mirror = moving;
+            g->mirror = moving ^ mirror_pass;
         }
         int i = n;
         while(i > 0 && key[ord[i - 1]] > key[b]) { ord[i] = ord[i - 1]; i--; }
@@ -1326,7 +1331,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         }
         struct gu_piece g;
         g.phase = piece_phase;
-        g.mirror = 0;
+        g.mirror = mirror_pass;
         g.refl = 0;
         g.blk = block_of(pc->obj, &g.obj);
         float ca = sin2048((uint32_t)pc->t + 512), sa = sin2048((uint32_t)pc->t);
@@ -1384,6 +1389,18 @@ void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const stru
     float f[3], r[3], u[3];
     cam_frame(cam, f, r, u);
     draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
+}
+
+void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
+                       struct track_object *objs, int nobj, struct track_stats *st)
+{
+    const float c[3] = { cam->x, cam->y, cam->h };
+    float f[3], r[3], u[3];
+    cam_frame(cam, f, r, u);
+    for(int k = 0; k < 3; k++) r[k] = -r[k];
+    mirror_pass = 1;
+    draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
+    mirror_pass = 0;
 }
 
 void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, struct track_stats *st)
