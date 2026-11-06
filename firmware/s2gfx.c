@@ -317,9 +317,18 @@ int s2gfx_init(struct zip *z)
 
 /* GAMEL.SPR and GAMEL.FNT of GFX/GAME1.DAT, each into its own memory, apart from the menu's: its directory (the container's end, or all of it when the
    ZIP is deflated), the sprites as the file is, the glyphs after them */
+static uint32_t gdir[GDIR_MAX / 4 + 4];
+static const struct zip_entry *game_c;          /* GFX/GAME1.DAT and its directory as s2gfx_game_init() found them (s2gfx_game_entry) */
+static const uint8_t *game_dr;
+static uint32_t game_dr_len;
+
+uint32_t s2gfx_game_entry(const char *name, uint8_t *out, uint32_t max)
+{
+    return game_c ? entry_of(game_c, game_dr, game_dr_len, name, out, max) : 0;
+}
+
 int s2gfx_game_init(struct zip *z)
 {
-    static uint32_t gdir[GDIR_MAX / 4 + 4];
     uint32_t t0 = rdcycle();
     const struct zip_entry *c = zip_find(z, "GFX/GAME1.DAT");
     if (!c) return dlog_str("ui: GFX/GAME1.DAT is not in the ZIP\n"), 0;
@@ -337,6 +346,9 @@ int s2gfx_game_init(struct zip *z)
     }
     game.base = GMEM;
     game.nsprites = game.nfonts = 0;
+    game_c = c;
+    game_dr = dr;
+    game_dr_len = dr_len;
     uint32_t spr = entry_of(c, dr, dr_len, "GAMEL.SPR", GMEM, GSPR_MAX), glyphs = (spr + 3) & ~3u, used;
     if (!spr || !build_sprites(&game, GMEM, spr)) return dlog_str("ui: GAMEL.SPR unusable\n"), 0;
     uint32_t fnt = entry_of(c, dr, dr_len, "GAMEL.FNT", UNPACK, UNPACK_MAX);

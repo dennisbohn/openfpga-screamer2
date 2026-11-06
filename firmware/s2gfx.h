@@ -101,6 +101,9 @@ int s2gfx_banner(int track);
    1 if the sprites and fonts are there (the log says what is not). */
 #define S2G_GAME_MEM    0xC00000u
 int s2gfx_game_init(struct zip *z);
+/* An entry of GFX/GAME1.DAT (COCK3_L.PKC, MIRROR_L.PKC, ...) unpacked into out (max bytes): its size, 0 if it is not there or does not fit. Only after s2gfx_game_init(), and while that
+   call's directory is good (a stored ZIP's always; a deflated one's GAME1.DAT is inflated at SDRAM_BASE + 0x1500000, which nothing else may use before the last such call). */
+uint32_t s2gfx_game_entry(const char *name, uint8_t *out, uint32_t max);
 void s2gfx_game_sprite(struct blit_list *l, int n, int x, int y);
 void s2gfx_game_sprite_centred(struct blit_list *l, int n, int y);
 /* the sprite's x offset and width (the original's table 0x124210, records of 0x14 bytes: x at +0, the width at +8): 1 if there is such a sprite */
