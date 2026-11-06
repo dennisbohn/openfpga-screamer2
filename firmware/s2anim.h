@@ -17,6 +17,7 @@
 #define S2ANIM_ROWS     40              /* the original's limits: rows, paths, keys a channel, kinds of mesh */
 #define S2ANIM_PATHS    40
 #define S2ANIM_KEYS     24
+#define S2ANIM_POOL     512             /* keys of all the paths of a set (the most any track has is 240) */
 #define S2ANIM_MESHES   8
 #define S2ANIM_OBJECTS  16              /* objects drawn at once (the most any track has alive in a frame is 6) */
 #define S2ANIM_RANGE    80000.0f        /* how far a row's sound carries (0x2d525) */
@@ -54,3 +55,26 @@ const struct s2anim_row *s2anim_row(int i);
 /* the heading and the climb of row i at its share `part` of the run, in 2048ths of a turn: 0x2cee4's from the path's way there (the drawing works them out for an object
    when it comes up; they are also what the original puts in its object's +0x18 and +0x14) */
 void s2anim_angles(int i, float part, int *heading, int *climb);
+
+/* ------------------------------------------------------------------------------------------------ cubic paths of any file
+   The track's paths (MAPn.PTH) are read and evaluated by the routines below, and so can any other file of that format: the ARCADE title's cars and camera (DATA/GEN.DAT's SCENEn.PTH,
+   s2arcscene.h) keep a set of their own, so that the scenery of the race in the track's set is not touched. A set is the keys of its paths' three channels (x, y and height) and the paths. */
+struct s2anim_key { float t, v, out, in; };
+struct s2anim_chan { uint16_t first, n; };                              /* its keys: the first in the pool, how many */
+struct s2anim_path { struct s2anim_chan c[3]; float start, end; uint8_t ok; };     /* the channels, and the share of the run the path's keys span (head +0x28, +0x2c) */
+struct s2anim_paths {
+    struct s2anim_key pool[S2ANIM_POOL];
+    struct s2anim_path path[S2ANIM_PATHS];
+    uint16_t used;                                                      /* keys in the pool */
+};
+
+/* An empty set */
+void s2anim_paths_clear(struct s2anim_paths *ps);
+/* The paths of a file (size bytes at file) into the set: path i of the file into slot base + slot_of(its 100-byte header), a MAPn.PTH's own rule (the name's third character: "MV_<c>", '1' .. '9' then
+   'a' on) if slot_of is 0. Slots outside 0 .. S2ANIM_PATHS - 1 are left out. More files can follow into other slots. 1 if all of the file was read (the set's pool and the limits of a channel's keys
+   hold it), 0 if not: the set is then not to be used */
+int s2anim_paths_load(struct s2anim_paths *ps, const uint8_t *file, uint32_t size, int base, int (*slot_of)(const uint8_t *header));
+/* A path's place (x, y, height) at part (0 .. 1) of its run (0x129d5: the cubic between the keys, the first / last key's value outside them) and, if way is not 0, the unit vector of its direction */
+void s2anim_paths_at(const struct s2anim_paths *ps, int slot, float part, float place[3], float way[3]);
+/* The heading and the climb at part, in 2048ths of a turn (s2anim_angles' rules) */
+void s2anim_paths_angles(const struct s2anim_paths *ps, int slot, float part, int *heading, int *climb);

@@ -18,7 +18,7 @@
 int back_wait;
 uint32_t draw_buf, draw_wait, back_clocks, back_cycles, tl_scene, frames_shown;
 void (*hw_idle)(void);
-static uint32_t pieces_drawn, faces_drawn;
+static uint32_t pieces_drawn, faces_drawn, pixels_drawn, vertices_drawn;
 
 void su_view_regs(const struct su_view *v)
 {
@@ -33,9 +33,10 @@ void hw_piece(const struct gu_piece *g)
     const struct su_view v = { (int16_t)(SU_CENTRE & 0xFFFF), (int16_t)(SU_CENTRE >> 16), SU_SCALE, (int32_t)SU_FAR };
     const struct rs_clip clip = { (int)(RS_CLIP0 & 0xFFFF), (int)(RS_CLIP0 >> 16), (int)(RS_CLIP1 & 0xFFFF), (int)(RS_CLIP1 >> 16) };
     struct gu_stats st = { 0, 0, 0, 0 };
-    gu_draw(FB((GU_MODE >> 8) & 1), &clip, &v, (const uint8_t *)(uintptr_t)(SDRAM_BASE + GU_MLB), g, &st);
+    pixels_drawn += gu_draw(FB((GU_MODE >> 8) & 1), &clip, &v, (const uint8_t *)(uintptr_t)(SDRAM_BASE + GU_MLB), g, &st);
     pieces_drawn++;
     faces_drawn += st.faces;
+    vertices_drawn += st.vertices;
 }
 
 /* the see-through table into the rasterizer (main.c writes it through RS_SMG): the model reads the table the firmware hands over */

@@ -4,7 +4,7 @@
  * state the firmware's page is drawn exactly as the game has it (the team 1's room built from MENU11.DAT, the backdrop, the placements, the darkened band, the title, the choice's
  * name, the arrows) and compared pixel for pixel with the screenshot; the state that matches best is the screenshot's (a screenshot of a settled station has one camera and
  * only the animation clock to choose; one in the middle of a move may be any frame of the window). Of the settled stations the camera is also moved by a few units of the
- * angle, to show that the record's own is the best (the camera of the engine as track_cam_of() converts it).
+ * angle, to show that the record's own is the best (the camera of the engine as s2scene_camera_of() converts it).
  * It reports, per screenshot: the pixels equal, the pixels that differ and have the screenshot's colour within a pixel of the page's (the textures are minified: another texel is
  * picked where the original's matrices (16-bit tables) and ours (floats) differ in the last bit), the pieces and faces the page handed to the geometry unit, and in the end
  * the sums. The 2D parts (the band, the title, the name, the arrows) are compared on their own, in the rows of their boxes.
@@ -112,7 +112,7 @@ static void render(int at, const int32_t pos[3], int a0, int a1, int anim, int a
     static int dark_made;
     if (!dark_made++) s2gfx_dark_table(track_palette(), R.dark, 256);
     track_clock_set(((float)anim + 0.5f) / 65535.0f);
-    const struct track_cam cam = track_cam_of(&R.cam);
+    const struct track_cam cam = s2scene_camera_of(R.cam.pos, R.cam.a0, R.cam.a1);
     struct blit_list *l = s2gfx_begin_on(0);
     pieces_drawn = faces_drawn = 0;
     room_scene(&R, l, &cam);

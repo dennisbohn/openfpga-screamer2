@@ -484,9 +484,9 @@ static void check_frame(const struct expect *e)
     } else {
         const volatile uint8_t *fb = FB(front);
         int differ = 0, first = -1;
-        /* the CAR page has 3D cars the model does not draw: only the pixels where the model draws something (sprites, digits) are compared; where it shows
-           the picture the page may show a car (the sprites are drawn over the cars, and their see-through pixels let the cars show) */
-        const int masked = !strncmp(e->name, "car_", 4) || !strncmp(e->name, "trans_", 6);
+        /* the title and the CAR page have 3D cars the model does not draw: only the pixels where the model draws something (the prompt, sprites, digits) are compared; where it shows
+           the picture the page may show a car (the prompt and the sprites are drawn over the cars, and their see-through pixels let the cars show) */
+        const int masked = !strncmp(e->name, "title_", 6) || !strncmp(e->name, "car_", 4) || !strncmp(e->name, "trans_", 6);
         for (int i = 0; i < S2G_PIC_BYTES; i++)
             if ((!masked || idx[i] != s2gfx_pic(0)[i]) && fb[i] != idx[i] && differ++ == 0) first = i;
         CHECK(!differ, "%s: %d pixels differ from the model, first at x %d y %d (%02x, expected %02x)", e->name, differ, first % 320, first / 320,
@@ -1034,6 +1034,9 @@ static void draw_banner(int track, uint8_t *out)
 /* the options room: room_screen.c */
 #include "room_screen.c"
 
+/* the ARCADE title's cars: scene_screen.c */
+#include "scene_screen.c"
+
 /* ------------------------------------------------------------------------------------------------ all of it */
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix)
@@ -1062,6 +1065,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     check_pages3d(prefix);
     check_trackpages(prefix);
     check_room(ref, prefix);
+    check_scene(ref, prefix);
     check_sounds(z, ref);
     static uint8_t banners[7][S2G_PIC_BYTES];                       /* the race screen's track banners, drawn on the stored ZIP's init */
     int stored_banners = s2gfx_banner(1) != 0x13;
