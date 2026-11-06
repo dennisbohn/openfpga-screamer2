@@ -43,7 +43,7 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   car's place kept as a float (the original's whole-number places hold a car back at 50 steps a second). The stand-in
   `firmware/s2car_stub.c` is only built when `s2car.c` is missing (the race needs the real one). Docs: docs/development.md, "Driving mode".
 - **Sound (the race):** the music is the CD track the original plays for the track (`CD_TRACKS` of `MISC.DTR`; the optional
-  `GAME.GOG` + `GAME.DAT`, without them no music and no error), started with the race and faded out when you finish; the effects come
+  `GAME.GOG` + `GAME.DAT`, without them no music and no error), started with the race and playing on until you leave it (the original's CD is never faded); the end screen eases the effects out as the original does; the effects come
   from `DATA/SOUND.DAT` in the ZIP: every car's engine (pitch from its revs, volume and stereo place from the camera's distance),
   your tyres (squeal, rolling on rough ground), wall and car knocks and a landing, all by the original's own rules
   (`firmware/s2snd.c`, tested natively with `tools/s2/check_sound.sh`; `firmware/s2sound.c` plays them). Open: the volume balance (not
