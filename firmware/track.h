@@ -151,6 +151,9 @@ struct track_fx {
 };
 int track_fx(struct track_fx *fx);
 
+/* The far plane of the track (the image's header, TRACK_DATA's first number): nothing further than this and its own reach is drawn */
+float track_far(void);
+
 /* The projection for clip (for the setup unit's registers) */
 void track_view(const struct rs_clip *clip, struct su_view *v);
 
@@ -176,7 +179,8 @@ struct track_cam;
    and the three float accumulators of the reflection's offsets along the view's axes (the
    original's x left, y up, z back) */
 struct track_refl { int32_t prev[3]; float acc[3]; };
-#define TRACK_MAX_OBJS  96              /* objects of a frame that the drawing takes (the rest is left out) */
+#define TRACK_MAX_OBJS  212             /* objects of a frame that the drawing takes (the rest is left out): the cars 4, their shadows and puffs 68 (s2fx.h), the animated scenery 16 (s2anim.h),
+                                           the obstacles 64 and the sparks 60 (s2props.h); the lists in track.c grow by 4 bytes each of two for every object */
 struct track_object {
     float x, y, h, radius;
     int n;
