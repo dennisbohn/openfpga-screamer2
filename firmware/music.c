@@ -16,6 +16,10 @@
 #define FM_MAX      0x40000u
 #define SECTOR      2352u
 #define MAX_TRACKS  99
+#define PRIME       0x18000u                /* the mixer starts when this many bytes are in the ring: 3 reads, 0.55 s of music */
+#define KEEP        (CPU_HZ * 3 / 5)        /* cycles of song a blocking read must leave in the ring when it is done: 0.6 s, for the CPU's work after it before the page looks after the ring */
+#define FRAME_CYCLES (CPU_HZ / 44100)       /* cycles a ring frame plays for (the CD's 44,100 a second) */
+#define READ_CYCLES 100u                    /* cycles a byte of a slot read may take: 0.74 MB/s, below anything measured (2.4 MB in 2.1 s on the Pocket, 32 KB in 25 ms) */
 
 static int32_t first[MAX_TRACKS + 2];       /* per CD track its first sector (INDEX 01), -1 none */
 static uint8_t audio[MAX_TRACKS + 2];       /* 1 for an AUDIO track */
@@ -40,6 +44,11 @@ static uint32_t from, to, at;               /* its bytes in the image; the next 
 static uint32_t written, played, place;     /* frames into the ring, frames played, the mixer's place */
 static uint32_t reading;                    /* bytes of the read running, 0 none */
 static uint32_t short_frames;               /* frames in which the mixer had less than 16 frames ahead */
+static uint32_t origin;                     /* the byte of the song that the ring's frame 0 holds (a song resumed does not begin at its start) */
+static uint32_t served;                     /* rdcycle() at the last music_frame(): the ring was looked after then */
+static int priming;                         /* the first reads are coming in: the mixer starts when PRIME bytes are there */
+static int held;                            /* a long read took the data slot: the song waits (music_pause) for the next music_frame() */
+static uint32_t held_at, holds;             /* when it was held; how many times so far */
 
 /* the text's next line from *p, without its line break: 0 at the end */
 static int line(const char **p, const char *end, const char **s, const char **e)
@@ -164,6 +173,8 @@ static int choose(void)
     return src;
 }
 
+static void slot_guard(uint32_t len);
+
 int music_init(const uint8_t *gen, uint32_t gen_size)
 {
     uint32_t size = slot_size(CUE_SLOT);
@@ -186,6 +197,7 @@ int music_init(const uint8_t *gen, uint32_t gen_size)
     dlog_str(OPT_MUSIC ? " (FM Synth)\n" : " (Auto)\n");
     opt_seen = OPT_MUSIC != 0;
     if (OPT_MUSIC || !n) fm_available();        /* needed from the first song on; else when it is */
+    slot_hook = slot_guard;                     /* from now on every blocking slot call looks after the ring first */
     return n || fm_state > 0;
 }
 
@@ -204,7 +216,7 @@ static void done(uint32_t len, int r)
 {
     if (r) {
         AU_MUSIC = 0;
-        playing = 0;
+        playing = priming = 0;
         dlog_str("music: a read of GAME.GOG failed (result ");
         dlog_dec(r);
         dlog_str("), it stops\n");
@@ -215,7 +227,35 @@ static void done(uint32_t len, int r)
     if (at == to) at = from;                /* the song again, as the drive's poll plays it */
 }
 
-/* CD track n from byte off of it on (a whole sector), the music before stopped */
+/* a read of the ring done, if the APF is through with it: taken into the ring's state. wait: until it is. */
+static void take_read(int wait)
+{
+    if (!reading) return;
+    if (wait) {
+        uint32_t t0 = rdcycle();
+        while (slot_busy() && rdcycle() - t0 < 20u * CPU_HZ)
+            ;
+    } else if (slot_busy()) {
+        return;
+    }
+    uint32_t len = reading;
+    reading = 0;
+    done(len, slot_result());
+}
+
+/* the next read into the ring started, if there is room for it (the CPU only starts it: the APF writes the SDRAM while the frame is drawn) */
+static void top_up(void)
+{
+    uint32_t len = next();
+    if (len && !reading) {
+        slot_start(DISC_SLOT, at, RING_MEM + written * 4 % AU_MUSIC_RING, len);
+        reading = len;
+    }
+}
+
+/* CD track n from byte off of it on (a whole sector), the music before stopped. The ring is filled over the next frames by music_frame():
+   the mixer is off until PRIME bytes are in, so no frame is long (the 224 KB of a blocking fill took 170 ms) and the mixer never plays
+   what the ring held before. */
 static void cd_start(int n, uint32_t off)
 {
     int m = n + 1;
@@ -227,14 +267,12 @@ static void cd_start(int n, uint32_t off)
     from = (uint32_t)first[n] * SECTOR;
     to = last * SECTOR;
     at = off < to - from ? from + off : from;
+    origin = at - from;
     written = played = place = short_frames = 0;
     playing = n;
-    for (uint32_t len; playing && (len = next()) != 0;)
-        done(len, slot_read(DISC_SLOT, at, RING_MEM + written * 4 % AU_MUSIC_RING, len));
-    if (!playing) return;
-    AU_MUSIC_ADDR = RING_MEM - SDRAM_BASE;
-    AU_MUSIC_VOL = master;
-    AU_MUSIC = 1;
+    priming = 1;
+    served = rdcycle();
+    top_up();
 }
 
 /* Song n (MUSICn.HMP, CD track n + 1) from its start, the music before stopped: from the source
@@ -268,8 +306,8 @@ void music_pause(void)
         paused_fm = 1;
     }
     if (!n) return;
-    played += ((AU_MUSIC & 0xFFFF) - place) & 0xFFFF;
-    uint32_t off = played * 4 % (to - from) / SECTOR * SECTOR;
+    if (!priming) played += ((AU_MUSIC & 0xFFFF) - place) & 0xFFFF;     /* (the mixer has not started yet while priming: nothing was played) */
+    uint32_t off = (origin + played * 4) % (to - from) / SECTOR * SECTOR;
     music_stop();
     paused = n;
     paused_at = off;
@@ -335,29 +373,65 @@ void music_frame(void)
         if (n) begin(n);
     }
     fm_frame();
-    if (!playing) return;
-    uint32_t p = AU_MUSIC & 0xFFFF;
-    played += (p - place) & 0xFFFF;
-    place = p;
-    if (reading) {
-        if (slot_busy()) return;
-        uint32_t len = reading;
-        reading = 0;
-        done(len, slot_result());
-        if (!playing) return;
+    if (held) {                             /* the load that held the song is over: the caller looks after the ring again */
+        held = 0;
+        if (holds <= 8) {
+            dlog_str("music: held for ");
+            dlog_dec((int32_t)((rdcycle() - held_at) / (CPU_HZ / 1000)));
+            dlog_str(" ms by a load\n");
+        }
+        music_resume();
     }
-    short_frames += (int32_t)(written - played) < 16;
-    uint32_t len = next();
-    if (len) {
-        slot_start(DISC_SLOT, at, RING_MEM + written * 4 % AU_MUSIC_RING, len);
-        reading = len;
+    if (!playing) return;
+    served = rdcycle();
+    if (!priming) {
+        uint32_t p = AU_MUSIC & 0xFFFF;
+        played += (p - place) & 0xFFFF;
+        place = p;
+    }
+    take_read(0);
+    if (!playing) return;
+    if (!priming) short_frames += (int32_t)(written - played) < 16;
+    top_up();
+    if (priming && written * 4 >= PRIME) {  /* enough of the song is in: the mixer plays the ring from its start */
+        priming = 0;
+        AU_MUSIC_ADDR = RING_MEM - SDRAM_BASE;
+        AU_MUSIC_VOL = master;
+        AU_MUSIC = 1;
+    }
+}
+
+int music_active(void)
+{
+    return playing || held || fm_playing();
+}
+
+/* Every blocking call of the data slot (slot.c) comes here first. The slot does one read at a time, so the ring's own read running is
+   waited for (a few ms) and taken. A song that plays is held when the call (its estimated time, READ_CYCLES a byte) would leave less than
+   KEEP of song in the ring: the lead is the live one (what is written less what the mixer has played), 1.2 s at the most right after
+   music_frame(), 0.55 s right after a start. When the ring runs dry the mixer plays the old ring again; that is what this prevents. A song
+   held goes on from where it was at the next music_frame() (music_resume). While it is only starting nothing is played and a long read only
+   delays it. len: the bytes the call reads (0: a look-up), SLOT_REST counts as long. */
+static void slot_guard(uint32_t len)
+{
+    if (!playing) return;
+    take_read(1);
+    if (!playing || priming) return;        /* (the mixer has not started: a long read only delays the song) */
+    uint32_t p = AU_MUSIC & 0xFFFF;
+    int32_t ahead = (int32_t)(written - (played + ((p - place) & 0xFFFF)));     /* the frames the mixer has not played yet */
+    uint32_t lead = ahead > 0 ? (uint32_t)ahead * FRAME_CYCLES : 0;
+    if (rdcycle() - served >= CPU_HZ || lead <= KEEP || (lead - KEEP) / READ_CYCLES < len) {
+        held_at = rdcycle();
+        holds++;
+        music_pause();
+        held = 1;
     }
 }
 
 void music_stop(void)
 {
     AU_MUSIC = 0;
-    if (reading) {
+    if (reading) {                          /* (a read of the ring is waited for; its result does not matter any more) */
         uint32_t t0 = rdcycle();
         while (slot_busy() && rdcycle() - t0 < 20u * CPU_HZ)
             ;
@@ -386,5 +460,5 @@ void music_stop(void)
         }
     }
     fm_stop();
-    playing = paused = paused_fm = 0;
+    playing = paused = paused_fm = held = priming = 0;
 }
