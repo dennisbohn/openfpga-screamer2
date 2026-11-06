@@ -656,7 +656,7 @@ static uint8_t *backdrop_turned(const uint8_t *pano)
     return turned;
 }
 
-void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam)
+static void backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam, int mirror)
 {
     int w = clip->x1 - clip->x0, h = clip->y1 - clip->y0, eye = EYE_LINE(h);
     int32_t s = view_sin16(view_angle(cam->pitch));             /* the game's sine, [0x8228c] */
@@ -664,7 +664,7 @@ void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const 
     int heading = (int)lrintf((cam->yaw + 1.5707964f) * (1024.0f / 3.14159265f));
     int col = ((2047 - heading) >> 1) & 511;
     const uint8_t *pano = track_backdrop();
-    if(mirror_pass) {                                           /* the glass shows the picture turned over, the panorama's rows read from the other end: column x of the window is column 319 - x of the ordinary one */
+    if(mirror) {                                                /* the glass shows the picture turned over, the panorama's rows read from the other end: column x of the window is column 319 - x of the ordinary one */
         pano = backdrop_turned(pano);
         col = (192 - col) & 511;
     }
@@ -676,6 +676,16 @@ void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const 
     else
         rows = 0;
     if(rows < h) blit_fill(l, clip->x0, clip->y0 + rows, w, h - rows, track_ground_colour());
+}
+
+void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam)
+{
+    backdrop_blit(l, clip, cam, 0);
+}
+
+void track_backdrop_blit_mirror(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam)
+{
+    backdrop_blit(l, clip, cam, 1);
 }
 
 const uint8_t *track_hud(void)

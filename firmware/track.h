@@ -166,6 +166,8 @@ struct track_cam { float x, y, h, yaw, pitch, roll; };
 /* the blitter's commands for the backdrop behind the view clip, seen from cam (the game's
    0x83a68; track.c) */
 void track_backdrop_blit(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam);
+/* The same for the rear-view mirror's pass: the panorama turned over (column x of the window is column 319 - x of the ordinary one), `cam` the mirror's camera */
+void track_backdrop_blit_mirror(struct blit_list *l, const struct rs_clip *clip, const struct track_cam *cam);
 
 /* An object besides the track's pieces (a car, a shadow, a puff of smoke): its blocks in the
    order they are drawn, each with its own place: world = o + m . local (m rows: world x, y,

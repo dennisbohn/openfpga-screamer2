@@ -13,7 +13,7 @@ for n in $tracks; do
     [ -f "$img" ] || { echo "no $img (python -I tools/s2/make_track_s2.py <game folder> $n $img)"; exit 1; }
     # cameras over the road at points of the map (r<i>, looking along it)
     cams=""
-    for i in 30 200 400 700; do cams="$cams r$i"; done
+    for i in 30 150 300 450 600 750; do cams="$cams r$i"; done
     NOLOD=1 MIRROR_ROWS=35 sh "$root/tools/s2/render_s2.sh" "$img" "$root/build/check/mirror/t$n" $cams > "$root/build/check/mirror/t$n.txt" 2>&1 || { tail -5 "$root/build/check/mirror/t$n.txt"; exit 1; }
 done
 python -I "$root/tools/s2/check_mirror_s2.py" "$root/build/check/mirror" $tracks

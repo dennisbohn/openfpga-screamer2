@@ -478,7 +478,7 @@ static void draw_mirror(struct s2car_state *const *rc, int n, int follow, const 
     track_view_mirror(&mclip, &mv);
     draw_buf = buffer;
     blit_start(&mback, (int)buffer);
-    track_backdrop_blit(&mback, &mclip, &mc);
+    track_backdrop_blit_mirror(&mback, &mclip, &mc);
     while (!(MEM_STATUS & MEM_WRITES_IDLE))                             /* (the panorama turned over, made the first time, is in the SDRAM for the blitter) */
         ;
     BL_CLOCKS = 0;
