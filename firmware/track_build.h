@@ -81,3 +81,8 @@ uint32_t track_build_s2(const struct s2_files *f, int n, uint8_t *out, uint32_t 
    negative, so a face in several rows is moved once. 1, or 0 if the file is malformed or an offset would leave the 16 bits. The cars' meshes (track_build_s2) and the scenery's
    (s2anim.c: delta is info->misc_delta) are moved so. */
 int s2_faces_onto(uint8_t *x, uint32_t size, int32_t delta);
+
+/* A mesh of the track's graphics container (gfx: GFX/MAP<n>H01.DAT, as the viewer read it whole), <name>.3DX (the name in either case), unpacked to dst (cap bytes) with its faces
+   moved onto the image's copy of MISC.MLB's records by misc_delta (track_build_info.misc_delta; not 0): its size, 0 if it is not there, does not fit or cannot be moved. The small
+   objects of a race are loaded so: the scenery's (s2anim.c) and the obstacles' and sparks' (s2props.c). */
+uint32_t s2_mesh_load(const uint8_t *gfx, uint32_t gfx_size, const char *name, int32_t misc_delta, uint8_t *dst, uint32_t cap);

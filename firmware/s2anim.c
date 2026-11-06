@@ -51,8 +51,6 @@ static float rdf(const uint8_t *p)
     return f;
 }
 
-static int is_space(uint8_t c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
-
 /* MAPn.PTH (0x30ec2, 0x11c0c): a count, then per path 100 bytes (its name at +8, "MV_<c>...": c is its number, '1' .. '9' are 0 .. 8, 'a' on 9 on; at +0x28 and +0x2c the
    times its keys span of the run, 0 and 1, the trains' and the second kind of birds' 0 and 0.5) and three channels of 0x30 bytes (the number of keys at +0x1c) with their keys of
    0x2c bytes (the time +8, the value +0xc, the slopes out and in +0x10, +0x14); 1 if all of it was read */
@@ -137,59 +135,21 @@ void s2anim_angles(int i, float part, int *heading, int *climb)
     *climb = (int)(up * 1024.0f / PI) & 0x7FF;
 }
 
-/* the ANIMATIONS rows' names: the words that begin with s between the section's name and its END_LIST (the numbers come from s2_dtr_words) */
-static int row_names(const uint8_t *t, uint32_t size, char names[][12])
-{
-    uint32_t p = 0;
-    int n = 0, in = 0;
-    while(p < size) {
-        uint32_t e = p, a;
-        while(e < size && t[e] != '\n') e++;
-        a = p;
-        p = e < size ? e + 1 : e;
-        while(a < e && is_space(t[a])) a++;
-        if(!in) {
-            uint32_t z = e;
-            while(z > a && is_space(t[z - 1])) z--;
-            in = z - a == 10 && !memcmp(t + a, "ANIMATIONS", 10);
-            continue;
-        }
-        if(a >= e || t[a] == '*') continue;
-        uint32_t w = a;
-        while(a < e && !is_space(t[a])) a++;
-        if(a - w == 8 && !memcmp(t + w, "END_LIST", 8)) break;
-        if(t[w] == 's' && a - w >= 2 && n < S2ANIM_ROWS) {
-            uint32_t len = a - w - 1;
-            if(len > 11) len = 11;
-            memcpy(names[n], t + w + 1, len);
-            names[n++][len] = 0;
-        }
-    }
-    return n;
-}
-
 /* a row's mesh <NAME>.3DX out of the track's graphics container into the meshes' memory: its index, -1 if it is not there */
 static int mesh_of(const uint8_t *gfx, uint32_t gfx_size, const char *name, int32_t misc_delta, uint32_t *used)
 {
     for(int k = 0; k < nmeshes; k++)
         if(!strcmp(meshes[k].name, name)) return k;
-    char file[20];
     uint32_t len = (uint32_t)strlen(name);
-    struct dat_entry e;
-    if(nmeshes >= S2ANIM_MESHES || len > 11) return -1;
-    memcpy(file, name, len);
-    memcpy(file + len, ".3DX", 5);
-    for(uint32_t i = 0; i < len; i++)
-        if(file[i] >= 'a' && file[i] <= 'z') file[i] = (char)(file[i] - 32);
-    if(!dat_find(gfx, gfx_size, file, &e) || e.size < 0x100 || *used + ((e.size + 3) & ~3u) > MESH_BYTES) return -1;
-    if(dat_extract(gfx, gfx_size, &e, mesh_mem + *used, MESH_BYTES - *used) != e.size) return -1;
-    if(!misc_delta || !s2_faces_onto(mesh_mem + *used, e.size, misc_delta)) return -1;     /* its faces onto the image's copy of MISC.MLB's records */
+    if(nmeshes >= S2ANIM_MESHES || len > 11 || !misc_delta) return -1;
+    uint32_t size = s2_mesh_load(gfx, gfx_size, name, misc_delta, mesh_mem + *used, MESH_BYTES - *used);
+    if(!size) return -1;
     struct mesh *m = &meshes[nmeshes];
     m->file = mesh_mem + *used;
     m->radius = rd32(m->file);
     m->key = track_class_key(m->file);
     memcpy(m->name, name, len + 1);
-    *used += (e.size + 3) & ~3u;
+    *used += (size + 3) & ~3u;
     return nmeshes++;
 }
 
@@ -207,7 +167,7 @@ int s2anim_load(int track, const uint8_t *gfx, uint32_t gfx_size, const uint8_t 
     if(!dat_find(data, data_size, file, &e) || e.size > cap) return 0;
     uint32_t n = dat_extract(data, data_size, &e, scratch, cap);
     if(!n) return 0;
-    int count = row_names(scratch, n, names);
+    int count = s2_dtr_names(scratch, n, "ANIMATIONS", names, S2ANIM_ROWS);
     int words = s2_dtr_words(scratch, n, "ANIMATIONS", w, 7 * S2ANIM_ROWS);
     if(count < 1 || words != 7 * count) return 0;
     memcpy(file + 4, ".PTH", 5);

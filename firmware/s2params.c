@@ -126,3 +126,36 @@ int s2_params_track_dat(const uint8_t *map_dat, uint32_t size, int track, uint8_
     uint32_t n = entry_text(map_dat, size, name, scratch, cap);
     return n && s2_params_track(scratch, n, out);
 }
+
+int s2_dtr_names(const uint8_t *text, uint32_t size, const char *section, char names[][12], int max)
+{
+    uint32_t p = 0, sl = (uint32_t)strlen(section);
+    int n = 0, in = 0;
+    while(p < size) {
+        uint32_t e = p, a;
+        while(e < size && text[e] != '\n') e++;
+        a = p;
+        p = e < size ? e + 1 : e;
+        while(a < e && is_space(text[a])) a++;
+        if(!in) {
+            uint32_t z = e;
+            while(z > a && is_space(text[z - 1])) z--;
+            in = z - a == sl && !memcmp(text + a, section, sl);
+            continue;
+        }
+        while(a < e) {                              /* the words of the line */
+            while(a < e && is_space(text[a])) a++;
+            if(a >= e || text[a] == '*') break;
+            uint32_t w = a;
+            while(a < e && !is_space(text[a])) a++;
+            if(a - w == 8 && !memcmp(text + w, "END_LIST", 8)) return n;
+            if(text[w] == 's' && a - w >= 2 && n < max) {
+                uint32_t len = a - w - 1;
+                if(len > 11) len = 11;
+                memcpy(names[n], text + w + 1, len);
+                names[n++][len] = 0;
+            }
+        }
+    }
+    return n;
+}
