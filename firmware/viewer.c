@@ -334,11 +334,13 @@ static void leave(int n, int cars, const struct stats *s)
    TRANSMISSION page or GAME SETTINGS) stays through new races and tracks; nothing in a race changes it */
 static int manual;
 
-/* the view a race starts in: the one the player left the last race in (the original keeps it in its options, 0x2b64a, 0x20469, and takes 2, 3, 4 or 6, else 2 at 0x2e205) */
+/* the view a race starts in: the one the player left the last race in (the original keeps it in its options, 0x2b64a, 0x20469, and takes 2, 3, 4 or 6, else 2 at 0x2e205), but the
+   chase camera when he has chosen none: the save holds the view number + 1 (the field held 2 from before the views, its default, which reads as view 1, the trackside cameras of a replay:
+   no choice), so every save made before and every new one starts in the chase camera, and a view the player chooses stays */
 static int start_view(void)
 {
-    const int v = s2save_get(S2S_VIEW);
-    return v == S2CAM_INCAR || v == S2CAM_BACK || v == S2CAM_NEAR || v == S2CAM_INSIDE ? v : S2CAM_INCAR;
+    const int v = s2save_get(S2S_VIEW) - 1;
+    return v == S2CAM_INCAR || v == S2CAM_BACK || v == S2CAM_NEAR || v == S2CAM_INSIDE ? v : S2CAM_BACK;
 }
 
 /* a view from the car (F1 .. F4), kept for the next race; the race screen follows */
@@ -346,7 +348,7 @@ static void set_view(int view)
 {
     s2cam_view(view);
     s2hud_view(s2cam_get_view(), s2cam_get_follow());
-    if (!race_replaying() && !attract_mode) s2save_set(S2S_VIEW, s2cam_get_view());
+    if (!race_replaying() && !attract_mode) s2save_set(S2S_VIEW, s2cam_get_view() + 1);
 }
 
 /* a new race on track n: the four cars on the grid, the countdown from 3 s; 0 if the line or a car could not be set up */
@@ -376,7 +378,11 @@ static int race_start(int n, float floor_z)
         if (!cam_mode) lg_res_valid = 0;
         s2cam_begin(n, cam_mode ? S2CAM_TRACKSIDE : start_view());
         for (int i = 0; i < RACE_CARS; i++) race_car(i)->cam_on = 0;
+#ifdef S2_SIM_MIRROR
+        mirror_on = 1;                                  /* (the measurement build: tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_MIRROR=1 TAG=mirror runs the simulated race with the mirror on) */
+#else
         mirror_on = 0;
+#endif
         s2hud_view(s2cam_get_view(), 0);
     }
     return ok;
