@@ -41,9 +41,8 @@ controller, caches, clock phase): `docs/memory.md`. Overall architecture:
   executes `fence.i` and jumps with `a0` = its results (`SYS_SIM` bits), `a1`, `a2` = position
   and begun word in the log. The program sets its own `gp`, `tp` and `mtvec`; its stack is at
   the top of the boot RAM (from `0x8000` downwards to `0x6000`; the loader stays below).
-  Meanwhile the loader shows LOADING in white on black (`show_loading`, drawn before the
-  self-tests), so that the screen is not black for about a second, and a reset does not leave
-  the previous run's picture; the first frame of the program is its loading screen. If a
+  Nothing is shown meanwhile except a swap with a black palette, so that a reset does not
+  leave the previous run's picture; the first frame is the program's loading screen. If a
   self-test or a memory test fails, or `program.bin` is missing, the loader starts nothing
   and the results stay on the screen.
 

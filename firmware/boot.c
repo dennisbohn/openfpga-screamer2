@@ -2,9 +2,8 @@
  * The boot loader (firmware.bin, data slot 0, in the boot RAM; docs/soc.md): the CPU tests
  * itself and the SDRAM, then starts the program in the SDRAM (program.bin, data slot 2).
  * CPU self-tests, then the short memory test of the SDRAM (memtest.h: its clock phase, then
- * windows of 2 KB, a tenth of a second), its progress in the debug log's head line alone. LOADING
- * is on the screen from before the tests until the program's first picture (show_loading). The
- * memory test also loads program.bin
+ * windows of 2 KB, a tenth of a second), its progress in the debug log's head line alone; the
+ * screen stays black until the program's first picture. The memory test also loads program.bin
  * and checks its header and CRC-32. If everything passed, a jump to program.bin with the results
  * and the debug log's position. Otherwise the results go on screen, stay there, and go to
  * SYS_SIM after the third frame.
@@ -51,20 +50,6 @@ static void draw_frame(volatile uint8_t *fb, const char *title)
     }
 }
 
-/* Shows LOADING in white on black, from the first moments of the boot until the program draws its first
-   picture, which takes about a second. The swap also replaces the picture that a reset leaves on the screen
-   (docs/soc.md). Palette entry 0 is black and entry 1 white. */
-static void show_loading(void)
-{
-    uint32_t st = wait_swap_done();
-    volatile uint8_t *fb = FB(!(st & VID_FRONT));
-    for (int i = 0; i < 256; i++) VID_PAL[i] = 0;
-    VID_PAL[1] = 0x00FFFFFFu;
-    fb_fill(fb, 0, 0, FB_W, FB_H, 0);
-    con_text(fb, (CON_COLS - 7) / 2, CON_ROWS / 2, "LOADING", 1, 0);
-    VID_SWAP = 1;
-}
-
 /* memtest_run() calls this before each test and every 64 KB: into the log's head line, so
    that a hang shows where */
 static void progress(const char *what, uint32_t addr)
@@ -100,7 +85,6 @@ int main(void)
     dlog_hex(id);
     dlog_str(id == SYS_ID_VALUE ? " ok\n" : " wrong\n");
 
-    show_loading();
     for (int i = 0; i < 3; i++) {   /* one line each, so a trap shows which one ran */
         ok[i] = tests[i]();
         results |= (uint32_t)ok[i] << i;
@@ -116,6 +100,11 @@ int main(void)
     ((void (*)(void))0x00008000u)();
 #endif
 
+    /* the screen black until the program's first picture (after a reset the last run's
+       picture would stay, docs/soc.md) */
+    wait_swap_done();
+    for (int i = 0; i < 256; i++) VID_PAL[i] = 0;
+    VID_SWAP = 1;
     results |= memtest_run(progress);
 
     uint32_t entry = memtest_program();
