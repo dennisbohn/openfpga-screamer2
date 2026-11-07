@@ -8,6 +8,7 @@
 #        tools/fw.sh EXTRA_CFLAGS=-DX=1 TAG=x   other defines, in build/firmware-x/, not copied (e.g. -DHW_FULL_CYCLES=100: the computers' steps run in the scene at once)
 #        tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_END=1 TAG=simend   the end of the race drawn over frames 2 to 9 of the simulated race, with its cost in the log ("end screen frame 3: 3341 us")
 #        tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_INTRO=1 TAG=intro   the start's intro (the LOADING picture, the attract sequence on track 1) run in the simulation: tools/s2/sim_race.sh build/sim/<dir> build/s2/track1.bin 1 600 <name> (the image of track 1; about 20 minutes)
+#        tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_MENUMUSIC=1 TAG=menumusic   the menus' song on the real mixer in the simulation, with a short read, long reads and a chain of chunks while it plays (a made-up CD image: python -I tools/musicwav.py make build/simmusic, the game's ZIP and a dummy file next to it; SIM_GAME=build/simmusic SIM_IMAGE=build/simmusic/dummy.bin SIM_WAV=build/sim/menumusic.wav tools/sim.sh soc build/firmware-menumusic/firmware.bin build/sim/menumusic 4000; python -I tools/musicwav.py check build/sim/menumusic.wav; docs/development.md "The menus' music")
 #        tools/fw.sh PROF=1          with the cycle counters of firmware/prof.h, for the simulation, in build/firmware-prof/, not copied
 # Output: build/firmware/{firmware,program}.elf, .bin, .lst (disassembly), .map
 set -e

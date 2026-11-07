@@ -48,7 +48,8 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
   your tyres (squeal, rolling on rough ground), wall and car knocks and a landing, all by the original's own rules
   (`firmware/s2snd.c`, tested natively with `tools/s2/check_sound.sh`; `firmware/s2sound.c` plays them). Open: the volume balance (not
   heard yet), the car-against-car knock is the firmware's closing
-  speed, no menu sounds in the start menu. The original has no sound for the start lights or the gears. Docs: docs/development.md, "Sound".
+  speed, no menu sounds in the start menu. The original has no sound for the start lights or the gears. **The menus have the original's song** (CD track 2, MUSIC ON): it begins with the first page after the intro and after every race, goes on through the pages, begins again at the desk scene and when GAME SETTINGS' MUSIC
+  is turned on, and stops with MUSIC OFF or when a race begins. The CD plays through loads, the core cannot: a long load (the options room's build, the desk scene) holds the song and it goes on from where it stood once the page is up; short reads do not chop it (not heard yet). Docs: docs/development.md, "Sound" and "The menus' music".
 - **Animated scenery (the race):** the tracks' moving things run along their paths as the original runs them at DETAIL HIGH (`firmware/s2anim.c`): the helicopters of
   Columbia, Egypt and Switzerland (Egypt's comes 7 s into the racing), England's and Columbia's flocks of birds, California's airship, cable cars and bulldozers, Finland's trains;
   and the sounds that stand in places (crowds, market, mill, traffic, works, wolves, cows, ...), heard from the camera. Their materials are the track's `MISC.MLB`, which the

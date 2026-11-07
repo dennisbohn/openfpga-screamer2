@@ -7,6 +7,7 @@
 #include "s2load.h"
 #include "s2save.h"
 #include "s2sound.h"
+#include "s2menumusic.h"
 #include "dlog.h"
 #include "console.h"
 #include "hw.h"
@@ -49,6 +50,7 @@ static void step(int row, int d)
     int n = s2save_count(S2S_TRANS + row);
     s2save_set(S2S_TRANS + row, (s2save_get(S2S_TRANS + row) + d + n) % n);
     s2sound_menu(S2PAGE_SND_ROW);
+    if (S2S_TRANS + row == S2S_MUSIC) s2mm_song();      /* 0x42451 / 0x42462: the song stops, or begins from its start */
 }
 
 static int set_key(void *self, uint32_t press)

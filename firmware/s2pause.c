@@ -5,7 +5,6 @@
 #include "s2gfx.h"
 #include "s2page.h"
 #include "s2sound.h"
-#include "music.h"
 #include "dlog.h"
 #include "hw.h"
 
@@ -34,8 +33,7 @@ static int item_y(int i)
 static void pause_frame(void *self, uint32_t tick)
 {
     (void)self;
-    (void)tick;
-    music_frame();                      /* the song goes on: its ring is kept filled */
+    (void)tick;                         /* (the song goes on: the page runner keeps its ring filled) */
     if (p.effects > 0) {
         p.effects -= EASE;
         if (p.effects < 0) p.effects = 0;

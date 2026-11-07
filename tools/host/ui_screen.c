@@ -15,6 +15,9 @@
 #include "../s2menu.h"
 #include "../s2save.h"
 #include "../s2snd.h"
+#include "../music.h"
+#include "../slot.h"
+#include "music_hw.h"
 #include "../s2pages.h"
 #include "../s2room.h"
 #include "../s2end.h"
@@ -82,6 +85,7 @@ static void save(const char *name)
 
 uint32_t wait_swap_done(void)
 {
+    mhw_burn_ms(20);                    /* (a frame is 20 ms: the song plays, the ring is read) */
     if (frame_probe) frame_probe();
     if (VID_SWAP) {                     /* the frame drawn since the last call goes on show */
         VID_SWAP = 0;
@@ -139,7 +143,12 @@ void pal_faded(const uint32_t *pal, int32_t f)         /* main.c's */
 /* the music and the effects: what the pause asks of them */
 static int music_frames, effects_calls, clicks[64], nclicks;
 static int32_t effects_last, effects_min = 0x8000, effects_log[512];       /* (every level asked for, in order, while the end screen is tested) */
-void music_frame(void) { music_frames++; }
+/* music.c is the real one (tools/menu_screens.sh compiles it as music_frame_real) on the model of music_hw.c: its ring, the data slot and the clock; a frame is 20 ms of it,
+   a read of the ZIP its time (menu_screen.c). s2snd_racing() is what s2sound.c says: the pause menu is a page of a race, the others are not. */
+void music_frame_real(void);
+void music_frame(void) { music_frames++; mhw_last_service = mhw_now(); music_frame_real(); }
+static int racing_stub;
+int s2snd_racing(void) { return racing_stub; }
 void s2sound_effects(int32_t f)
 {
     if (effects_calls < 512) effects_log[effects_calls] = f;
@@ -329,6 +338,7 @@ static void check_loading(const char *prefix)
 
 static void check_pause(const char *ref, const char *prefix)
 {
+    racing_stub = 1;                                                /* (a page of a race: the menu's song is not started under it) */
     static const char *const frames[3] = { "s2_track4_city", "s2_track1_village", "s2_track5_snow" };
     static uint32_t pal[256], seen[256];
     static uint8_t dark[256];
@@ -422,6 +432,7 @@ static void check_pause(const char *ref, const char *prefix)
     int r = s2pause_run(front, seen);
     CHECK(r == S2PAUSE_RESTART, "a held DOWN chose %d (RESTART expected after 10 presses)", r);
     CHECK(effects_min == 0 && effects_last == 0x8000, "the effects ease to %d and are given back at %d", effects_min, effects_last);
+    racing_stub = 0;
     printf("ui: pause menu: keys, clicks, the darkened still and the easing of the effects checked on three race pictures\n");
 }
 
@@ -458,11 +469,68 @@ static void check_runner(void)
     CHECK(leaving >= 3, "the fade out darkens in %d of the last frames (%u frames; %06x %06x %06x %06x %06x %06x)", leaving, swaps,
           pal_trace[swaps - 6][0], pal_trace[swaps - 5][0], pal_trace[swaps - 4][0], pal_trace[swaps - 3][0], pal_trace[swaps - 2][0], pal_trace[swaps - 1][0]);
     CHECK(swaps >= 65 && swaps <= 70, "the page ran %u frames", swaps);
+    CHECK(music_frames == (int)calls, "the runner kept the music's ring fed %d times in %u frames (fade in, fade out and all)", music_frames, calls);
     /* no fade: a cut, the result at once */
     const struct s2_page cut = { 0, pal, 0, 0, 0, demo_key, 0 };
     begin_run("..B", "unused");
     CHECK(s2page_run(&cut, &d) == 7 && swaps <= 3, "a page with no fade ends with its key (%u swaps)", swaps);
-    printf("ui: page runner: key repeat, fade in and out and the cut checked\n");
+    CHECK(music_frames == (int)calls, "a page with no fade: the ring was fed %d times in %u frames", music_frames, calls);
+    printf("ui: page runner: key repeat, fade in and out and the cut checked, the music's ring fed once every frame\n");
+}
+
+/* ------------------------------------------------------------------------------------------------ the menus' music */
+
+/* the song (s2menumusic.c, music.c, on the model of music_hw.c) through the pages: it begins with a page when none plays, no page touches it, the MUSIC row of GAME SETTINGS
+   stops it and begins it from its start (STARTL.EXE 0x42451, 0x42462) */
+static void put_keys(char *script, size_t size, const char *spec);
+
+static void check_music(const char *prefix)
+{
+    char script[256];
+    s2save_reset();                                                 /* MUSIC ON */
+    music_stop();
+    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:D 14:D 30:A");
+    begin_run(script, prefix);
+    s2_page_settings();
+    CHECK(music_active() && mhw_mixer_on() && mhw.last_start == mhw_image_frame(2, 0), "the page began the menu's song: active %d, mixer %d, from frame %u (track 2 begins at %u)", music_active(),
+          mhw_mixer_on(), mhw.last_start, mhw_image_frame(2, 0));
+    CHECK(music_frames >= (int)calls - 1, "the settings page fed the ring %d times in %u frames", music_frames, calls);
+    uint32_t starts = mhw.starts, stops = mhw.stops;
+    begin_run("..A", prefix);                                       /* another page: it goes on, nothing is touched */
+    s2_page_settings();
+    CHECK(mhw.starts == starts && mhw.stops == stops && music_active(), "a page changed the song that plays (starts %u -> %u, stops %u -> %u)", starts, mhw.starts, stops, mhw.stops);
+    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:D 14:D 20:R 40:A");
+    begin_run(script, prefix);
+    s2_page_settings();
+    CHECK(s2save_get(S2S_MUSIC) == 1 && !music_active() && !mhw_mixer_on(), "MUSIC OFF: the song is %s", music_active() ? "still there" : "stopped");
+    begin_run("..A", prefix);                                       /* a page with MUSIC OFF plays none */
+    s2_page_settings();
+    CHECK(!music_active(), "a page began a song with MUSIC OFF");
+    put_keys(script, sizeof script, "2:D 4:D 6:D 8:D 10:D 12:D 14:D 20:R 45:A");
+    begin_run(script, prefix);
+    s2_page_settings();
+    CHECK(s2save_get(S2S_MUSIC) == 0 && music_active() && mhw_mixer_on() && mhw.last_start == mhw_image_frame(2, 0), "MUSIC ON: the song begins again from its start (frame %u, active %d, mixer %d)", mhw.last_start,
+          music_active(), mhw_mixer_on());
+    printf("ui: the menu's music: a page begins it, pages leave it alone, the MUSIC row stops it and begins it from its start\n");
+}
+
+static void music_summary(void)
+{
+    uint32_t reads = 0, held = 0;
+    for (int c = 0; c < MHW_CLASSES; c++) {
+        reads += mhw_class_reads[c];
+        held += mhw_class_holds[c];
+    }
+    printf("ui: the menu's music through all of these pages: the mixer played %.0f s of song in %u starts (%u stops); the ring was read %u times (%u KB); the blocking reads of the pages by size, held / all:",
+           mhw.played / 44100.0, mhw.starts, mhw.stops, mhw.ring_reads, mhw.ring_bytes / 1024);
+    for (int c = 0; c < MHW_CLASSES; c++) printf(" %s %u/%u (%u KB)%s", mhw_class_name(c), mhw_class_holds[c], mhw_class_reads[c], mhw_class_bytes[c] / 1024, c + 1 < MHW_CLASSES ? "," : "\n");
+    CHECK(mhw.bad_frames == 0, "the mixer played %u frames that were not the song's next, in %u runs (the first at %u ms)", mhw.bad_frames, mhw.bad_runs, mhw.first_bad_ms);
+    CHECK(mhw.overlaps == 0, "%u slot calls met a read that ran", mhw.overlaps);
+    CHECK(mhw.overruns == 0, "%u reads of the ring landed outside it or on frames not played yet", mhw.overruns);
+    CHECK(mhw.played > 44100 * 20 && reads > 100, "the pages played the song for %.1f s and read %u times: too little to say anything", mhw.played / 44100.0, reads);
+    CHECK(mhw_chopped == 0, "a read of 64 KB or less within a quarter of a second of the last music_frame() held the song %u times: the pictures and sprites must not chop it", mhw_chopped);
+    printf("ui: reads of 64 KB or less soon after a music_frame() that held the song: %u of %u\n", mhw_chopped, mhw_class_reads[0] + mhw_class_reads[1]);
+    (void)held;
 }
 
 /* ------------------------------------------------------------------------------------------------ the arcade pages */
@@ -1107,12 +1175,17 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     *(volatile uint32_t *)0xF000000Cu = 0x1Fu;                      /* MEM_STATUS: all writes done, the SDRAM ready */
     IN_KEY = 0;
     dlog_init();
+    mhw_reset();
+    mhw_trace = getenv("MHW_TRACE") ? atoi(getenv("MHW_TRACE")) : 0;
+    CHECK(music_init(0, 0) == 1, "music_init on the model's cue sheet");          /* (the pages' reads meet the real guard from here on) */
+    if (getenv("MHW_NOGUARD")) slot_hook = 0;                                       /* (the negative control: tools/menu_screens.sh with MHW_NOGUARD=1 must fail) */
     CHECK(s2gfx_init(z), "s2gfx_init on the stored ZIP");
     check_pictures(ref, "stored ZIP");
     check_text(ref, prefix);
     check_loading(prefix);
     check_pause(ref, prefix);
     check_settings(ref, prefix);
+    check_music(prefix);
     check_hiscores(ref, prefix);
     check_end(ref, prefix);
     check_end_fade(ref);
@@ -1157,6 +1230,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
         }
         printf("ui: GAMEL.SPR's seven track banners: the same from a stored and a deflated GAME1.DAT\n");
     }
+    music_summary();
     printf("%s", (const char *)(uintptr_t)DLOG_BASE + DLOG_HEAD);
     printf(failures ? "ui: %d tests FAILED\n" : "ui: all tests passed\n", failures);
     return failures;

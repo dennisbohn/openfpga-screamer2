@@ -3,6 +3,8 @@
  */
 #include "s2page.h"
 #include "s2gfx.h"
+#include "music.h"
+#include "s2menumusic.h"
 #include "hw.h"
 
 #define REPEAT_FIRST    25              /* a held d-pad button repeats after 0.5 s, every 6th frame (the start menu's) */
@@ -36,8 +38,10 @@ int s2page_run_step(const struct s2_page *p, void *self, int fade_step)
     s2page_keys_init(&keys);
     int32_t fade = p->fade_in ? 0 : FULL;
     int result = 0, leaving = 0;
+    s2mm_page();                                            /* (the menu's song, if none plays: here the page's loads are over) */
     for (uint32_t tick = 0;; tick++) {
         struct blit_list *l = s2gfx_begin();                /* (waits for the last swap) */
+        music_frame();                                      /* the song's ring kept fed, a song held by a load resumed (music.h): every page, once a frame */
         uint32_t press = s2page_press(&keys);
         if (p->frame) p->frame(self, tick);
         if (!leaving && (result = p->key(self, press)) != 0) {

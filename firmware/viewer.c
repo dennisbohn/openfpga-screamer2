@@ -36,6 +36,7 @@
 #include "s2attract.h"
 #include "trackmem.h"
 #include "music.h"
+#include "s2menumusic.h"
 #include "s2hud.h"
 #include "s2cockpit.h"
 #include "s2dash.h"
@@ -182,6 +183,7 @@ struct viewer_image loaded;      /* what the image holds, so that time attack do
 
 static int load_track(struct zip *z, int n, const char **what)
 {
+    music_stop();                       /* a race begins: the menu's song stops (0x386bd, before the load; the races' songs begin with the race, s2snd_race_start) */
     loaded.valid = 0;
     static struct s2_files f;
     static char gfx_name[24], data_name[24], env_name[24];
@@ -1279,6 +1281,52 @@ static void attract_run(struct zip *z, int *cars, int at_start)
     loaded.valid = 0;
 }
 
+#ifdef S2_SIM_MENUMUSIC
+/* A measurement build (tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_MENUMUSIC=1 TAG=menumusic; tools/musicwav.py): the menus' song in the simulation on the real mixer and a made-up CD image whose frames carry
+   their own place. Frames of 20 ms with music_frame() as the page runner calls it; a short read of the ZIP (64 KB), a long one (1 MB, held), one of 300 KB, a chain of 16 chunks of 64 KB with
+   60 ms of work after each (held in the middle of it) and a second long read (the place of a song held twice). The log has the holds; SIM_WAV the sound. */
+static void __attribute__((noreturn)) sim_menumusic(uint32_t results)
+{
+    static const uint32_t ms20 = 20 * MS_CYCLES;
+    s2mm_song();
+    uint64_t sum = 0;
+    uint32_t worst = 0, steady_worst = 0;
+    for (int f = 0; f < 480; f++) {
+        uint32_t t0 = rdcycle();
+        music_frame();
+        uint32_t dt = rdcycle() - t0;
+        sum += dt;
+        if (dt > worst) worst = dt;
+        if (f > 40 && f < 110 && dt > steady_worst) steady_worst = dt;
+        if (f == 60) slot_read(3, 0, (uint32_t)(uintptr_t)SCRATCH_MEM, 65536);
+        if (f == 120) slot_read(3, 0, (uint32_t)(uintptr_t)SCRATCH_MEM, 1000000);
+        if (f == 220) slot_read(3, 0, (uint32_t)(uintptr_t)SCRATCH_MEM, 300000);
+        if (f == 300)
+            for (int k = 0; k < 16; k++) {
+                slot_read(3, 65536u * (uint32_t)k, (uint32_t)(uintptr_t)SCRATCH_MEM, 65536);
+                uint32_t t1 = rdcycle();
+                while (rdcycle() - t1 < 60 * MS_CYCLES)
+                    ;
+            }
+        if (f == 400) slot_read(3, 0, (uint32_t)(uintptr_t)SCRATCH_MEM, 1400000);
+        while (rdcycle() - t0 < ms20)
+            ;
+    }
+    music_stop();
+    dlog_str("menumusic: music_frame ");
+    dlog_dec((int32_t)(sum / 480));
+    dlog_str(" cycles mean, ");
+    dlog_dec((int32_t)worst);
+    dlog_str(" worst, ");
+    dlog_dec((int32_t)steady_worst);
+    dlog_str(" worst in the steady frames 41 .. 109\n");
+    dlog_str("menumusic: done\n");
+    SYS_SIM = SIM_DONE | results;
+    for (;;)
+        ;
+}
+#endif
+
 void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
 {
     struct zip *z = files_zip();
@@ -1302,6 +1350,9 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
 #endif
     if (intro) s2load_show_kind(S2S_KINDS, s2att_track(), 1);     /* the LOADING picture of the intro's track, up as soon as the toolkit can draw it: it stays through the rest of the start-up and the track's build, visit() fades it out */
     s2snd_init(z);
+#ifdef S2_SIM_MENUMUSIC
+    sim_menumusic(boot_results);
+#endif
     s2hud_init(z);                                      /* the race screen (the simulation has it: its cost is measured there) */
     for (;;) {
         if (intro) {                                    /* the intro: any button ends it, the menu follows (on a first start TEAM SELECTION first) */

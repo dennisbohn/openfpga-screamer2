@@ -13,6 +13,7 @@
 #include "../dlog.h"
 #include "../hw.h"
 #include "../slot.h"
+#include "music_hw.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,9 +30,12 @@ static int failures;
 
 int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *prefix);
 
+/* (slot.c is linked under other names for its slot_start / slot_busy / slot_result, which the music's ring uses against the model of
+   music_hw.c: the music is real here, tools/menu_screens.sh) */
 uint32_t slot_size(uint32_t id)
 {
-    return id == 3 ? zsize : id == 4 ? zsize2 : 0;
+    if (slot_hook) slot_hook(0);
+    return id == 3 ? zsize : id == 4 ? zsize2 : mhw_slot_size(id);
 }
 
 /* (s2save.c links in for the choices; s2save_load() is not called here: tools/s2/check_save_s2.sh tests it) */
@@ -52,8 +56,17 @@ uint32_t zip_addr(const void *p)
     return OUTSIDE;
 }
 
+#define CPU_PER_BYTE    67                      /* cycles of the CPU's work for each byte a read brings (inflating, unpacking, building): the Pocket's logs have the room
+                                                   1,487 ms for 0.85 MB read, a track 2.1 s of reading and 2.2 s of building for 2.4 MB: about 0.9 us a byte */
+
 int slot_read(uint32_t id, uint32_t off, uint32_t addr, uint32_t len)
 {
+    if (id == 21) {                                 /* the music's cue sheet */
+        if (slot_hook) slot_hook(len);
+        mhw_serve_cue((void *)(uintptr_t)addr);
+        return 0;
+    }
+    if (id == 3 || id == 4) mhw_zip_read(len == SLOT_REST ? zsize - off : len, CPU_PER_BYTE);
     void *to = addr == OUTSIDE ? outside : (void *)(uintptr_t)addr;
     FILE *f = id == 4 ? zf2 : zf;
     uint32_t size = id == 4 ? zsize2 : zsize;

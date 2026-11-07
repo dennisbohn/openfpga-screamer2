@@ -89,6 +89,7 @@ void tl_begin(uint32_t t) { (void)t; }
 void s2sound_menu(int id) { (void)id; }
 void s2sound_effects(int32_t f) { (void)f; }
 void music_frame(void) {}
+void s2mm_song(void) {}
 int s2page_run(const struct s2_page *p, void *self) { (void)p; (void)self; return 0; }
 struct viewer_image loaded;
 struct zip *files_zip(void) { return &zip; }
