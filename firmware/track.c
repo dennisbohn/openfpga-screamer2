@@ -1109,11 +1109,11 @@ static void block_pose(const uint8_t *obj, int32_t so, int fr, const float R[9],
    a frame's 12 words are the block's whole matrix, the vertex as stored a row multiplied into
    it, 16383 = 1, then its place; frame = frames x clock >> 16, a turn of the clock in 3.33 s;
    the frames turn z up into y up, a mirror) or else moved by its place (the position record),
-   the furthest block's middle first (0x8ac58). The middle that counts is the one in the block's
-   first frame, its rest pose: the turn of the frames moves the block that is drawn, not its place
-   in the order. The sails of track 3's windmills turn about an axis that does not pass through
-   their middle; with the turned middle they pass the tower's place in the order twice a turn and
-   go behind it. In the original they stay in front of it (measured in DOSBox).
+   the furthest block's key first (0x8ac58). The key is the half of the distance of the block's middle,
+   turned by its frame, rounded; a block whose name starts with a capital Z gets 0x2000 more (16384 units
+   nearer). That keeps the sails of track 3's windmills (Z1vela) in front of the tower at every turn,
+   while the gondolas of track 4's wheel (z1ruot, lower case) pass in front of and behind its frame as
+   they go round. Both measured in the original (DOSBox: its table of keys, read while it draws).
    Returns the pieces in gs (MAX_BLOCKS). */
 static int multi_pieces(const float c[3], const float f[3], const float r[3], const float u[3],
                         const struct piece *pc, struct gu_piece *gs)
@@ -1129,15 +1129,8 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
         const uint8_t *blk = obj + rd32(obj + 0x18 + 4 * b);
         int32_t so = rd32(blk + 0x0C);
         int moving = so > 0 && fr >= 0;
-        float m[9], o[3];                           /* the block's matrix and origin in this frame */
+        float m[9], o[3];                           /* the block's matrix and origin in the world */
         block_pose(obj, so, fr, R, pc, m, o);
-        float m0[9], o0[3];                         /* and in its first frame, for the place in the order */
-        const float *mk = m, *ok = o;
-        if(moving) {
-            block_pose(obj, so, 0, R, pc, m0, o0);
-            mk = m0;
-            ok = o0;
-        }
         struct gu_piece *g = &tmp[b];
         block_piece(c, f, r, u, m, o, blk, g);
         g->obj = obj;
@@ -1145,9 +1138,10 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
         g->mirror = moving;
         float w[3];
         for(int i = 0; i < 3; i++)
-            w[i] = ok[i] + mk[3 * i] * rd16(blk + 4) + mk[3 * i + 1] * rd16(blk + 6) + mk[3 * i + 2] * rd16(blk + 8) - c[i];
-        key[b] = -(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
-        int lvl = track_lod_level(sqrtf(-key[b]), 0);       /* level of detail, per block (the middle and the sort key stay level 0's) */
+            w[i] = o[i] + m[3 * i] * rd16(blk + 4) + m[3 * i + 1] * rd16(blk + 6) + m[3 * i + 2] * rd16(blk + 8) - c[i];
+        float dist = sqrtf(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+        key[b] = -(float)lrintf(dist * 0.5f) + (blk[0x68] == 'Z' ? 8192.0f : 0.0f);
+        int lvl = track_lod_level(dist, 0);       /* level of detail, per block (the middle and the sort key stay level 0's) */
         if(lvl) {
             int32_t off = rd32(obj + 0x18 + 4 * (b + 13 * lvl));
             if(!off) continue;
