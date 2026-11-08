@@ -1083,12 +1083,38 @@ void track_block_piece(const struct track_cam *cam, const struct track_block *b,
     g->phase = b->phase;
 }
 
+/* The matrix m and the origin o, in the world, of a block of the piece pc: so is the block's frames or
+   position record (<= 0: none), R the world from the piece's frame. Frame fr (>= 0) turns and places the
+   block, with fr < 0 only the position record moves it. */
+static void block_pose(const uint8_t *obj, int32_t so, int fr, const float R[9], const struct piece *pc,
+                       float m[9], float o[3])
+{
+    float F[9] = { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f }, t[3] = { 0.0f, 0.0f, 0.0f };
+    if(so > 0 && fr >= 0) {                         /* rows x, up, z: the words down the columns */
+        const uint8_t *q = obj + so + 0x1C + 0x30 * fr;
+        for(int i = 0; i < 3; i++)
+            for(int j = 0; j < 3; j++) F[3 * i + j] = (float)rd16(q + 2 * (3 * j + i)) / 16383.0f;
+        for(int i = 0; i < 3; i++) t[i] = (float)rd16(q + 18 + 2 * i);
+    } else if(so > 0)
+        for(int i = 0; i < 3; i++) t[i] = (float)rd32(obj + so + 0x10 + 4 * i);
+    for(int i = 0; i < 3; i++) {
+        for(int j = 0; j < 3; j++) m[3 * i + j] = R[3 * i] * F[j] + R[3 * i + 1] * F[3 + j] + R[3 * i + 2] * F[6 + j];
+        o[i] = (i == 0 ? (float)pc->x : i == 1 ? (float)pc->y : (float)pc->h) +
+               R[3 * i] * t[0] + R[3 * i + 1] * t[1] + R[3 * i + 2] * t[2];
+    }
+}
+
 /* A placement whose mesh has several blocks or moving parts (track 1's football helmet V220:
    its base and the helmet turning on it): block by block, each turned by its frame (0x8ad14:
    a frame's 12 words are the block's whole matrix, the vertex as stored a row multiplied into
    it, 16383 = 1, then its place; frame = frames x clock >> 16, a turn of the clock in 3.33 s;
    the frames turn z up into y up, a mirror) or else moved by its place (the position record),
-   the furthest block's middle first (0x8ac58). Returns the pieces in gs (MAX_BLOCKS). */
+   the furthest block's middle first (0x8ac58). The middle that counts is the one in the block's
+   first frame, its rest pose: the turn of the frames moves the block that is drawn, not its place
+   in the order. The sails of track 3's windmills turn about an axis that does not pass through
+   their middle; with the turned middle they pass the tower's place in the order twice a turn and
+   go behind it. In the original they stay in front of it (measured in DOSBox).
+   Returns the pieces in gs (MAX_BLOCKS). */
 static int multi_pieces(const float c[3], const float f[3], const float r[3], const float u[3],
                         const struct piece *pc, struct gu_piece *gs)
 {
@@ -1102,20 +1128,15 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
     for(int b = 0; b < nb && b < MAX_BLOCKS; b++) {
         const uint8_t *blk = obj + rd32(obj + 0x18 + 4 * b);
         int32_t so = rd32(blk + 0x0C);
-        float F[9] = { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f }, t[3] = { 0.0f, 0.0f, 0.0f };
         int moving = so > 0 && fr >= 0;
-        if(moving) {                                /* rows x, up, z: the words down the columns */
-            const uint8_t *q = obj + so + 0x1C + 0x30 * fr;
-            for(int i = 0; i < 3; i++)
-                for(int j = 0; j < 3; j++) F[3 * i + j] = (float)rd16(q + 2 * (3 * j + i)) / 16383.0f;
-            for(int i = 0; i < 3; i++) t[i] = (float)rd16(q + 18 + 2 * i);
-        } else if(so > 0)
-            for(int i = 0; i < 3; i++) t[i] = (float)rd32(obj + so + 0x10 + 4 * i);
-        float m[9], o[3];
-        for(int i = 0; i < 3; i++) {
-            for(int j = 0; j < 3; j++) m[3 * i + j] = R[3 * i] * F[j] + R[3 * i + 1] * F[3 + j] + R[3 * i + 2] * F[6 + j];
-            o[i] = (i == 0 ? (float)pc->x : i == 1 ? (float)pc->y : (float)pc->h) +
-                   R[3 * i] * t[0] + R[3 * i + 1] * t[1] + R[3 * i + 2] * t[2];
+        float m[9], o[3];                           /* the block's matrix and origin in this frame */
+        block_pose(obj, so, fr, R, pc, m, o);
+        float m0[9], o0[3];                         /* and in its first frame, for the place in the order */
+        const float *mk = m, *ok = o;
+        if(moving) {
+            block_pose(obj, so, 0, R, pc, m0, o0);
+            mk = m0;
+            ok = o0;
         }
         struct gu_piece *g = &tmp[b];
         block_piece(c, f, r, u, m, o, blk, g);
@@ -1124,7 +1145,7 @@ static int multi_pieces(const float c[3], const float f[3], const float r[3], co
         g->mirror = moving;
         float w[3];
         for(int i = 0; i < 3; i++)
-            w[i] = o[i] + m[3 * i] * rd16(blk + 4) + m[3 * i + 1] * rd16(blk + 6) + m[3 * i + 2] * rd16(blk + 8) - c[i];
+            w[i] = ok[i] + mk[3 * i] * rd16(blk + 4) + mk[3 * i + 1] * rd16(blk + 6) + mk[3 * i + 2] * rd16(blk + 8) - c[i];
         key[b] = -(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
         int lvl = track_lod_level(sqrtf(-key[b]), 0);       /* level of detail, per block (the middle and the sort key stay level 0's) */
         if(lvl) {
