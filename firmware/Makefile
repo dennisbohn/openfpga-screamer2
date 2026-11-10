@@ -15,10 +15,10 @@ SIZE     = $(CROSS)size
 ARCH     = -march=rv32imf_zicsr_zifencei -mabi=ilp32f
 CFLAGS   = $(ARCH) --specs=picolibc.specs -O2 -g -ffunction-sections -fdata-sections \
            -fno-math-errno -Wdouble-promotion -Wall -Wextra -MMD -MP
-# How far the firmware draws and where the levels of detail change, as factors on the original's (track.h): 1.5 times as
-# far, the original's levels (2.0 with 1.2 and 2.0 with 1.0 were too much for track 4 on the Pocket). EXTRA_CFLAGS=-DFAR_SCALE=1.0f (below) builds the
+# How far the firmware draws and where the levels of detail change, as factors on the original's (track.h): 1.3 times as
+# far, the original's levels (2.0 with 1.2, 2.0 with 1.0 and 1.5 were too much for track 4 on the Pocket). EXTRA_CFLAGS=-DFAR_SCALE=1.0f (below) builds the
 # original's distance.
-CFLAGS  += -DFAR_SCALE=1.5f -DLOD_SCALE=1.0f
+CFLAGS  += -DFAR_SCALE=1.3f -DLOD_SCALE=1.0f
 LDFLAGS  = $(ARCH) --specs=picolibc.specs -nostartfiles -Wl,--gc-sections -Wl,--no-warn-rwx-segments
 
 # Size and CRC-32 of a file, in the words of the firmware's debug log

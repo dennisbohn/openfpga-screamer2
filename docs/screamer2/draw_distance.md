@@ -205,10 +205,10 @@ behind walls more than he wants the original's picture, that is the way.
 
 ## The firmware draws farther than the original (2026-11-10, for a test on the Pocket)
 
-`FAR_SCALE` 1.5 and `LOD_SCALE` 1.0 (`firmware/Makefile` sets them, `track.h` has the original's 1.0 as the default for
+`FAR_SCALE` 1.3 and `LOD_SCALE` 1.0 (`firmware/Makefile` sets them, `track.h` has the original's 1.0 as the default for
 the PC tools). Screamer 1 uses 2.0 and 1.2; with 1.2 the Pocket did not keep up on track 4, so the levels stay the
-original's here (2026-11-10: first 2.0 and 1.2, then 2.0 and 1.0, both too heavy for track 4; now 1.5 and 1.0): the far plane the faces are cut at and the reach of the pieces are 1.5 times
-the image's (track 4: 90,000 and 12,288 more instead of 60,000 and 8,192), and the distances where a block goes to the
+original's here (2026-11-10: first 2.0 and 1.2, then 2.0 and 1.0, then 1.5 and 1.0, all too heavy for track 4; now 1.3 and 1.0): the far plane the faces are cut at and the reach of the pieces are 1.3 times
+the image's (track 4: 78,000 and 10,650 more instead of 60,000 and 8,192), and the distances where a block goes to the
 next level of detail are the original's (placed 6,000 / 9,000, cars 2,000 / 6,000; with `LOD_SCALE` 1.2: 7,200 / 10,800 and 2,400 / 7,200). Not changed: the cell
 lists of this document still decide which cells are looked at where the camera's cell has one (their cells reach 7 to 11
 cells, 57,000 to 90,000 units, so a longer reach shows more of them, not floating scenery), and the rear-view mirror keeps
