@@ -639,7 +639,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     struct stats st_all = { 0 };
     float s = resume_s, floor_z = road_floor() - FALL_UNITS;
     resume_s = 0.0f;
-    uint32_t win_n = 0, win_sum = 0, win_max = 0, shown_mean = 0, shown_max = 0, shown_faces = 0;
+    uint32_t win_n = 0, win_sum = 0, win_max = 0, shown_mean = 0, shown_max = 0, shown_faces = 0, shown_n = 0;
     if (*drive && !race_start(n, floor_z)) {          /* no race on this track: the ride instead (the championship stops) */
         *drive = 0;
         return league_mode || attack_mode ? 0 : -n;
@@ -932,7 +932,8 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             char l[40], *p;
             p = fmt_ms(l, shown_mean);
             p = fmt_ms(fmt_str(p, " ms  max "), shown_max);
-            fmt_str(p, " ms");
+            p = fmt_str(p, " ms");
+            if (shown_n) fmt_str(fmt_udec(fmt_str(p, "  "), shown_n), " fps");     /* the pictures of the last second: 50, or 25 with the mirror on (the ms are the work of a picture, not the time between two) */
             con_text(fb, 0, 0, l, col_text, col_bg);
             p = fmt_udec(fmt_str(l, "T"), (uint32_t)n);
             p = *drive ? fmt_str(p, "  drive") : fmt_udec(fmt_str(p, "  cars "), (uint32_t)*cars);
@@ -1000,6 +1001,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         if (((vf - window_vf) & 0xFFFF) >= VID_HZ && win_n) {
             shown_mean = win_sum / win_n;
             shown_max = win_max;
+            shown_n = win_n;
             win_n = win_sum = win_max = 0;
             window_vf = vf;
         }

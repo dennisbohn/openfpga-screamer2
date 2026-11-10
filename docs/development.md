@@ -302,7 +302,7 @@ comes over the race ("End of the race and the two pages" below).
 | L / R | gear down / up on a manual gearbox (on the step the button goes down; the gearbox is chosen on the TRANSMISSION page or in GAME SETTINGS, there is no button for it in the race: d-pad up used to toggle it and was hit by mistake while steering, with the stick of a docked controller too) |
 | X | the next view from the car, as Screamer 1's X changes its camera (INCAR, INSIDE, NEAR, BACK in turn: the original's F1 .. F4, "Vollbildschirm", "Am Steuer", "Wagendach", "Blick von hinten" in the manual; kept in the save for the next race; not after the finish) |
 | Select | the rear-view mirror on / off (the original's M; off at every race's start; not in a replay, where Select ends it); with the mirror on the pictures come 25 a second (two steps each), with the whole far plane in the glass |
-| L and R together | the timing overlay on / off |
+| L and R together | the timing overlay on / off (first line: the work of a picture in ms, mean and worst of the last second, and the pictures of that second, 50 fps or 25 with the mirror on; the ms are not the time between two pictures) |
 | Start | the pause menu (RESUME, RESTART, EXIT) |
 | After the finish | the end screen: d-pad left / right choose RACE AGAIN or EXIT, B or Start take it (after the four seconds of CONGRATULATIONS) |
 | Start | the pause menu (RESUME, RESTART, EXIT; not once the player has finished), the original's Esc; B or Start take the item, A or Select resume |
