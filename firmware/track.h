@@ -114,6 +114,21 @@ void track_detail(int level);
    at level L is entry b + 13 L of its object's header (+0x18), 0 = no block there = not drawn. */
 int track_lod_level(float dist, int moving);
 
+/* How far Screamer 2 draws and where its blocks change their level of detail, as factors on the original's: FAR_SCALE
+   on the far plane the faces are cut at and on the reach of the pieces, LOD_SCALE on the distances of the levels
+   (6000 / 9000 units for a placed block, 2000 / 6000 for a moving one). Screamer 1 draws at 2.0 and 1.2. The
+   original's values are the defaults here, so the PC tools that compare with the original's pictures (tools/s2) draw
+   as it does; the firmware's Makefile sets 2.0 and 1.2 (CFLAGS). The rear-view mirror keeps the original's
+   far plane. The cell lists of the original's walk (docs/screamer2/draw_distance.md) still decide which cells are
+   looked at where the camera's cell has one, so a longer reach shows more of a list's cells (they reach 7 to 11
+   cells, 57,000 to 90,000 units) and, where there is no list, every cell in reach. */
+#ifndef FAR_SCALE
+#define FAR_SCALE 1.0f
+#endif
+#ifndef LOD_SCALE
+#define LOD_SCALE 1.0f
+#endif
+
 /* The file's size and its blocks of 256 KB from offset 0x100 on, each with a CRC-32 in the
    header: whether block k (0 .. track_blocks() - 1) arrived as written */
 uint32_t track_size(void);

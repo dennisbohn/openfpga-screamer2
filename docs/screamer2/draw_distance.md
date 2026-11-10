@@ -202,3 +202,15 @@ sorts 3,394 units further back), it is not the cause.
 backlog or a test of the car's bounding box against the pieces' faces; the original has neither. If the user wants cars hidden
 behind walls more than he wants the original's picture, that is the way.
 
+
+## The firmware draws farther than the original (2026-11-10, for a test on the Pocket)
+
+`FAR_SCALE` 2.0 and `LOD_SCALE` 1.2 (`firmware/Makefile` sets them, `track.h` has the original's 1.0 as the default for
+the PC tools), the factors Screamer 1 uses: the far plane the faces are cut at and the reach of the pieces are 2.0 times
+the image's (track 4: 120,000 and 16,384 more instead of 60,000 and 8,192), and the distances where a block goes to the
+next level of detail are 1.2 times the original's (placed 7,200 / 10,800, cars 2,400 / 7,200). Not changed: the cell
+lists of this document still decide which cells are looked at where the camera's cell has one (their cells reach 7 to 11
+cells, 57,000 to 90,000 units, so a longer reach shows more of them, not floating scenery), and the rear-view mirror keeps
+the original's far plane (its glass is 160 x 35 pixels). Not measured, not simulated: the frame time (the owner tests it
+on the Pocket, track 4 first) and what pops in. Back to the original's distances:
+`tools/fw.sh EXTRA_CFLAGS="-DFAR_SCALE=1.0f -DLOD_SCALE=1.0f" TAG=orig`.

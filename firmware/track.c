@@ -140,7 +140,8 @@ struct gpiece { float x, y, ox, oy, r2, c, s; int32_t obj, h, br; uint8_t kind; 
 static struct gpiece gpieces[MAX_GROUND];
 static float sin_q[513];                /* sin(2 pi i / 2048) for i = 0..512 */
 static float under_n[3];                /* track_under's face: its normal in world axes (x, y, up) */
-static float far_z = 50000.0f;          /* the far plane (the image's header, track_init) */
+static float far_base = 50000.0f;       /* the far plane of the image's header (track_init), the original's */
+static float far_z = 50000.0f;          /* the far plane the faces are cut at: far_base x FAR_SCALE (the mirror's pass: its own) */
 static float reach2 = (50000.0f + REACH_PLUS) * (50000.0f + REACH_PLUS);   /* the pieces' reach, squared */
 static float radius[MAX_OBJ];           /* of each mesh around its origin */
 /* the placements as the culling reads them, from the track's set-up: place as floats (the same
@@ -346,8 +347,9 @@ int track_init(void)
     unr_count = rd32(unr + 4);
     if(unr_count > MAX_OBJ || npieces > MAX_PIECES || ncars < 0 || nmodels < 0) return 0;     /* (a menu's room has no cars: only a damaged count is negative) */
     int32_t far = rd32(f + 0x70);
-    far_z = far > 0 ? (float)far : 50000.0f;
-    reach2 = (far_z + REACH_PLUS) * (far_z + REACH_PLUS);
+    far_base = far > 0 ? (float)far : 50000.0f;
+    far_z = far_base * FAR_SCALE;
+    reach2 = (far_z + REACH_PLUS * FAR_SCALE) * (far_z + REACH_PLUS * FAR_SCALE);
     unr_off = (const int32_t *)(unr + 8);
     unr_blob = unr + 8 + 4 * unr_count;
 
@@ -517,7 +519,7 @@ static int mirror_pass;
    other moving objects; docs/screamer2/performance.md, section 6): the distance of the block's middle
    from the camera, rounded to nearest (even). Placed: key = -(dist >> 1), level 0 above -3000 (dist <
    6000), level 1 above -4500 (dist < 9000), else 2. Moving: key = -dist, -2000 and -6000. These are
-   constants of the game's image, no option. The mirror's pass (at least level 1) is not in this core
+   constants of the game's image, no option, but for LOD_SCALE (track.h). The mirror's pass (at least level 1) is not in this core
    yet. -DTRACK_NO_LOD (the PC renderer, tools/s2/render_s2.sh) draws every block at level 0. */
 int track_lod_level(float dist, int moving)
 {
@@ -526,7 +528,7 @@ int track_lod_level(float dist, int moving)
     (void)moving;
     return 0;
 #else
-    int32_t d = (int32_t)lrintf(dist);
+    int32_t d = (int32_t)lrintf(dist * (1.0f / LOD_SCALE));        /* (the levels' distances times LOD_SCALE) */
     int32_t key = moving ? -d : -(d >> 1);
     const int level = key > (moving ? -2000 : -3000) ? 0 : key > (moving ? -6000 : -4500) ? 1 : 2;
     return level < mirror_pass ? mirror_pass : level;
@@ -1460,7 +1462,7 @@ void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const s
     for(int k = 0; k < 3; k++) r[k] = -r[k];
     mirror_pass = 1;
     const float far_keep = far_z, reach_keep = reach2;
-    far_z = far_keep * ((float)MIRROR_FAR_PCT / 100.0f);
+    far_z = far_base * ((float)MIRROR_FAR_PCT / 100.0f);       /* (the original's far plane, whatever FAR_SCALE is) */
     reach2 = (far_z + REACH_PLUS) * (far_z + REACH_PLUS);
     draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
     far_z = far_keep;
