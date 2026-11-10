@@ -461,7 +461,12 @@ race): seconds into the race, its ms, the steps it took (`k`: more than 1 after 
 its parts as the longest frame's line has them, pieces, the player's node, puffs alive. `I812 0020` is a change of the buttons (at most 40, the first
 3,000 steps): the race step it took effect at and the buttons in hex (`hw.h`: bit 5 gas, 7 brake, 2 and 3 left and right, 4 handbrake, 8 and 9 the
 gears). The race is the same race whatever the frames took, so these lines and the menu line (`menu: race T4 ...`) are what the simulation needs to run
-the same start: `sim_keys()` of the viewer would read them from a table.
+the same start, and that is what the replay build does: `python -I tools/s2/replay_header.py <debug.txt> firmware/sim_replay_data.h 950 980 <damages> <view>`
+(the header stays out of the repository), `tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_REPLAY=1 TAG=replay`, a track image made with `S2CARS` for the race's grid, and
+`tools/s2/sim_race.sh <dir> <image> <track> 70 <name>`: the physics runs alone up to step 950 (the same race: it does not depend on what the frames took), then
+70 frames are drawn, each from step 980 on with its `L` line in the simulation's debug.txt. The settings the race went by that are not in the log (DAMAGES, the view) come
+from the Pocket's CHOICE.DAT (main part: set[6], view). On the PC, `REPLAY=<file with the I lines> FX=1 TEAM=1 CAR=2 SKILL=0 LAPS=1 tools/s2/framestats.sh race ...` drives the
+race with the same buttons, but after a crash the computers' cars part from the Pocket's (the PC's float results are not the target's), so the position is only near.
 
 ### Reproduce
 

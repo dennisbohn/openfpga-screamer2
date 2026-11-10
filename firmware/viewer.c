@@ -43,6 +43,9 @@
 #include "s2fx.h"
 #include "s2props.h"
 #include "prof.h"
+#ifdef S2_SIM_REPLAY
+#include "sim_replay_data.h"            /* a Pocket's race for the simulation (tools/s2/replay_header.py, made from its debug.txt; not committed) */
+#endif
 #include <string.h>
 
 /* The SDRAM (docs/soc.md): the track image where Screamer 1's was, the game's containers above it (the
@@ -62,7 +65,16 @@
 #define STEP_S      0.02f               /* a video frame */
 #define MS_CYCLES   (CPU_HZ / 1000)
 #define LATE_CYCLES (CPU_HZ / 50)       /* a frame over 20 ms misses its vertical blanking */
-#define LATE_LOG_MAX    14              /* debug.txt (4 KB, no ring): the first late frames of a race, one line each ("L12.4 26.1 k3 a6.4 c1.7 s14.5 o3.4 w0.0 p289 n3 m40": seconds
+#ifdef S2_SIM_REPLAY                    /* the replay build: every frame from step SIM_REPLAY_SHOW_FROM on gets the line, in the simulation too */
+#define LATE_LOG_MAX    40
+#define LATE_FRAME(w)   (race_steps() >= SIM_REPLAY_SHOW_FROM)
+#define LATE_SIM_OK     1
+#else
+#define LATE_LOG_MAX    14
+#define LATE_FRAME(w)   ((w) > LATE_CYCLES)
+#define LATE_SIM_OK     (!sim)
+#endif
+/* debug.txt (4 KB, no ring): the first late frames of a race, one line each ("L12.4 26.1 k3 a6.4 c1.7 s14.5 o3.4 w0.0 p289 n3 m40": seconds
                                            into the race, ms, steps, the parts as the longest frame's, pieces, the player's node, puffs alive) */
 #define INPUT_LOG_MAX   40              /* and the first changes of the buttons, with the race step they took effect at ("I812 20": step, buttons in hex), to run the same start in
                                            the simulation: the race is the same whatever the frames took, so the steps and the buttons are all it needs */
@@ -438,8 +450,14 @@ static struct s2car_input car_input(uint32_t keys)
    cars are held for the first 3 s, 150 steps), nothing else. */
 static uint32_t sim_keys(uint32_t step)
 {
+#ifdef S2_SIM_REPLAY                            /* the buttons of a Pocket's race (SIM_REPLAY: step, buttons), the last change at or before the step */
+    uint32_t keys = 0;
+    for (unsigned i = 0; i < sizeof SIM_REPLAY / sizeof SIM_REPLAY[0] && SIM_REPLAY[i][0] <= step; i++) keys = SIM_REPLAY[i][1];
+    return keys;
+#else
     (void)step;
     return KEY_B;
+#endif
 }
 
 /* "01:23:45" for seconds: minutes, seconds, hundredths */
@@ -651,6 +669,18 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         return league_mode || attack_mode ? 0 : -n;
     }
     league_started = league_mode;
+#ifdef S2_SIM_REPLAY
+    if (sim && *drive) {                                /* the Pocket's race up to the step the frames are wanted from: the physics alone, at once (the race is the same whatever the frames took) */
+        for (uint32_t k = 0; k < SIM_REPLAY_FF; k++) {
+            struct s2car_input in = car_input(sim_keys(race_steps()));
+            race_step_player(&in);
+            race_step_others(1);
+            struct s2car_state *fc[RACE_CARS];
+            for (int i = 0; i < race_cars(); i++) fc[i] = race_car(i);
+            s2fx_update(fc, race_cars(), 1, race_steps() * 2, s2cam_get_view() == S2CAM_BACK ? s2cam_get_follow() : -1);
+        }
+    }
+#endif
     s2load_fade();                                      /* the LOADING picture was up through the track's build and the race's set-up (no-op if none) */
     for (;;) {
         uint32_t st = wait_swap_done(), t_frame = rdcycle(), vf = VID_FRAME(st);
@@ -806,7 +836,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
                 in_n++;
             }
             for (uint32_t k = 0; k < steps; k++) {
-                struct s2car_input in = car_input(sim ? sim_keys(drawn) : keys);
+                struct s2car_input in = car_input(sim ? sim_keys(race_steps()) : keys);
                 in.gear_up = k == 0 && (press & KEY_R);         /* a gear on the one step the button went down */
                 in.gear_down = k == 0 && (press & KEY_L);
                 race_step_player(&in);
@@ -991,7 +1021,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         if (others_cycles > sa->others_max) sa->others_max = others_cycles;
         sa->pieces += ts.pieces;
         sa->over += work > LATE_CYCLES;
-        if (work > LATE_CYCLES && *drive && !veiled && !sim && !attract_mode && late_n < LATE_LOG_MAX) {
+        if (LATE_FRAME(work) && *drive && !veiled && LATE_SIM_OK && !attract_mode && late_n < LATE_LOG_MAX) {
             late_n++;
             float lnode;
             memcpy(&lnode, &race_car(0)->rec[0x4b8 / 4], 4);
@@ -1403,6 +1433,19 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
             intro = 0;
             attract_run(z, &cars, 1);
         }
+#ifdef S2_SIM_REPLAY
+        if (sim) {                                      /* the choices and settings of the Pocket's race */
+            s2menu_defaults(&cfg);
+            cfg.team = SIM_REPLAY_TEAM;
+            cfg.car = SIM_REPLAY_CAR;
+            cfg.laps = SIM_REPLAY_LAPS_INDEX;
+            cfg.skill = SIM_REPLAY_SKILL;
+            cfg.manual = SIM_REPLAY_MANUAL;
+            s2save_set(S2S_DAMAGE, SIM_REPLAY_DAMAGES);
+            s2save_set(S2S_VIEW, SIM_REPLAY_VIEW);
+            apply_cfg();
+        }
+#endif
         if (!sim) {                                     /* (the simulation takes the track from the testbench and has no menu) */
             int go = s2menu_run(&cfg);
             if (go == S2M_CHAMP) {                      /* the championship needs the toolkit's pages; without it the row does nothing */

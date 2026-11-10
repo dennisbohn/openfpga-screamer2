@@ -9,6 +9,14 @@
  * ATTRACT=1 (menus row 9): the attract race instead: nobody drives car 0 (race_attract: every car the game's driver's), the scene seen from the replay's trackside cameras
  * (s2cam.c, the ten-second rotation of the car followed) instead of the physics' chase camera; the columns px.. are car 0's as before.
  *
+ * REPLAY=<file> in the environment: the player's car is driven by the buttons of a Pocket's race instead of the game's driver: the file has lines `I<step> <hex>`
+ * as debug.txt has them (the race step a change of the buttons took effect at, the buttons in hex, hw.h's KEY_*; gas B, brake Y, left/right, handbrake A). The race is
+ * the same whatever the frames took, so this is that race. FX=1: the shadows and the wheel smoke (s2fx.c) in the scene too, as the viewer has them (columns fx_puffs,
+ * and the pieces then include them); the columns yaw and cam_yaw follow the px.. ones.
+ *
+ * TEAM=<1..4> CAR=<1..5> [SKILL=<0 rookie, 1 normal, 2 pro>] [LAPS=<n>]: the menu's choices (the Pocket's debug.txt: "menu: race T4 CONDOR2 1L ROOKIE AUTO" is
+ * TEAM=1 CAR=2 SKILL=0 LAPS=1); the grid is the track image's, so build the image with S2CARS for the same grid (tools/s2/make_track_s2.py), else the pieces differ a little.
+ *
  * Usage: racestats <track image> <label> <out.csv> <steps> <every> [track]
  *   track  1 .. 7, default the last digit of the image's file name
  * Needs the game's files for the physics: S2_GAME=<game folder> (racestats.sh mounts it).
@@ -27,6 +35,7 @@
 #include "race.h"
 #include "perf.h"
 #include "s2cam.h"
+#include "s2fx.h"
 
 #define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as the viewer */
 
@@ -40,6 +49,29 @@ static void map(void)
         perror("map");
         exit(1);
     }
+}
+
+static uint32_t rp_step[512], rp_keys[512];             /* REPLAY: the changes of the buttons */
+static int rp_n;
+
+static void rp_load(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) { perror(path); exit(1); }
+    char line[128];
+    while (fgets(line, sizeof line, f) && rp_n < 512) {
+        unsigned st, k;
+        if (sscanf(line, "I%u %x", &st, &k) == 2) { rp_step[rp_n] = st; rp_keys[rp_n++] = k; }
+    }
+    fclose(f);
+    fprintf(stderr, "replay: %d changes of the buttons\n", rp_n);
+}
+
+static uint32_t rp_keys_at(uint32_t step)
+{
+    uint32_t k = 0;
+    for (int i = 0; i < rp_n && rp_step[i] <= step; i++) k = rp_keys[i];
+    return k;
 }
 
 int main(int argc, char **argv)
@@ -61,14 +93,25 @@ int main(int argc, char **argv)
     if (argc > 6) tn = atoi(argv[6]);
     int steps = atoi(argv[4]), every = atoi(argv[5]);
     if (every < 1) every = 1;
+    if (getenv("TEAM") && getenv("CAR")) {              /* the menu's choice: the grid as s2menu_grid() has it (slot k: team (team + k) mod 4, car (car + k) mod 4 from 0) */
+        const int team = atoi(getenv("TEAM")), car = atoi(getenv("CAR"));
+        for (int k = 0; k < RACE_CARS; k++)
+            race_grid[k] = (struct s2_pick){ (uint8_t)((team - 1 + k) % 4 + 1), (uint8_t)(k ? (car - 1 + k) % 4 + 1 : car) };
+    }
+    if (getenv("SKILL")) race_level = 2 - atoi(getenv("SKILL"));      /* 0 ROOKIE, 1 NORMAL, 2 PRO */
+    if (getenv("LAPS")) race_laps = atoi(getenv("LAPS"));
     const int attract = getenv("ATTRACT") != 0;
     race_attract = attract;
     if (!race_init(tn, road_floor() - 3000.0f)) { fprintf(stderr, "race_init failed\n"); return 1; }
     struct s2car_state *p = race_car(0);
     float forever = 1e9f;
+    const char *replay = getenv("REPLAY");
+    const int fx_on = getenv("FX") != 0;
+    if (replay) rp_load(replay);
+    s2fx_reset();
     if (attract) {
         s2cam_begin(tn, S2CAM_TRACKSIDE);
-    } else {
+    } else if (!replay) {
         p->rec[0x4c / 4] |= 1;                          /* the game's driver drives the player's car too */
         memcpy(&p->rec[1], &forever, 4);
     }
@@ -76,19 +119,32 @@ int main(int argc, char **argv)
     if (!out) { perror(argv[3]); return 1; }
     FILE *pcs = 0;                                      /* PIECES=<file>: every piece of every frame (the pipeline model) */
     if (getenv("PIECES") && !(pcs = fopen(getenv("PIECES"), "w"))) { perror(getenv("PIECES")); return 1; }
-    fprintf(out, "label,step,px,py,pz,node,mph,place,lap,c1x,c1y,c2x,c2y,c3x,c3y,ts_pieces,ts_faces,ts_triangles,ts_vertices,ts_objects,ts_nearest");
+    fprintf(out, "label,step,px,py,pz,node,mph,place,lap,c1x,c1y,c2x,c2y,c3x,c3y,ts_pieces,ts_faces,ts_triangles,ts_vertices,ts_objects,ts_nearest,yaw,fx_puffs");
     perf_header(out);
     fprintf(out, "\n");
     fprintf(stderr, "%s: road loop %d points, race of track %d, %d steps, a frame every %d\n", argv[2], loop, tn, steps, every);
     for (int k = 0; k < steps; k++) {
         struct s2car_input in = { .throttle = 0 };
+        if (replay) {
+            const uint32_t keys = rp_keys_at((uint32_t)k);
+            in.throttle = (keys & KEY_B) ? 1.0f : 0.0f;
+            in.brake = (keys & KEY_Y) ? 1.0f : 0.0f;
+            in.steer = ((keys & KEY_RIGHT) ? 1.0f : 0.0f) - ((keys & KEY_LEFT) ? 1.0f : 0.0f);
+            in.handbrake = (keys & KEY_A) != 0;
+        }
         race_step(&in);
+        if (fx_on) {                                    /* (the puffs of the step just taken, from the cars as they stand now: the viewer's order) */
+            struct s2car_state *fc[RACE_CARS];
+            for (int i = 0; i < race_cars(); i++) fc[i] = race_car(i);
+            s2fx_update(fc, race_cars(), 1, race_steps() * 2, 0);
+        }
         if (k % every) continue;
-        static struct track_object objs[ROAD_CARS];
+        static struct track_object objs[ROAD_CARS + S2FX_MAX];
         struct track_cam cam;
         struct s2car_state *rc[RACE_CARS];
         for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
         int nobj = road_race_scene(rc, race_cars(), &cam, objs);
+        if (fx_on) nobj += s2fx_objects(&cam, rc, race_cars(), objs + nobj, ROAD_CARS + S2FX_MAX - nobj);
         if (attract) {
             s2cam_attract_tick(race_get_clock(), 0.02f * (float)every);
             s2cam_frame((const struct s2car_state *const *)rc, race_cars(), 0.02f * (float)every, &cam);
@@ -105,7 +161,7 @@ int main(int argc, char **argv)
         race_get_hud(&h);
         fprintf(out, "%s,%d,%.0f,%.0f,%.0f,%.1f,%.0f,%d,%d", argv[2], k + 1, p->pos[0], p->pos[1], p->pos[2], node, p->speed_mph, h.place, h.lap);
         for (int i = 1; i < 4; i++) fprintf(out, ",%.0f,%.0f", race_car(i)->pos[0], race_car(i)->pos[1]);
-        fprintf(out, ",%u,%u,%u,%u,%u,%u", ts.pieces, ts.faces, ts.triangles, ts.vertices, ts.objects, ts.nearest);
+        fprintf(out, ",%u,%u,%u,%u,%u,%u,%.2f,%d", ts.pieces, ts.faces, ts.triangles, ts.vertices, ts.objects, ts.nearest, p->yaw, s2fx_puffs());
         perf_row(out);
         fprintf(out, "\n");
         if (pcs) {

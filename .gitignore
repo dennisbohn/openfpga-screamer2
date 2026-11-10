@@ -33,3 +33,4 @@ core/src/fpga/apf/build_id.mif
 SCREAMER2.zip
 *.GOG
 *.gog
+firmware/sim_replay_data.h
