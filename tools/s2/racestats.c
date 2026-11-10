@@ -51,7 +51,7 @@ static void map(void)
     }
 }
 
-static uint32_t rp_step[512], rp_keys[512];             /* REPLAY: the changes of the buttons */
+static uint32_t rp_step[2048], rp_keys[2048];             /* REPLAY: the changes of the buttons */
 static int rp_n;
 
 static void rp_load(const char *path)
@@ -59,9 +59,18 @@ static void rp_load(const char *path)
     FILE *f = fopen(path, "r");
     if (!f) { perror(path); exit(1); }
     char line[128];
-    while (fgets(line, sizeof line, f) && rp_n < 512) {
-        unsigned st, k;
-        if (sscanf(line, "I%u %x", &st, &k) == 2) { rp_step[rp_n] = st; rp_keys[rp_n++] = k; }
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef";
+    unsigned at = 0;
+    while (fgets(line, sizeof line, f) && rp_n < 2048) {
+        unsigned st, k, d;
+        char c;
+        if (sscanf(line, "I%u %x", &st, &k) == 2) { rp_step[rp_n] = st; rp_keys[rp_n++] = k; }      /* the first log's lines: step, buttons in hex */
+        else if (sscanf(line, "%u%c", &d, &c) == 2 && strchr(alphabet, c)) {                           /* the compact ones: steps since the last change and the letter */
+            const unsigned v = (unsigned)(strchr(alphabet, c) - alphabet);
+            at += d;
+            rp_step[rp_n] = at;
+            rp_keys[rp_n++] = ((v & 3) << 2) | (((v >> 2) & 3) << 4) | (((v >> 4) & 1) << 7);          /* left, right, A, B, Y as hw.h has them */
+        }
     }
     fclose(f);
     fprintf(stderr, "replay: %d changes of the buttons\n", rp_n);

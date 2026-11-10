@@ -2,7 +2,8 @@
 
 Usage: python -I tools/s2/replay_header.py <debug.txt> <out.h> [ff] [show_from] [damages] [view]
   The debug.txt has the race's choices ("menu: race T4 CONDOR2 1L ROOKIE AUTO") and the changes of the buttons of its first minute
-  ("I812 0020": the race step they took effect at, the buttons in hex; firmware/viewer.c INPUT_LOG_MAX). The race is the same whatever the
+  (compact: "25U" a line, the race steps since the last change and a letter for the five buttons the car goes by, firmware/viewer.c INPUT_LOG_BYTES; the
+  first build's "I812 0020" lines, step and buttons in hex, are read too). The race is the same whatever the
   frames took, so the simulation (the firmware itself, cycle by cycle) runs the same race from them: build the firmware with
   `tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_REPLAY=1 TAG=replay` (viewer.c: the physics alone up to step `ff`, then the frames, each from
   step `show_from` on with its line "L..." in the simulation's debug.txt, as the Pocket's late frames have it) and run it with
@@ -16,6 +17,7 @@ import sys
 TEAMS = ["CONDOR", "ANGELS", "WASP", "ZEUS"]
 LAPS = [1, 3, 5, 10]
 SKILLS = ["ROOKIE", "NORMAL", "PRO"]
+ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
 
 
 def main():
@@ -33,7 +35,14 @@ def main():
     if not m:
         sys.exit("no 'menu: race ...' line in " + src)
     track, team, car, laps, skill, gears = int(m[1]), TEAMS.index(m[2]) + 1, int(m[3]), int(m[4]), SKILLS.index(m[5]), m[6]
-    keys = [(int(a), int(b, 16)) for a, b in re.findall(r"^I(\d+) ([0-9a-f]+)$", text, re.M)]
+    keys = [(int(a), int(b, 16)) for a, b in re.findall(r"^I(\d+) ([0-9a-f]+)$", text, re.M)]       # the first log's lines
+    if not keys:                                                                                    # the compact ones: steps since the last change, a letter
+        at = 0
+        keys = [(0, 0)]
+        for d, c in re.findall(r"^(\d+)([A-Za-f])$", text, re.M):
+            v = ALPHABET.index(c)
+            at += int(d)
+            keys.append((at, ((v & 3) << 2) | (((v >> 2) & 3) << 4) | (((v >> 4) & 1) << 7)))      # left, right, A, B, Y as hw.h has them
     if not keys or keys[0][0] != 0:
         sys.exit("the buttons' lines do not start at step 0")
     with open(out, "w", newline="\n") as f:
