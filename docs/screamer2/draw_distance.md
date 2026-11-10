@@ -203,15 +203,17 @@ backlog or a test of the car's bounding box against the pieces' faces; the origi
 behind walls more than he wants the original's picture, that is the way.
 
 
-## The firmware draws farther than the original (2026-11-10, for a test on the Pocket)
+## Farther than the original: tried on the Pocket, not kept (2026-11-10)
 
-`FAR_SCALE` 1.3 and `LOD_SCALE` 1.0 (`firmware/Makefile` sets them, `track.h` has the original's 1.0 as the default for
-the PC tools). Screamer 1 uses 2.0 and 1.2; with 1.2 the Pocket did not keep up on track 4, so the levels stay the
-original's here (2026-11-10: first 2.0 and 1.2, then 2.0 and 1.0, then 1.5 and 1.0, all too heavy for track 4; now 1.3 and 1.0): the far plane the faces are cut at and the reach of the pieces are 1.3 times
-the image's (track 4: 78,000 and 10,650 more instead of 60,000 and 8,192), and the distances where a block goes to the
-next level of detail are the original's (placed 6,000 / 9,000, cars 2,000 / 6,000; with `LOD_SCALE` 1.2: 7,200 / 10,800 and 2,400 / 7,200). Not changed: the cell
-lists of this document still decide which cells are looked at where the camera's cell has one (their cells reach 7 to 11
-cells, 57,000 to 90,000 units, so a longer reach shows more of them, not floating scenery), and the rear-view mirror keeps
-the original's far plane (its glass is 160 x 35 pixels). Not measured, not simulated: the frame time (the owner tests it
-on the Pocket, track 4 first) and what pops in. Back to the original's distances:
-`tools/fw.sh EXTRA_CFLAGS="-DFAR_SCALE=1.0f -DLOD_SCALE=1.0f" TAG=orig`.
+**Result: Screamer 2 keeps the original's distances** (`FAR_SCALE` and `LOD_SCALE` 1.0, the defaults of `track.h`). On the Pocket
+track 4 dropped frames at every factor tried: 2.0 with `LOD_SCALE` 1.2 (Screamer 1's values), 2.0, 1.5 and 1.3, with the 25
+pictures a second of the mirror on and without it (the owner's tests; not simulated). Screamer 1 holds 2.0 and 1.2 because
+its tracks have fewer pieces and no mirror. The mechanism stays, so a factor can be tried again with
+`tools/fw.sh EXTRA_CFLAGS=-DFAR_SCALE=1.3f TAG=x`.
+
+What `FAR_SCALE` and `LOD_SCALE` do (`track.h`, `track.c`): the far plane the faces are cut at and the reach of the pieces are
+FAR_SCALE times the image's (track 4: 60,000 and 8,192), and the distances where a block goes to the next level of detail are
+LOD_SCALE times the original's (placed 6,000 / 9,000, cars 2,000 / 6,000). The cell lists of this document still decide which
+cells are looked at where the camera's cell has one (their cells reach 7 to 11 cells, 57,000 to 90,000 units, so a longer reach
+shows more of them, not floating scenery), and the rear-view mirror keeps the original's far plane (its glass is 160 x 35
+pixels).
