@@ -455,6 +455,14 @@ car is drawn one step (20 ms) old, always (`road_race_scene` copies the poses; u
 newer than one made before it, which jerked the car beside the player at the start, driving.md). `RACE_OVERLAP` 1 (all computers' steps after the last piece, as the
 earlier build) and 0 (before the scene) remain as compile-time switches if the slices misbehave.
 
+The race also writes the first late frames and the buttons of its first minute into `debug.txt` (2026-11-10; the read test's files are no longer one
+line each, only a failed one, to leave room in the 4 KB). `L12.4 26.1 k3 a6.4 c1.7 s14.5 o3.4 w0.0 p289 n3 m40` is a frame over 20 ms (at most 14 a
+race): seconds into the race, its ms, the steps it took (`k`: more than 1 after a late frame, the catch-up that can keep the next frame late too),
+its parts as the longest frame's line has them, pieces, the player's node, puffs alive. `I812 0020` is a change of the buttons (at most 40, the first
+3,000 steps): the race step it took effect at and the buttons in hex (`hw.h`: bit 5 gas, 7 brake, 2 and 3 left and right, 4 handbrake, 8 and 9 the
+gears). The race is the same race whatever the frames took, so these lines and the menu line (`menu: race T4 ...`) are what the simulation needs to run
+the same start: `sim_keys()` of the viewer would read them from a table.
+
 ### Reproduce
 
 `tools/fw.sh` (zero warnings); `tools/fw.sh PROF=1` (cycle counters, `build/firmware-prof`); `tools/fw.sh CODE_PAD=n` / `CODE_PAD2=n`

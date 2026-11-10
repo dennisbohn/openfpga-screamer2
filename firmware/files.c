@@ -8,6 +8,10 @@
 #include "slot.h"
 #include "zip.h"
 
+#ifndef ZIP_LOG_FILES
+#define ZIP_LOG_FILES 0                 /* 1: the read test's files one by one in debug.txt (a failed one is always there) */
+#endif
+
 #define ZIP_SLOT    3           /* core/data.json: SCREAMER2.zip */
 
 /* The files by group. A group is a row of the screen: a label, then one short name per file;
@@ -210,22 +214,24 @@ void files_load_check(uint8_t *dest, uint32_t max, uint32_t limit)
         uint32_t t0 = rdcycle();
         int r = zip_read(&zip, e, dest, max);
         uint32_t cycles = rdcycle() - t0;
-        dlog_str("zip: ");
-        dlog_str(probe[i]);
-        dlog_str(" method ");
-        dlog_dec(e->method);
-        dlog_char(' ');
-        dlog_dec((int32_t)e->size);
-        dlog_str(" bytes in ");
-        dlog_dec((int32_t)(cycles / (CPU_HZ / 1000)));
-        dlog_str(" ms (");
-        dlog_dec((int32_t)cycles);
-        dlog_str(" cycles)");
-        if (r) {
-            dlog_str(": ");
-            dlog_str(reason(r));
+        if (r || ZIP_LOG_FILES) {                       /* (a file per line only when one failed: the 4 KB log needs the room; the sum is below) */
+            dlog_str("zip: ");
+            dlog_str(probe[i]);
+            dlog_str(" method ");
+            dlog_dec(e->method);
+            dlog_char(' ');
+            dlog_dec((int32_t)e->size);
+            dlog_str(" bytes in ");
+            dlog_dec((int32_t)(cycles / (CPU_HZ / 1000)));
+            dlog_str(" ms (");
+            dlog_dec((int32_t)cycles);
+            dlog_str(" cycles)");
+            if (r) {
+                dlog_str(": ");
+                dlog_str(reason(r));
+            }
+            dlog_char('\n');
         }
-        dlog_char('\n');
         if (r) {
             load_state = 2;
             load_err = r;

@@ -62,6 +62,11 @@
 #define STEP_S      0.02f               /* a video frame */
 #define MS_CYCLES   (CPU_HZ / 1000)
 #define LATE_CYCLES (CPU_HZ / 50)       /* a frame over 20 ms misses its vertical blanking */
+#define LATE_LOG_MAX    14              /* debug.txt (4 KB, no ring): the first late frames of a race, one line each ("L12.4 26.1 k3 a6.4 c1.7 s14.5 o3.4 w0.0 p289 n3 m40": seconds
+                                           into the race, ms, steps, the parts as the longest frame's, pieces, the player's node, puffs alive) */
+#define INPUT_LOG_MAX   40              /* and the first changes of the buttons, with the race step they took effect at ("I812 20": step, buttons in hex), to run the same start in
+                                           the simulation: the race is the same whatever the frames took, so the steps and the buttons are all it needs */
+#define INPUT_LOG_STEPS 3000            /* (only the first minute) */
 
 /* The driving mode is a race (race.h, docs/development.md): the physics of the four cars steps once per video frame
    since the last picture, at most as many as Screamer 1's race takes (main.c); a car with no drivable ground under it
@@ -636,6 +641,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     static float resume_s;                              /* where the road was left when only the cars changed */
     static int timeline_done;
     uint32_t keys_before = in_keys(), last_vf = 0, drawn = 0, window_vf = 0, fin_frames = 0;    /* (frames the player has been finished) */
+    uint32_t in_logged = ~0u, in_n = 0, late_n = 0;     /* the log of the buttons and of the late frames (LATE_LOG_MAX, INPUT_LOG_MAX) */
     struct stats st_all = { 0 };
     float s = resume_s, floor_z = road_floor() - FALL_UNITS;
     resume_s = 0.0f;
@@ -791,6 +797,14 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             /* the physics at 50 steps a second, one per video frame since the last picture (in the simulation, one a
                frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
             uint32_t steps = sim || !drawn ? 1 : dvf > DRIVE_MAX_STEPS ? DRIVE_MAX_STEPS : dvf;
+            if (!sim && !attract_mode && keys != in_logged && in_n < INPUT_LOG_MAX && race_steps() < INPUT_LOG_STEPS) {
+                char l[24], *q = fmt_hex(fmt_str(fmt_udec(fmt_str(l, "I"), race_steps()), " "), keys, 4);       /* (the frame's steps all take these buttons) */
+                *q++ = '\n';
+                *q = 0;
+                dlog_str(l);
+                in_logged = keys;
+                in_n++;
+            }
             for (uint32_t k = 0; k < steps; k++) {
                 struct s2car_input in = car_input(sim ? sim_keys(drawn) : keys);
                 in.gear_up = k == 0 && (press & KEY_R);         /* a gear on the one step the button went down */
@@ -977,6 +991,27 @@ static int visit(int n, int *cars, int *overlay, int *drive)
         if (others_cycles > sa->others_max) sa->others_max = others_cycles;
         sa->pieces += ts.pieces;
         sa->over += work > LATE_CYCLES;
+        if (work > LATE_CYCLES && *drive && !veiled && !sim && !attract_mode && late_n < LATE_LOG_MAX) {
+            late_n++;
+            float lnode;
+            memcpy(&lnode, &race_car(0)->rec[0x4b8 / 4], 4);
+            char l[88], *q = fmt_udec(fmt_str(l, "L"), race_steps() / 50);
+            *q++ = '.';
+            *q++ = (char)('0' + race_steps() % 50 / 5);
+            q = fmt_ms(fmt_str(q, " "), work);
+            q = fmt_udec(fmt_str(q, " k"), hud_steps);
+            q = fmt_ms(fmt_str(q, " a"), t_scene - t_frame);
+            q = fmt_ms(fmt_str(q, " c"), ts.cyc_cull);
+            q = fmt_ms(fmt_str(q, " s"), t_wait - t_scene - others_cycles - ts.cyc_cull);
+            q = fmt_ms(fmt_str(q, " o"), others_cycles);
+            q = fmt_ms(fmt_str(q, " w"), work - (t_wait - t_frame));
+            q = fmt_udec(fmt_str(q, " p"), ts.pieces);
+            q = fmt_udec(fmt_str(q, " n"), lnode > 0.0f ? (uint32_t)lnode : 0);
+            q = fmt_udec(fmt_str(q, " m"), (uint32_t)s2fx_puffs());
+            *q++ = '\n';
+            *q = 0;
+            dlog_str(l);
+        }
         if (work > sa->max) {
             sa->max = work;
             sa->worst_s = s;
