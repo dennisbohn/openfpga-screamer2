@@ -15,9 +15,10 @@ SIZE     = $(CROSS)size
 ARCH     = -march=rv32imf_zicsr_zifencei -mabi=ilp32f
 CFLAGS   = $(ARCH) --specs=picolibc.specs -O2 -g -ffunction-sections -fdata-sections \
            -fno-math-errno -Wdouble-promotion -Wall -Wextra -MMD -MP
-# How far the firmware draws and where the levels of detail change, as factors on the original's (track.h): Screamer 1's
-# values. EXTRA_CFLAGS=-DFAR_SCALE=1.0f -DLOD_SCALE=1.0f (below) builds the original's distances.
-CFLAGS  += -DFAR_SCALE=2.0f -DLOD_SCALE=1.2f
+# How far the firmware draws and where the levels of detail change, as factors on the original's (track.h): twice as far,
+# the original's levels (1.2 was too much for track 4 on the Pocket). EXTRA_CFLAGS=-DFAR_SCALE=1.0f (below) builds the
+# original's distance.
+CFLAGS  += -DFAR_SCALE=2.0f -DLOD_SCALE=1.0f
 LDFLAGS  = $(ARCH) --specs=picolibc.specs -nostartfiles -Wl,--gc-sections -Wl,--no-warn-rwx-segments
 
 # Size and CRC-32 of a file, in the words of the firmware's debug log
