@@ -11,6 +11,9 @@
  *          view), n the player's and n - 1 opponents ahead (see frame()); models taken in turn
  *          from the image (Screamer 1: AUTO00..06, Screamer 2: AUTO1..5 of a team's cars file)
  *   grid   (optional word) one more frame: the start grid, player at the start place
+ * FX=1 in the environment: the race's shadows and wheel smoke too (firmware/s2fx.c): a shadow quad under every car, and the player's car (the one the
+ * camera chases, at the rear of the convoy) with all eight records of both smokes alive at its two rear corners, as in a long brake: the worst case of the
+ * effects. The puffs of the camera's car stay in the car's frame (carried), so they sit close behind the camera all the time.
  * MIRROR=1 in the environment: with every road frame the rear-view mirror's pass too (kind
  * "mirror", cars = opponents behind the player).
  * FAR=n [REACH=m] in the environment: the far plane (faces) and the reach (placements) in units,
@@ -37,6 +40,7 @@ void perf_set_far(float far, float reach);      /* track.c's copy (perf_patch.py
 
 #define TEX_FILE    ((uint8_t *)(uintptr_t)(SDRAM_BASE + 0x2100000))      /* as main.c */
 #define MAX_CARS    10
+#define MAX_OBJS    (MAX_CARS + 2 + MAX_CARS + 16)      /* cars, then the shadows and the player's puffs of FX=1 */
 
 static void map(void)
 {
@@ -114,13 +118,51 @@ static void add_car(struct track_object *objs, int *nobj, struct track_block (*b
     if (car_draw(model % (nm ? nm : 1), &lk, cam, blocks[*nobj], &o)) objs[(*nobj)++] = o;
 }
 
+
+/* FX=1: the shadows and the smoke the race's s2fx.c adds (its rules, placed here without a physics state): a shadow under each car (30 further from the camera,
+   2 under the ground), and the player's 16 puffs at the rear corners of the body, ages spread over the life, spread sideways and back by up to 300 */
+static void add_fx(struct track_object *objs, int *nobj, struct track_block *blocks, int *nblk, int idx, float x, float y, float z, float yaw,
+                   const struct track_cam *cam, int player)
+{
+    struct track_fx fx;
+    if (!track_fx(&fx)) return;
+    float dx = cam->x - x, dy = cam->y - y, d = sqrtf(dx * dx + dy * dy);
+    float sx = d > 0.0f ? (float)(int32_t)(x - dx / d * 30.0f) : x, sy = d > 0.0f ? (float)(int32_t)(y - dy / d * 30.0f) : y;
+    if (fx.shadow && !(player && getenv("FX_NOSHADOW"))) {
+        struct track_block *b = &blocks[(*nblk)++];
+        car_flat_block(fx.shadow, sx, sy, z - 2.0f, yaw, 0.0f, 0.0f, b);
+        objs[(*nobj)++] = (struct track_object){ sx, sy, z - 2.0f, 900.0f, 1, b, 0, idx, -200, 0, 0 };
+    }
+    if (!player || getenv("FX_NOSMOKE")) return;
+    float f[3], r[3], u[3];
+    track_cam_axes(cam, f, r, u);
+    const float fwx = sinf(yaw), fwy = -cosf(yaw), rx = cosf(yaw), ry = sinf(yaw);
+    for (int k = 0; k < 2; k++) {
+        const uint8_t *mesh = k ? fx.smoke2 : fx.smoke;
+        for (int j = 0; j < 8 && mesh; j++) {
+            const float age = (float)j / 8.0f * 0.95f + (k ? 0.04f : 0.0f);
+            const float lx = ((j & 1) ? 1.0f : -1.0f) * (550.0f + 40.0f * (float)((j * 5 + k * 3) % 7) - 120.0f);    /* the two rear corners */
+            const float lz = -1100.0f - 300.0f * (float)((j * 3 + k) % 5) / 4.0f;                                   /* the car's frame: sideways, back */
+            float wx = x + rx * lx + fwx * lz, wy = y + ry * lx + fwy * lz, wz = z + 20.0f;
+            struct track_block *b = &blocks[(*nblk)++];
+            for (int m = 0; m < 3; m++) { b->m[3 * m] = r[m]; b->m[3 * m + 1] = u[m]; b->m[3 * m + 2] = f[m]; }
+            b->o[0] = wx; b->o[1] = wy; b->o[2] = wz;
+            b->file = mesh;
+            b->blk = mesh + *(const int32_t *)(mesh + 0x18);
+            b->phase = (uint32_t)(age * 65536.0f) >> 2;
+            objs[(*nobj)++] = (struct track_object){ wx, wy, wz, 420.0f, 1, b, 0, j, 0, 0, 0 };
+        }
+    }
+}
+
 /* one frame: the player's car at (x, y, z, yaw) if ncars >= 1, opponents ahead */
 static void frame(FILE *out, const char *label, int idx, float x, float y, float z, float yaw, int ncars,
                   int grid, int mirror, const char *tag)
 {
-    static struct track_object objs[MAX_CARS + 2];
-    static struct track_block blocks[MAX_CARS + 2][CAR_BLOCKS];
-    int nobj = 0, nm;
+    static struct track_object objs[MAX_OBJS];
+    static struct track_block blocks[MAX_CARS + 2][CAR_BLOCKS], fxblocks[MAX_OBJS];
+    int nobj = 0, nm, nfx = 0;
+    const int fx_on = getenv("FX") != 0 && !mirror;
     perf_reset();
     track_models(&nm);
     perf_lod_min = mirror;                      /* the mirror's pass takes level 1 at least (STARTL.EXE 0x7f0fc) */
@@ -130,7 +172,9 @@ static void frame(FILE *out, const char *label, int idx, float x, float y, float
     /* the rear-view mirror (NOTES2 S2-5zh): the scene again from the car's place, 400 above the
        body, looking back, 35 rows of 320, without the car; the others are behind it */
     if (mirror) cam = (struct track_cam){ x, y, z + 400.0f, yaw + 3.14159265f, 0.0f, 0.0f };
-    if (ncars >= 1 && !mirror) add_car(objs, &nobj, blocks, 0, x, y, z, yaw, &cam);
+    float fxp[MAX_CARS][4];                     /* FX=1: where the cars stand (x, y, z, yaw), the player first */
+    int nfxp = 0;
+    if (ncars >= 1 && !mirror) { add_car(objs, &nobj, blocks, 0, x, y, z, yaw, &cam); fxp[nfxp][0] = x; fxp[nfxp][1] = y; fxp[nfxp][2] = z; fxp[nfxp++][3] = yaw; }
     /* the start grid of Screamer 1 (track 1, measured in the game): nine opponents in rows 4,000
        apart, two columns 3,600 apart, the player last in the right column; (ahead, left) in units.
        The first is beside the player. On the road: opponents 2,200 ahead and then every 1,700,
@@ -152,7 +196,10 @@ static void frame(FILE *out, const char *label, int idx, float x, float y, float
             oy = ry + sinf(oyaw) * side;
         }
         add_car(objs, &nobj, blocks, k % (nm ? nm : 1), ox, oy, ground(ox, oy, z), oyaw, &cam);
+        fxp[nfxp][0] = ox; fxp[nfxp][1] = oy; fxp[nfxp][2] = ground(ox, oy, z); fxp[nfxp++][3] = oyaw;
     }
+    if (fx_on)
+        for (int k = 0; k < nfxp; k++) add_fx(objs, &nobj, fxblocks, &nfx, k, fxp[k][0], fxp[k][1], fxp[k][2], fxp[k][3], &cam, k == 0 && ncars >= 1);
     const struct rs_clip clip = { 0, 0, FB_W, mirror ? 35 : FB_H };
     struct track_stats ts;
     memset(&ts, 0, sizeof ts);

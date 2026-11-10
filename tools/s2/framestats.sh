@@ -6,6 +6,7 @@
 #       the cells' visibility lists, everything in reach looked at (-DTRACK_NO_VIS)
 #   tools/s2/framestats.sh sweep s2 <track image> <label> <out.csv> <step> <cars,...> [grid]   (ROAD_S=185,370: the viewer's frames at those places instead)
 #       the frames along the road, see framestats.c
+#       FX=1: the race's shadows and the player's wheel smoke (all 16 puffs) too: the worst case of the effects (framestats.c)
 #   tools/s2/framestats.sh race <track image> <label> <out.csv> <steps> <every> [track]
 #       a race on the PC (the game's driver drives all four cars), a frame every <every> steps, see racestats.c
 #       ATTRACT=1: the attract race instead (nobody drives car 0, the replay's trackside cameras: menus row 9)
@@ -55,7 +56,7 @@ PY
 sweep)
     v=$1; image=$2; label=$3; out=$4; step=$5; cars=$6; grid=$7
     cp "$image" "$st/$(basename "$image")"
-    docker_sh ${YAW_OFF:+-e YAW_OFF=$YAW_OFF} ${FAR:+-e FAR=$FAR} ${REACH:+-e REACH=$REACH} ${MIRROR:+-e MIRROR=$MIRROR} ${ROAD_S:+-e ROAD_S=$ROAD_S} -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats && ./framestats_$v $(basename "$image") $label $(basename "$out") $step $cars $grid"
+    docker_sh ${FX:+-e FX=1} ${FX_NOSMOKE:+-e FX_NOSMOKE=1} ${FX_NOSHADOW:+-e FX_NOSHADOW=1} ${YAW_OFF:+-e YAW_OFF=$YAW_OFF} ${FAR:+-e FAR=$FAR} ${REACH:+-e REACH=$REACH} ${MIRROR:+-e MIRROR=$MIRROR} ${ROAD_S:+-e ROAD_S=$ROAD_S} -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats && ./framestats_$v $(basename "$image") $label $(basename "$out") $step $cars $grid"
     mv "$st/$(basename "$out")" "$out"
     ;;
 race)

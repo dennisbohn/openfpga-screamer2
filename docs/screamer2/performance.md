@@ -415,6 +415,33 @@ reached by this change alone, in either case.** The mean falls from 14.5 to abou
   libm's, so `check_car.sh` would have to be re-run against the reference. (d) The geometry unit's read cache 4 KB -> 16 KB
   and a queue between it and the clipper (section 5) lower the hardware's path, which the worst frames follow.
 
+### Worst-case stress: the convoy with shadows and smoke (2026-11-10, D)
+
+The road sweep with the four cars in view (`pack`, section 2) draws no shadows and no smoke, which the race adds (`s2fx.c`). `FX=1` in
+`tools/s2/framestats.sh sweep` adds them: a shadow under each car and the player's car (the one the camera chases, the rear of the
+convoy) with all 16 puffs of both smokes alive at its rear corners, as in a long brake: 20 more objects a frame (60 against 40 blocks of
+objects). The computers' steps are in the model's constants (3 steps and the collisions after the last piece, or hidden), so the
+convoy with full physics is this test's model frame. The firmware as it is now (the model's "new" column; the calibration logs of
+sections 1 and 7 were gone, the constants of section 1 were used as they are written there, not fitted again):
+
+| Track | mean ms without -> with FX | worst ms without -> with FX | frames over 16 ms with FX |
+|---|---|---|---|
+| 1 | 9.0 -> 10.9 | 13.4 -> 15.1 | 0 |
+| 2 | 8.6 -> 10.6 | 10.5 -> 12.2 | 0 |
+| 3 | 9.0 -> 10.8 | 13.5 -> 15.2 | 0 |
+| 4 | 10.4 -> 11.6 | 14.3 -> 14.4 | 0 |
+| 5 | 9.1 -> 10.6 | 13.1 -> 13.2 | 0 |
+| 6 | 8.8 -> 10.9 | 13.4 -> 15.1 | 0 |
+| 7 | 9.2 -> 10.2 | 13.1 -> 13.2 | 0 |
+
+The effects cost 1 to 2 ms on the mean and turn the hardware-bound frames into CPU-bound ones (hardware-bound frames on track 4: 367
+of 421 before, 106 with FX): the 20 objects are handed on by the CPU. The model counts every object block at the cost of a car's
+block (6,300 cycles); a puff or a shadow is one small quad, so this is an upper bound. Track 4 with the far plane at 1.3 times
+(the Pocket's test of FAR_SCALE 1.3): worst 16.2 -> 16.3 ms, 4 frames over 16 ms with FX. Adding the 3.8 ms by which the Pocket's
+worst frame on track 4 lies above the model (section 7) gives 18 to 20 ms, which is where the Pocket's frames "just over 20 ms" lie.
+So the stress does not explain them alone: the unexplained part of that difference is the thing to find. Not run in the SoC
+simulation (it needs the cars placed and the smoke forced in the firmware); the model's puff cost is the part to check there first.
+
 ### What to read in `debug.txt` after the test
 
 The first line (the last state when the core is quit) ends with the longest frame: ` | a.. c.. s.. o.. w.. f.. p.. n..`.
@@ -432,7 +459,7 @@ earlier build) and 0 (before the scene) remain as compile-time switches if the s
 
 `tools/fw.sh` (zero warnings); `tools/fw.sh PROF=1` (cycle counters, `build/firmware-prof`); `tools/fw.sh CODE_PAD=n` / `CODE_PAD2=n`
 (layout tests); `tools/s2/framestats.sh build`, then `race <image> <label> <out.csv> 12000 10 <track>` and `sweep s2 ...`;
-`tools/s2/check_cull_s2.sh <reference commit>`; `python -I tools/s2/perf_race.py <old stats dir> <new stats dir> build pack`; the
+`tools/s2/check_cull_s2.sh <reference commit>`; `python -I tools/s2/perf_race.py <old stats dir> <new stats dir> build pack`; `FX=1 tools/s2/framestats.sh sweep s2 <image> <label> <out.csv> -400 4` (the convoy with shadows and the player's smoke; the image must be a current one: an image built before the effects block has no meshes for them and the run is the same as without FX); the
 simulations: `tools/s2/sim_race.sh <dir with firmware.bin and program.bin> <image> <track> 220 <name>` (about 9 minutes
 each, 6 at a time are fine; `build/gamedata/` as `tools/simcheck.sh` has it); the S2START_ROAD of the image builder does not move the
 race's grid.
