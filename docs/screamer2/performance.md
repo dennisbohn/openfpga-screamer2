@@ -442,6 +442,29 @@ worst frame on track 4 lies above the model (section 7) gives 18 to 20 ms, which
 So the stress does not explain them alone: the unexplained part of that difference is the thing to find. Not run in the SoC
 simulation (it needs the cars placed and the smoke forced in the firmware); the model's puff cost is the part to check there first.
 
+### The dips after a touch on track 4 (2026-11-11, M: the Pocket's race replayed in the simulation)
+
+The Pocket's race (team 1 car 2, rookie, 1 lap; `debug.txt` of 2026-11-11: 1,076 frames, 58 over 20 ms) was run again in the simulation from its buttons (the replay build
+above). The simulation and the Pocket agree to the frame where the scene is the same: at 10.8 s the Pocket logged `20.2 k1 a1.9 c1.5 s10.0 o6.8 p265 m2` and the simulation
+`20.2 k1 a1.7 c1.5 s10.2 o6.8 p267 m6`; the simulation is 0 to 0.8 ms under the Pocket. (A first replay from a log that had stopped after 40 changes of the buttons
+could not follow the Pocket past step 896: the buttons after it were not logged.)
+
+What lifts the frames from about 16 to 20 ms at 10.8 to 11.1 s, the player at 128 mph on the first straight with a computer's car touching his: the computers' time `o`
+from 3.8 to 7.4 ms for about 0.4 s (the touch solver, the walls and ground of the two cars again and the rest of their step, `race_others`), and the scene `s` from 9.0 to
+11.2 ms as the puffs go from 0 to 18 and the pieces from 258 to 285. The profile build (`PROF=1` and the replay build, 30 frames from step 535 against 30 from step 480, per
+frame): `COLLIDE` 9.5k -> 121k cycles (+1.5 ms), the objects' pieces 341k -> 446k (+1.4 ms, 16.7 -> 29.7 objects; much of it the hardware's: the rasterizer is busy 70k cycles
+more with the see-through puffs close to the camera), the rest within 10k. In both windows the frame is the CPU's path: the hardware has some 70k cycles left when the last piece
+is handed on, and the computers' steps after it are 300k. A frame over 20 ms is not a 25 fps frame: the swap comes at the next blanking window (section 4), 21 ms is 46 and
+22 ms 43 pictures a second; the one frame of the log with `k2` (26.4 ms, `a6.8`) is the catch-up after a late one (two steps in a frame: +4.7 ms).
+
+Where the quiet window's CPU time goes (per frame, profile build, so proportions; 224.7 static pieces and 16.7 objects, 275 pieces handed on): the static pieces 359k cycles
+(LOD level and the block's header 102k = 455 a piece, the face row 59k = 261, the matrix and its conversions 23k = 101, `hw_piece` 142k = 633 of which the 19 register
+writes are only 113), the objects 351k, the cull 125k, the physics 310k (the player 65k, three computers 236k, touching 9.5k), before the scene 123k.
+The touch solver already runs the second pass for the two cars alone (race.c `collide_slice`): nothing cheap is left there without changing the physics. The LOD and block lookups
+are memory latency (the header words of the mesh and of the block, scattered over the image); a table of the per-mesh words made at the track's load would turn about three cache
+misses a piece into one (estimated 0.3 to 0.5 ms), and the LOD decision without the square root and the rounding another 0.3 ms (it differs from the game's rounding only within
+a float's last bit of a threshold).
+
 ### What to read in `debug.txt` after the test
 
 The first line (the last state when the core is quit) ends with the longest frame: ` | a.. c.. s.. o.. w.. f.. p.. n..`.

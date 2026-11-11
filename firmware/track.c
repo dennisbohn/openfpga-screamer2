@@ -1392,6 +1392,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             continue;
         }
         struct gu_piece g;
+        PF_VAR(ps);
         g.phase = piece_phase;
         g.mirror = 0;
         g.refl = 0;
@@ -1411,6 +1412,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
                 g.blk = g.obj + off;
             }
         }
+        PF_ADD(PF_PC_LOD, ps); PF_SET(ps);
 
         /* local to view: per axis A, A . D + x (Ax cos + Ay sin) + y Ah + z (Ay cos - Ax sin) */
         const float m[9] = { rx * ca + ry * sa, rh, ry * ca - rx * sa,
@@ -1421,9 +1423,11 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
 #pragma GCC unroll 9                            /* (the conversions side by side in the FPU) */
         for(int k = 0; k < 9; k++) g.m[k] = (int32_t)(m[k] * 65536.0f);
         for(int k = 0; k < 3; k++) g.t[k] = (int32_t)(o[k] * 256.0f);
+        PF_ADD(PF_PC_MAT, ps); PF_SET(ps);
 
         /* the camera in the piece's frame picks the row, the eye tells the faces turned away */
         face_eye(g.blk, -dx * ca - dy * sa, -dh, dx * sa - dy * ca, &g);
+        PF_ADD(PF_PC_FACE, ps);
         st->pieces++;
         uint32_t t0 = now();
         if(track_mode == TRACK_HW) track_hw_piece(&g);

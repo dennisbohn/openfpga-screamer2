@@ -679,6 +679,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             for (int i = 0; i < race_cars(); i++) fc[i] = race_car(i);
             s2fx_update(fc, race_cars(), 1, race_steps() * 2, s2cam_get_view() == S2CAM_BACK ? s2cam_get_follow() : -1);
         }
+#ifdef S2_PROF
+        for (int i = 0; i < PF_N; i++) prof_t[i] = prof_n[i] = 0;      /* (the counters of the frames drawn from here on only) */
+#endif
     }
 #endif
     s2load_fade();                                      /* the LOADING picture was up through the track's build and the race's set-up (no-op if none) */

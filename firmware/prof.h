@@ -13,6 +13,7 @@ enum {
     PF_CULL_SETUP, PF_CULL_WALK, PF_CULL_OBJ, PF_CULL_SORT, PF_PC_STATIC, PF_PC_OBJ, PF_PC_MULTI, PF_PUSH,
     PF_TYRE, PF_ANGLES, PF_CORNERS, PF_FIND_ROAD, PF_SPRINGS, PF_SPEED, PF_LEAN, PF_SIN, PF_COS, PF_ATAN, PF_SQRT,
     PF_PUSH0, PF_PUSH1, PF_PUSH2, PF_PUSH3, PF_PUSH4, PF_PUSH5,     /* the pieces' pushes by the time they took: < 150, 300, 600, 1200, 2400, more */
+    PF_PC_LOD, PF_PC_MAT, PF_PC_FACE,       /* a static piece's hand-over before the push: the block and the level of detail, the matrix and its conversions, the row and the faces turned away */
     PF_N
 };
 
