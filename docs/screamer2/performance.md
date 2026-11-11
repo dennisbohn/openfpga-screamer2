@@ -476,6 +476,14 @@ sums `s + o` of 14.8 ms in every good layout say the saved time in the piece loo
 (the hardware starts at the first piece, which comes after `a` + `c` = 3.2 ms, and the computers' steps after the last piece run beside its tail). So: CPU time saved in the
 loop does not shorten these frames; time before the first piece (`a`, `c`), the hardware's own work and the computers' steps are what count. Not kept.
 
+**What a late frame costs on the screen, and the catch-up (2026-11-11, D: `tools/s2/catchup_model.py`).** A model of the race loop's rhythm: 512 lines of 39 us a picture, a swap at the first
+blanking line (lines 210 to 9) after the request, the frame counter counting at line 0, the physics taking as many steps as counter ticks have passed since the last frame began (at most 4),
+each step after the first costing 4.7 ms (the Pocket's `a6.8` against `a2.1`). With the simulation's frame times of the dips (18.1 ms on average, up to 21.3) it loses no picture: 50.0 a second;
+the swap simply lands later in the blanking window and the next, quicker frames bring it back. One cluster like the logged one (eight frames of 20.2 to 22.1 ms between frames of 16 to 19 ms)
+loses no picture either; the longest gap between two swaps is 22.5 ms. The Pocket's own numbers say the same: 49.6 pictures a second over a visit of 1,076 frames with 58 over 20 ms. Only a
+steady 19 ms and more (a mean of 19.1) costs pictures (48.8 a second) and starts the catch-up (2.5 % of the frames take two steps, up to 25 ms). Spreading the catch-up over later frames (a step
+owed while the last frame was long, paid when one was under 15.8 ms) was modelled and is not better: 48.2 pictures a second and frames up to 34.5 ms in the steady-19 ms case. Not built.
+
 ### What to read in `debug.txt` after the test
 
 The first line (the last state when the core is quit) ends with the longest frame: ` | a.. c.. s.. o.. w.. f.. p.. n..`.
