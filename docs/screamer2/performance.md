@@ -465,6 +465,17 @@ are memory latency (the header words of the mesh and of the block, scattered ove
 misses a piece into one (estimated 0.3 to 0.5 ms), and the LOD decision without the square root and the rounding another 0.3 ms (it differs from the game's rounding only within
 a float's last bit of a threshold).
 
+**Tried and dropped (2026-11-11, M): a table of the per-mesh words and the level of detail without the root.** The static piece's hand-over read the mesh's block header from three or
+four scattered places of the image; a table made at the track's load (the mesh, its level 0 block, the block's middle, the offsets of levels 1 and 2) and the level taken from the
+square of the distance (under 5999.5 and 8999.5, times LOD_SCALE) did the same with one line of a small table. `check_cull_s2.sh` against the commit before: the same pieces in the
+same order in every frame of the 7 tracks (5,200 frames) and byte-equal pictures. In the replay window of the dips (40 frames of the contact, same simulation, same scene) the
+frame time did not move: 18.12 -> 18.04 ms (`s` 10.20 -> 9.86, `o` 4.68 -> 4.96). The first build lost all of it to the instruction cache: `face_eye` was inlined into `draw`; split in two,
+the new function was placed by the linker at cache sets of the piece loop's own code and the two threw each other out for every piece (always_inline brought it back). Code
+offsets after main.c (`CODE_PAD2` 128 to 4096) with the same code: 17.96 to 19.48 ms, so the layout alone moves a frame by up to 1.4 ms, more than the table gains; the same
+sums `s + o` of 14.8 ms in every good layout say the saved time in the piece loop does not reach the end of the frame: the pieces' hand-over is not what the frame waits for in this scene
+(the hardware starts at the first piece, which comes after `a` + `c` = 3.2 ms, and the computers' steps after the last piece run beside its tail). So: CPU time saved in the
+loop does not shorten these frames; time before the first piece (`a`, `c`), the hardware's own work and the computers' steps are what count. Not kept.
+
 ### What to read in `debug.txt` after the test
 
 The first line (the last state when the core is quit) ends with the longest frame: ` | a.. c.. s.. o.. w.. f.. p.. n..`.
