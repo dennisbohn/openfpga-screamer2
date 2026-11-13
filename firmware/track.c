@@ -506,11 +506,10 @@ int track_class_key(const uint8_t *obj)
    sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
 static int mirror_pass;
 
-/* How far the mirror's pass sees, in percent of the track's far plane: the glass is 160 x 35 pixels, and the pass hands over pieces as the main pass does. With the mirror on the race runs at
-   25 pictures a second (viewer.c: each picture lasts two video frames, 40 ms), so the whole far plane fits, as the original has it: measured in the simulation of track 4 (docs/screamer2/hud.md
-   section 5), the pass takes 7.8 ms with the whole far plane (the race 20.6 ms a picture, worst 32.8), against the race's 11.8 ms without the mirror (13.5 in INCAR). At 20 ms a picture the
-   whole far plane did not fit (198 of 220 late), and the pass was cut to 50 % (4.3 ms; bridges stayed, a few far houses went) and, before it, to 35 % (the bridges after the tunnel were gone, the
-   owner saw it). Leaving out what is too small to be seen instead saved nothing (7.6 ms): the pieces far behind the car are big blocks of the city */
+/* How far the mirror's pass sees, in percent of the track's far plane: the glass is 160 x 35 pixels, and the pass hands over pieces as the main pass does. The whole far plane, as the
+   original has it: measured in the simulation of track 4 (docs/screamer2/hud.md section 5), the pass took 7.8 ms with it (2026-11-06), 4.3 ms at 50 %
+   (bridges stayed, a few far houses went) and less at 35 % (the bridges after the tunnel were gone, the owner saw it). Leaving out what is too small to be seen instead saved nothing
+   (7.6 ms): the pieces far behind the car are big blocks of the city. (From 2026-11-10 to 2026-11-13 the race ran at 25 pictures a second with the mirror on; viewer.c no longer holds it.) */
 #ifndef MIRROR_FAR_PCT
 #define MIRROR_FAR_PCT  100
 #endif
@@ -519,8 +518,8 @@ static int mirror_pass;
    other moving objects; docs/screamer2/performance.md, section 6): the distance of the block's middle
    from the camera, rounded to nearest (even). Placed: key = -(dist >> 1), level 0 above -3000 (dist <
    6000), level 1 above -4500 (dist < 9000), else 2. Moving: key = -dist, -2000 and -6000. These are
-   constants of the game's image, no option, but for LOD_SCALE (track.h). The mirror's pass (at least level 1) is not in this core
-   yet. -DTRACK_NO_LOD (the PC renderer, tools/s2/render_s2.sh) draws every block at level 0. */
+   constants of the game's image, no option, but for LOD_SCALE (track.h). The mirror's pass takes at least level 1 (mirror_pass above).
+   -DTRACK_NO_LOD (the PC renderer, tools/s2/render_s2.sh) draws every block at level 0. */
 int track_lod_level(float dist, int moving)
 {
 #ifdef TRACK_NO_LOD
