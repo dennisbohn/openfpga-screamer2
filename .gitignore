@@ -34,3 +34,4 @@ SCREAMER2.zip
 *.GOG
 *.gog
 firmware/sim_replay_data.h
+sim/soc_*/

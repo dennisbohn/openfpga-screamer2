@@ -40,7 +40,7 @@ controller, caches, clock phase): `docs/memory.md`. Overall architecture:
   the memory test the loader checks it (test "program", `SYS_SIM` bit 4), flushes the D-cache,
   executes `fence.i` and jumps with `a0` = its results (`SYS_SIM` bits), `a1`, `a2` = position
   and begun word in the log. The program sets its own `gp`, `tp` and `mtvec`; its stack is at
-  the top of the boot RAM (from `0x8000` downwards to `0x6000`; the loader stays below).
+  the top of the boot RAM (from `0x8000` downwards to `0x6000`; the loader stays below). Once the program runs the loader is done: the program copies its hottest code (about 19 KB, `.bootcode` in `link_prog.ld`) over it, to `0x0000`..`0x5000`, where a miss of the I-cache takes 11 clocks instead of 30 to 60 (docs/screamer2/performance.md, "Where the CPU waits").
   Nothing is shown meanwhile except a swap with a black palette, so that a reset does not
   leave the previous run's picture; the first frame is the program's loading screen. If a
   self-test or a memory test fails, or `program.bin` is missing, the loader starts nothing

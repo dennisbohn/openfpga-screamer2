@@ -484,6 +484,68 @@ loses no picture either; the longest gap between two swaps is 22.5 ms. The Pocke
 steady 19 ms and more (a mean of 19.1) costs pictures (48.8 a second) and starts the catch-up (2.5 % of the frames take two steps, up to 25 ms). Spreading the catch-up over later frames (a step
 owed while the last frame was long, paid when one was under 15.8 ms) was modelled and is not better: 48.2 pictures a second and frames up to 34.5 ms in the steady-19 ms case. Not built.
 
+### Where the CPU waits: the instruction cache (2026-11-13, M: the same replay window, 40 frames from step 525 on, SoC simulation)
+
+**What the frame is.** `s + o` is 14.8 ms in every firmware variant that only moves CPU work around (the table, the batched car blocks below), and the frame is `a + c + s + o` with `w` 0: the CPU's path.
+The computers' steps in the scene's gaps (`i` in the `L` line: the part of `o` done there) take what the loop's waits leave, not more; `RACE_OVERLAP` 1 (all after the last piece) is 0.2 ms better here
+(17.81, max 20.8 against 17.98, 21.2), 0 (before the scene) 3 ms worse (21.1), `HW_FULL_CYCLES` 600 and 2,400 the same as 1,200. So the lever is the CPU's own time, and a quarter of that is waiting.
+
+**The SDRAM controller's counters** (a testbench variant, `tools/s2/hwvariant.py stat`; per frame of the window, the firmware as it was): the controller is busy 48 % of the clocks. Lines read: 25,700 for the geometry unit
+and the rasterizer, **5,500 for the I-cache**, 3,200 for the D-cache (and 6,600 writes). The arbiter takes the dBus before the rasterizer's and geometry unit's lines and the iBus last, so a miss of the I-cache takes
+**61 clocks** on average (the D-cache's 28), and the I-cache's misses are outstanding **27 % of all clocks, 4.5 ms of the frame**, the D-cache's 7 %.
+
+**Which code.** A trace of the CPU's line reads (`hwvariant.py trace`, `tools/s2/imisses.py`): 6,400 lines a frame. A car's step runs through about 41 KB of code and four of them (the player's, the three computers')
+run in a frame, through an 8 KB direct-mapped cache: nearly every line of every pass misses. On top of that the small helpers that every function calls (`__riscv_save_0`, 24 bytes with 177 misses a frame, `_sinf`,
+136 bytes, 423, `atanf`, `memo_sin`, `__kernel_sinf`, `__rem_pio2f`: 1,700 misses a frame together, 27 %) throw each other and their callers (`tyre`: 400) out. The piece loop's own 7.9 KB fit; but `gu_oversize`, a 40-byte
+function in `geom.c` called for every piece, lay on two sets of the loop's code, 4 misses a piece: that was the layout lottery of the table test (the same code at `CODE_PAD2` 0, 512, 1024, 2048: **18.1, 18.2, 19.9, 19.7 ms**;
+with `gu_oversize` inline in `hw_piece` and `push_piece` in the hot block: **18.2, 18.3, 18.3, 18.2**: the frame no longer depends on where the linker puts the code).
+
+**What changed in the firmware** (nothing of the picture: the last frame's pixels below the overlay's rows are equal on tracks 1, 3, 4 in 220-frame runs, in every variant):
+
+| change | window mean / max ms | >20 ms |
+|---|---|---|
+| firmware as it was (a762c80) | 18.12 / 21.3 | 2 |
+| `gu_oversize` inline, `push_piece` in the hot block | 18.22 / 21.7 (18.2 to 18.3 at all four offsets) | 2 |
+| and the cars' blocks made in a row before the first piece (`track.c`: a car's make, 3 KB of code once a frame, between two pieces threw the loop's lines out) | 17.98 / 21.2 | 2 |
+| **and the hottest code in the boot RAM** (`link_boot.ld`, below) | **16.84 / 19.2** | **0** |
+| the same with `RACE_OVERLAP` 1 | 16.83 / 19.2 | 0 |
+| 23.5 KB of code there instead of 20 KB (51 functions) | 17.01 / 19.2 | 0 |
+
+*Code in the boot RAM.* The 24 KB below the program's stack are free once the loader has started the program (they are cached, and a miss there takes about 11 clocks: a line a word a clock, no SDRAM, no arbiter).
+`link_prog.ld` has an output section `.bootcode` in the boot RAM whose image sits in `program.bin` (at `BOOTIMG`, past the data: an `ASSERT` says when the program has grown over it), `start_prog.S` copies it to the boot RAM
+before it clears the bss (which lies over the image) and executes `fence.i`. `firmware/link_boot.ld` lists the input sections: the functions with the most misses per byte in the trace of the replayed race
+(`python -I tools/s2/bootpick.py build/firmware-x/program.lst build/firmware-x/program.map build/sim/trace_ib.txt 76 20000 firmware/link_boot.ld`), 46 functions, 19.5 KB. The SDRAM misses fall from 6,400 to 2,600 a frame,
+the I-cache's outstanding clocks from 27 % to 17.5 % (the misses that remain in the boot RAM cost 11 clocks each). More code there did not help (17.01): which lines share a cache set matters as much as how many there are.
+A crash in that code shows in `debug.txt` with `mepc` under `0x5000`.
+
+**Hardware, not built** (variants of the SoC for the simulation only: `tools/s2/hwvariant.py`; none touches the picture). Each group has its own firmware and its own line without a change:
+
+| firmware | variant of the hardware | window mean / max ms | >20 ms | block RAM |
+|---|---|---|---|---|
+| as it was | none | 18.12 / 21.3 | 2 | |
+| | I-cache in two ways of 4 KB (`wayCount` 2) | 17.71 / 20.7 | 2 | 0 |
+| | I-cache 16 KB, direct mapped | 16.82 / 19.6 | 0 | + about 7 M10K |
+| | I-cache 2 x 8 KB | 16.67 / 19.3 | 0 | + about 7 |
+| | D-cache 16 KB | 17.86 / 20.9 | 1 | + about 7 |
+| | I-cache 16 KB and D-cache 16 KB | 16.52 / 19.3 | 0 | + about 14 (16 are free) |
+| inline, blocks in a row | none | 17.98 / 21.2 | 2 | |
+| | arbiter: the iBus before the geometry unit's and rasterizer's lines (two lines of `sdram_port.v`) | 17.63 / 18.7 | 0 | 0 |
+| | arbiter and I-cache in two ways of 4 KB | 17.20 / 18.2 | 0 | 0 |
+| | arbiter and I-cache 16 KB | 16.91 / 18.0 | 0 | + about 7 |
+| | arbiter and I-cache 2 x 8 KB | 16.84 / 17.9 | 0 | + about 7 |
+| | arbiter and both caches 16 KB | 16.74 / 17.8 | 0 | + about 14 |
+| with boot-RAM code | none | 16.84 / 19.2 | 0 | |
+| | arbiter | 16.93 / 18.1 | 0 | 0 |
+| | **arbiter and I-cache in two ways of 4 KB** | **16.74 / 17.8** | **0** | **0** |
+
+The arbiter alone helps the CPU at the cost of the hardware's path (`w` of 2.4 ms: the
+frame is then the hardware's, 17.6 ms): on the grid of tracks 1, 3, 4 (220 frames, mean / max ms) the three are 11.0 / 12.7, 10.9 / 12.7, 11.9 / 13.6 without it and 10.7 / 12.1, 11.1 / 12.5, 11.7 / 13.3 with it:
+not a gain everywhere (track 3's mean is 0.2 worse). With the boot-RAM code the three are 10.6 / 12.1, 10.6 / 12.0, 11.3 / 13.0, and with the arbiter and the two-way I-cache on top 10.4 / 11.6, 10.7 / 11.9, 11.3 / 12.7.
+
+**Not the cause here.** The wheel smoke: ten more puffs alive (a build that forced the tyres of the first two cars to slide) left the window's mean at 18.21 against 18.22. The Pocket's heavy-smoke frames
+(`m` 25 to 40, `s` 12 to 14.5 ms in the 10 November logs) are not reproduced by the simulation: there the puffs lie between the camera and a sideways car, large and see-through; it is probably the rasterizer's time,
+and it is open. The D-cache's size and the slice trigger do not matter, as the tables say.
+
 ### What to read in `debug.txt` after the test
 
 The first line (the last state when the core is quit) ends with the longest frame: ` | a.. c.. s.. o.. w.. f.. p.. n..`.
@@ -498,7 +560,7 @@ newer than one made before it, which jerked the car beside the player at the sta
 earlier build) and 0 (before the scene) remain as compile-time switches if the slices misbehave.
 
 The race also writes the first late frames and the buttons of its first minute into `debug.txt` (2026-11-10; the read test's files are no longer one
-line each, only a failed one, to leave room in the 4 KB). `L12.4 26.1 k3 a6.4 c1.7 s14.5 o3.4 w0.0 p289 n3 m40` is a frame over 20 ms (at most 14 a
+line each, only a failed one, to leave room in the 4 KB). `L12.4 26.1 k3 a6.4 c1.7 s14.5 o3.4 i0.0 w0.0 p289 n3 m40` (`i`: of `o`, the part done in the scene's gaps) is a frame over 20 ms (at most 14 a
 race): seconds into the race, its ms, the steps it took (`k`: more than 1 after a late frame, the catch-up that can keep the next frame late too),
 its parts as the longest frame's line has them, pieces, the player's node, puffs alive. `I812 0020` is a change of the buttons (at most 40, the first
 3,000 steps): the race step it took effect at and the buttons in hex (`hw.h`: bit 5 gas, 7 brake, 2 and 3 left and right, 4 handbrake, 8 and 9 the
@@ -511,6 +573,10 @@ from the Pocket's CHOICE.DAT (main part: set[6], view). On the PC, `REPLAY=<file
 race with the same buttons, but after a crash the computers' cars part from the Pocket's (the PC's float results are not the target's), so the position is only near.
 
 ### Reproduce
+
+The hardware variants and the trace of the CPU's line reads: `python -I tools/s2/hwvariant.py i8w2p1=i8w2,p1 t=trace=271581184` (testbench directories `sim/soc_<name>/`, git-ignored), run with
+`tools/s2/sim_race_tb.sh soc_<name> <dir with firmware.bin and program.bin> <image> 4 76 <name>` like `sim_race.sh`; `python -I tools/s2/lsum.py build/sim/<name>_log.txt` sums a replay's `L` lines;
+`tools/s2/imisses.py` and `tools/s2/bootpick.py` read the trace (the section above).
 
 `tools/fw.sh` (zero warnings); `tools/fw.sh PROF=1` (cycle counters, `build/firmware-prof`); `tools/fw.sh CODE_PAD=n` / `CODE_PAD2=n`
 (layout tests); `tools/s2/framestats.sh build`, then `race <image> <label> <out.csv> 12000 10 <track>` and `sweep s2 ...`;

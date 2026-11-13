@@ -1348,18 +1348,28 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
     if(mirror_pass) track_view_mirror(clip, &view);
     else track_view(clip, &view);
     uint32_t t_out = 0;
+    /* The objects' blocks are made in a row here, before the first piece, not each when the pieces come to it: a car's make (its blocks' places, the trigonometry: some
+       3 KB of code that runs once a frame) between two pieces threw the lines of the piece loop out of the 8 KB I-cache (direct mapped) and brought them back one miss at a time. */
+    static uint32_t obj_refl[MAX_OBJS];
+    for(int n = 0; n < nv; n++) {
+        const int vi = vis[n] & 0xFFFF;
+        if(vi < npieces) continue;
+        struct track_object *ob = &objs[vi - npieces];
+        if(ob->make) ob->make(ob->id, cam, ob);
+        uint32_t refl = ob->refl_phase & 0xFFFF;
+        for(int b = 0; b < ob->n && ob->refl; b++)
+            if(rd32(ob->b[b].blk + 0x18) & 0x2000) {
+                refl |= refl_offsets(ob, f, r, u);
+                break;
+            }
+        obj_refl[vi - npieces] = refl;
+    }
     for(int n = 0; n < nv; n++) {
         const int vi = vis[n] & 0xFFFF;
         PF_VAR(pb);
         if(vi >= npieces) {                         /* an object: its blocks as they come */
             struct track_object *ob = &objs[vi - npieces];
-            if(ob->make) ob->make(ob->id, cam, ob);
-            uint32_t refl = ob->refl_phase & 0xFFFF;
-            for(int b = 0; b < ob->n && ob->refl; b++)
-                if(rd32(ob->b[b].blk + 0x18) & 0x2000) {
-                    refl |= refl_offsets(ob, f, r, u);
-                    break;
-                }
+            const uint32_t refl = obj_refl[vi - npieces];
             for(int b = 0; b < ob->n; b++) {
                 struct gu_piece g;
                 block_piece(c, f, r, u, ob->b[b].m, ob->b[b].o, ob->b[b].blk, &g);

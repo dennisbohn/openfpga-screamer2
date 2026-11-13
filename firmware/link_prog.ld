@@ -11,6 +11,8 @@ ENTRY(prog_entry)
 MEMORY
 {
     SDRAM (rwx) : ORIGIN = 0x13000000, LENGTH = 15M     /* above: the saves (save.h) */
+    BOOT  (rwx) : ORIGIN = 0x00000000, LENGTH = 24K     /* the boot RAM below the stack: the loader that was here is done, the program puts its hottest code in (.bootcode) */
+    BOOTIMG (r) : ORIGIN = 0x13058000, LENGTH = 24K     /* where program.bin carries that code's image to the start (past .tdata: the ASSERT below) */
 }
 
 CODE_PAD = DEFINED(CODE_PAD) ? CODE_PAD : 0;
@@ -18,6 +20,17 @@ CODE_PAD2 = DEFINED(CODE_PAD2) ? CODE_PAD2 : 0;
 
 SECTIONS
 {
+    /* The code the I-cache misses on most (link_boot.ld lists it; it has to come before .text, which takes every .text.* it is not told otherwise), run from the boot RAM:
+       a miss there takes some 11 clocks (a line a word a clock, no waiting for the SDRAM, which the geometry unit and the rasterizer share), one on the SDRAM 30 to 60 and more.
+       Its image is in program.bin at BOOTIMG, start_prog.S copies it before it clears the bss (which lies over it). */
+    .bootcode : ALIGN(32) {
+        __boot_start = .;
+        INCLUDE link_boot.ld
+        . = ALIGN(32);
+        __boot_end = .;
+    } > BOOT AT> BOOTIMG
+    __boot_load = LOADADDR(.bootcode);
+
     .text : {
         __image_start = .;
         KEEP(*(.text.header))       /* start_prog.S: header, entry, trap entry */
@@ -55,8 +68,10 @@ SECTIONS
         PROVIDE(__tls_base = .);
         *(.tdata .tdata.*)
         . = ALIGN(4);
-        __image_end = .;
+        __tdata_end = .;
     } > SDRAM
+    __image_end = SIZEOF(.bootcode) ? LOADADDR(.bootcode) + SIZEOF(.bootcode) : __tdata_end;
+    ASSERT(!SIZEOF(.bootcode) || __tdata_end <= ORIGIN(BOOTIMG), "the program has grown over the boot code's image: move BOOTIMG up in link_prog.ld")
     .tbss : ALIGN(8) {
         __bss_start = .;
         *(.tbss .tbss.*)

@@ -66,7 +66,9 @@
 #define MS_CYCLES   (CPU_HZ / 1000)
 #define LATE_CYCLES (CPU_HZ / 50)       /* a frame over 20 ms misses its vertical blanking */
 #ifdef S2_SIM_REPLAY                    /* the replay build: every frame from step SIM_REPLAY_SHOW_FROM on gets the line, in the simulation too */
+#ifndef LATE_LOG_MAX                    /* (a profile build wants the room for its counters: -DLATE_LOG_MAX=2) */
 #define LATE_LOG_MAX    40
+#endif
 #define LATE_FRAME(w)   (race_steps() >= SIM_REPLAY_SHOW_FROM)
 #define LATE_SIM_OK     1
 #else
@@ -1040,6 +1042,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             q = fmt_ms(fmt_str(q, " c"), ts.cyc_cull);
             q = fmt_ms(fmt_str(q, " s"), t_wait - t_scene - others_cycles - ts.cyc_cull);
             q = fmt_ms(fmt_str(q, " o"), others_cycles);
+            q = fmt_ms(fmt_str(q, " i"), others_in_scene);        /* (of it, the part done in the scene's gaps: hw_idle) */
             q = fmt_ms(fmt_str(q, " w"), work - (t_wait - t_frame));
             q = fmt_udec(fmt_str(q, " p"), ts.pieces);
             q = fmt_udec(fmt_str(q, " n"), lnode > 0.0f ? (uint32_t)lnode : 0);

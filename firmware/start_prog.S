@@ -31,6 +31,17 @@ prog_entry:
 
     la      tp, __tls_base          /* picolibc: errno lives in TLS */
 
+    la      t0, __boot_load         /* the hottest code into the boot RAM (link_prog.ld .bootcode), before the bss clear: it lies over the image */
+    la      t1, __boot_start
+    la      t2, __boot_end
+1:  bgeu    t1, t2, 2f
+    lw      t3, 0(t0)
+    sw      t3, 0(t1)
+    addi    t0, t0, 4
+    addi    t1, t1, 4
+    j       1b
+2:  fence.i                         /* (the I-cache may hold lines of the loader that was there) */
+
     la      t0, __bss_start         /* clear .tbss and .bss; a0..a2 stay for main */
     la      t1, __bss_end
 1:  bgeu    t0, t1, 2f

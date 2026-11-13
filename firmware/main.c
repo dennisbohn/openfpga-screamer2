@@ -214,7 +214,9 @@ static void push_piece(const struct gu_piece *g);
    faces a row: geom.h) goes in as the runs of its face row, one after the other (gu_split). */
 void hw_piece(const struct gu_piece *g)
 {
-    if (!gu_oversize(g)) {
+    /* (gu_oversize() inline: a call to a function of its own, 40 bytes at some place of the code, threw two of the piece loop's lines out of the
+       I-cache on every piece, and its own back in) */
+    if (!(*(const int32_t *)(g->blk + 0x10) > GU_MAX_VERT || *(const int32_t *)(g->blk + 0x14) > GU_MAX_FACES)) {
         push_piece(g);
         return;
     }
