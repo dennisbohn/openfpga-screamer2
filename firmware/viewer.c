@@ -985,7 +985,7 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             p = fmt_ms(l, shown_mean);
             p = fmt_ms(fmt_str(p, " ms  max "), shown_max);
             p = fmt_str(p, " ms");
-            if (shown_n) fmt_str(fmt_udec(fmt_str(p, "  "), shown_n), " fps");     /* the pictures of the last second: 50, or 25 with the mirror on (the ms are the work of a picture, not the time between two) */
+            if (shown_n) fmt_str(fmt_udec(fmt_str(p, "  "), shown_n), " fps");     /* the pictures of the last second (the ms are the work of a picture, not the time between two) */
             con_text(fb, 0, 0, l, col_text, col_bg);
             p = fmt_udec(fmt_str(l, "T"), (uint32_t)n);
             p = *drive ? fmt_str(p, "  drive") : fmt_udec(fmt_str(p, "  cars "), (uint32_t)*cars);
@@ -1116,13 +1116,6 @@ static int visit(int n, int *cars, int *overlay, int *drive)
             dlog_str(" bytes\n");
         }
         tl_mark(TL_END);
-        if (mirror_now && !sim) {
-            /* With the mirror on the pictures come 25 a second: the pass costs 4 to 8 ms on top of the race, and a picture that took a little more than a video
-               frame would wait for the third (a 40 ms picture between 20 ms ones). So the swap waits for the second video frame since this picture began,
-               each picture lasts two, and the next one takes two steps (dvf above). The simulation keeps its one picture a frame. */
-            while (((VID_FRAME(VID_STATUS) - vf) & 0xFFFF) < 2)
-                ;
-        }
         VID_SWAP = 1;
         drawn++;
         if (attract_mode && att.over) {                 /* the sequence is over: its last frame (the S2 logo on black) is up; the log gets the statistics of the first one only (it has 4 KB) */
