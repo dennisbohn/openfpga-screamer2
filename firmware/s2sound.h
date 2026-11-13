@@ -4,8 +4,8 @@
  * (s2snd.h); this file is the voices, the state between frames and the music's start and fade.
  *
  * Voices of the mixer: 0 .. 3 the four cars' engines, 5 the player's tyres (the squeal, or rolling on
- * grass and the like), 6 .. 9 the knocks (a wall, a car, a landing; round robin). The game's sound
- * manager has 64 slots of the same kinds.
+ * grass and the like), 4 the second player's in combat mode, 6 .. 9 the knocks (a wall, a car, a
+ * landing; round robin). The game's sound manager has 64 slots of the same kinds.
  *
  * The music: CD_TRACKS of MISC.DTR names the CD track of each of the seven tracks; it starts with the
  * race (the grid, before the lights) and goes on round and round until the race is left: the original's
@@ -32,8 +32,13 @@ extern int s2snd_music_later;
 void s2snd_music(int track);
 /* Once a frame of the race, after the physics' steps and with the camera of the picture: the engines'
    pitch and volume, the tyres, the knocks, and the music's ring kept filled (music_frame()). Costs 0.1 to 0.2
-   ms. */
-void s2snd_frame(const struct track_cam *cam);
+   ms. cam2 is 0 but in combat mode, where it is the second view's camera, and the sound is the original's of that
+   mode (STARTL.EXE, the mode word's bit 0x40): the first car's engine is heard from the first camera and the second's
+   from the second (0x1fe18: each player hears his own engine and not the other's car), both cars' tyres are heard
+   (0x1b77e), the scenery from the first camera; the knocks (a wall, an obstacle, a landing) are the first car's alone,
+   as the original's are the followed car's (0x11f0c8, car 0 in the running game's combat race), a knock of the two
+   cars being both players'. */
+void s2snd_frame(const struct track_cam *cam, const struct track_cam *cam2);
 /* The race is left (another track, the ride): every voice and the music stop; a line into the log with the cost
    per frame. Nothing may run on the data slots (a track's load) while music plays, so this comes first. */
 void s2snd_stop(void);

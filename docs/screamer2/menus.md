@@ -610,6 +610,10 @@ Here (`firmware/viewer.c` `combat_run()`, `frame_split()`; `race.h` `race_combat
 - **The race** is the arcade's with `race_combat`: two cars with a player's controls each (`race_step_player()`, `race_step_player2()`), the cars touching as the arcade's, no
   recording and no replay. The buttons are each player's own controller's, as in every race (B gas, Y brake, A handbrake, L / R gears, X his next view: INCAR, NEAR, BACK). Start on
   either is the pause menu. No mirror.
+- **The sound** is the original's of this mode: each car's engine is heard from its own player's camera (0x1fe18: the cars after the first take the second camera as the
+  listener), so both engines are near and neither player hears the other's car; both cars' tyres are heard, each on a voice of its own (0x1b77e: the mode's every car, where a
+  single race has the followed car's alone); the scenery is heard from the first camera. The knocks at a wall and an obstacle and the landing are the first car's alone, as the
+  original's are the followed car's (0x11f0c8, which is car 0 in the running game's combat race); a knock of the two cars is both players'.
 - **The picture**: two passes of the scene a frame, each 99 rows from the half's top (rows 99 and 199 black; the eye line is 0.65 of the rows, row 64), each with its own camera,
   backdrop and list of objects; the second view's objects are made when the rasterizer has drawn the first (the shadows' and the puffs' blocks are one set). A frame takes about twice
   the single view's CPU work for the scene: the race runs at 25 pictures a second where the single one runs at 50.

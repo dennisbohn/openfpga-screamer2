@@ -19,6 +19,7 @@
 #define SOUND_MEM   (SDRAM_BASE + 0x1C00000)    /* SOUND.DAT, up to 2 MB; the ring of the music follows (music.c), docs/soc.md */
 #define SOUND_MAX   0x200000u
 #define V_ENGINE    0                           /* voices 0 .. 3: the cars' engines */
+#define V_TYRE2     4                           /* combat mode: the second player's tyres */
 #define V_TYRE      5                           /* the player's tyres */
 #define V_KNOCK     6                           /* voices 6 .. 9: knocks */
 #define KNOCKS      4
@@ -43,7 +44,8 @@ static int cd_read;
 
 /* per engine: the sample playing (-1 none), the distance a frame before (< 0 none), what the voice has */
 static struct { int id; float last; uint32_t step, reg; } eng[RACE_CARS];
-static struct { int id; uint32_t reg; } tyre;
+static struct { int id; uint32_t reg; } tyre[2];                /* the first player's tyres, and the second's in combat mode */
+static const int tyre_voice[2] = { V_TYRE, V_TYRE2 };
 static struct { int id; float last; uint32_t step, reg; } scene[ANIMS];   /* the voice of each animated row: its ambient sample (-1 none), the distance a frame before (< 0 none) and what it has */
 static int ground_before;                       /* the player's wheels on the ground a frame before */
 static uint32_t knock_age, knock_rank, knock_next;
@@ -118,7 +120,7 @@ void s2snd_race_start(int track)
         eng[i].id = -1;
         eng[i].last = -1.0f;
     }
-    tyre.id = -1;
+    tyre[0].id = tyre[1].id = -1;
     for (int i = 0; i < ANIMS; i++) {
         scene[i].id = -1;
         scene[i].last = -1.0f;                  /* (0xaf45c: the distances forgotten) */
@@ -175,25 +177,27 @@ static void engine(int i, const struct track_cam *cam, float cs, float sn)
     eng[i].reg = reg;
 }
 
-/* the player's tyres (0x1b36f): a squeal, or the rolling of a rough road; at the sample's own rate */
-static void tyres(const struct s2car_state *c)
+/* a player's tyres (0x1b36f): a squeal, or the rolling of a rough road; at the sample's own rate. The game has them for the car the camera follows on its voice 5, and in
+   combat mode (the mode word's 0x40, 0x1b77e) for every car on voice 5 + the car: here the second player's are voice 4, the knocks have 6 and up. */
+static void tyres(int p, const struct s2car_state *c)
 {
+    const int v = tyre_voice[p];
     const struct s2_road_kind *k = s2car_road_kind(RI(c, 0x6b0));
     uint32_t vol = 0;
     int id = s2snd_tyres(k->smoke[2], k->smoke[3], RF(c, 0xC34), RF(c, 0x510), RF(c, 0x500), &vol);
     if (id < 0 || id >= S2SND_SAMPLES || !smp[id].len) {
-        if (tyre.id >= 0) AU_STOP = 1u << V_TYRE;
-        tyre.id = -1;
+        if (tyre[p].id >= 0) AU_STOP = 1u << v;
+        tyre[p].id = -1;
         return;
     }
     uint32_t reg = s2snd_vol_reg(vol, 0x8000);
-    if (tyre.id != id || !(AU_PLAY & (1u << V_TYRE))) {
-        tyre.id = id;
-        play(V_TYRE, id, s2snd_step(smp[id].rate), reg);
-    } else if (reg != tyre.reg) {
-        AU_VOL(V_TYRE) = at_level(reg);
+    if (tyre[p].id != id || !(AU_PLAY & (1u << v))) {
+        tyre[p].id = id;
+        play(v, id, s2snd_step(smp[id].rate), reg);
+    } else if (reg != tyre[p].reg) {
+        AU_VOL(v) = at_level(reg);
     }
-    tyre.reg = reg;
+    tyre[p].reg = reg;
 }
 
 /* a knock of the player's car on the next of the knocks' voices, at the sample's own volume and rate. The game starts
@@ -240,7 +244,7 @@ static void scenery(const struct track_cam *cam, float cs, float sn)
     }
 }
 
-void s2snd_frame(const struct track_cam *cam)
+void s2snd_frame(const struct track_cam *cam, const struct track_cam *cam2)
 {
     if (!active) return;
     uint32_t t0 = rdcycle();
@@ -250,8 +254,15 @@ void s2snd_frame(const struct track_cam *cam)
     struct s2car_state *p = race_car(0);
     if (ready) {
         float cs = cosf(cam->yaw), sn = sinf(cam->yaw);     /* the listener's left, in x and y (the camera's heading - pi: 0xaf338) */
-        for (int i = 0; i < race_cars() && i < RACE_CARS; i++) engine(i, cam, cs, sn);
-        tyres(p);
+        if (cam2) {                                         /* combat mode: every car but the first is heard from the second view's camera (0x1fe18) */
+            const float cs2 = cosf(cam2->yaw), sn2 = sinf(cam2->yaw);
+            engine(0, cam, cs, sn);
+            for (int i = 1; i < race_cars() && i < RACE_CARS; i++) engine(i, cam2, cs2, sn2);
+            tyres(1, race_car(1));
+        } else {
+            for (int i = 0; i < race_cars() && i < RACE_CARS; i++) engine(i, cam, cs, sn);
+        }
+        tyres(0, p);
         scenery(cam, cs, sn);
         knock_age += dvf;
         float hard = p->hit_hard, hit = race_knock_take();
@@ -294,7 +305,8 @@ void s2sound_effects(int32_t f)
     if (before == 0x8000 && k < 0x8000) AU_STOP = 0xFu << V_KNOCK;     /* (a knock is over in a moment: the ones playing go at the first step down, the later ones start at the level) */
     for (int i = 0; i < RACE_CARS; i++)
         if (eng[i].id >= 0) AU_VOL(V_ENGINE + i) = at_level(eng[i].reg);
-    if (tyre.id >= 0) AU_VOL(V_TYRE) = at_level(tyre.reg);
+    for (int p = 0; p < 2; p++)
+        if (tyre[p].id >= 0) AU_VOL(tyre_voice[p]) = at_level(tyre[p].reg);
     for (int i = 0; i < ANIMS; i++)
         if (scene[i].id >= 0) AU_VOL(V_ANIM + i) = at_level(scene[i].reg);
 }

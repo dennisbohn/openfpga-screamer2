@@ -969,7 +969,7 @@ static void frame_scene(struct visit *v, struct frame *f)
             s2anim_frame((float)race_steps() * STEP_S, (int)rc[0]->pos[0], (int)rc[0]->pos[1], (int32_t)rc[0]->rec[0x4A8 / 4]);
             combat_camera(1, rc, &combat_cam2);             /* (both cameras now, from the cars as the frame's steps left them) */
             f->nobj = combat_view_scene(0, rc, ncar, &f->cam);
-            s2snd_frame(&f->cam);                           /* (the sound is the first player's) */
+            s2snd_frame(&f->cam, &combat_cam2);             /* (each player's engine and tyres: s2sound.h) */
         } else {
             if (s2ck_hides_car(view_now) && follow_now < f->nobj) {      /* INCAR and INSIDE: the car and its shadow are not in the picture (0x2b6b4) */
                 memmove(&objs[follow_now], &objs[follow_now + 1], (size_t)(f->nobj - follow_now - 1) * sizeof objs[0]);
@@ -995,7 +995,7 @@ static void frame_scene(struct visit *v, struct frame *f)
             f->nobj += s2fx_objects(&f->cam, rc, race_cars(), objs + f->nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS - f->nobj);       /* (seen from the camera of this frame) */
             f->nobj += s2props_objects(&f->cam, objs + f->nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - f->nobj);        /* (last: should the frame be over the limit, the cars and their effects stay) */
             PF_ADD(PF_SCENE, pf); PF_SET(pf);
-            s2snd_frame(&f->cam);                          /* the race's sound (s2sound.h) */
+            s2snd_frame(&f->cam, 0);                       /* the race's sound (s2sound.h) */
             PF_ADD(PF_SOUND, pf);
         }
     } else {
