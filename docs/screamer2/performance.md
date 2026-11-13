@@ -1,5 +1,18 @@
 # Screamer 2 on our hardware: how many pictures a second?
 
+## Where things stand (2026-11-13)
+
+The race on the Pocket, track 4 (the heaviest), the owner's race replayed in the simulation around a touch with a computer's car: **16.1 ms a frame on average, 18.1 at most** (18.1 / 21.3 before
+2026-11-13); the grid of the tracks 10.4 to 11.0 ms. The frame is the CPU's path, and the CPU still waits for its instruction cache at the SDRAM (17.5 % of all clocks after the first round of
+2026-11-13, not measured again after the second).
+- What a frame is made of, how it is measured, what was changed and what it gave: section 7, from "The race on the Pocket" to "The second round".
+- Open in the firmware: nothing with a known gain over 0.3 ms. Open in the hardware (none built, each needs a bitstream): the SDRAM arbiter and a two-way I-cache take 1 ms off the peaks; the SDRAM path
+  itself and the geometry unit's share of the hand-over are the larger, unmeasured ones ("The second round", last paragraph).
+- Not reproduced in the simulation: the Pocket's frames of 20 to 22 ms with 25 to 40 puffs of smoke around a sideways car (2026-11-10 logs).
+- The rear-view mirror costs 6.5 to 8 ms on top (the whole far plane); no hold to 25 pictures a second since 2026-11-13 (hud.md).
+
+The rest of this file is the study in the order it was made; its first sections are a forecast from before the race ran on the Pocket.
+
 Study of 2026-11-03 on branch `perf` (from `main`, 122da04). A cost model of one frame, fitted on measured
 Screamer 1 (S1) frames and applied to the road of all seven S2 tracks. Nothing was run on the Pocket;
 one S2 frame was run in the simulation as a check. Labels: **(M)** measured, **(D)** derived from
@@ -498,23 +511,24 @@ and the rasterizer, **5,500 for the I-cache**, 3,200 for the D-cache (and 6,600 
 run in a frame, through an 8 KB direct-mapped cache: nearly every line of every pass misses. On top of that the small helpers that every function calls (`__riscv_save_0`, 24 bytes with 177 misses a frame, `_sinf`,
 136 bytes, 423, `atanf`, `memo_sin`, `__kernel_sinf`, `__rem_pio2f`: 1,700 misses a frame together, 27 %) throw each other and their callers (`tyre`: 400) out. The piece loop's own 7.9 KB fit; but `gu_oversize`, a 40-byte
 function in `geom.c` called for every piece, lay on two sets of the loop's code, 4 misses a piece: that was the layout lottery of the table test (the same code at `CODE_PAD2` 0, 512, 1024, 2048: **18.1, 18.2, 19.9, 19.7 ms**;
-with `gu_oversize` inline in `hw_piece` and `push_piece` in the hot block: **18.2, 18.3, 18.3, 18.2**: the frame no longer depends on where the linker puts the code).
+with `gu_oversize` inline in `hw_piece`: **18.2, 18.3, 18.3, 18.2**: the frame no longer depends on where the linker puts the code; `push_piece` was meant to go into the hot block with it and
+did not until the second round, below).
 
 **What changed in the firmware** (nothing of the picture: the last frame's pixels below the overlay's rows are equal on tracks 1, 3, 4 in 220-frame runs, in every variant):
 
 | change | window mean / max ms | >20 ms |
 |---|---|---|
 | firmware as it was (a762c80) | 18.12 / 21.3 | 2 |
-| `gu_oversize` inline, `push_piece` in the hot block | 18.22 / 21.7 (18.2 to 18.3 at all four offsets) | 2 |
+| `gu_oversize` inline | 18.22 / 21.7 (18.2 to 18.3 at all four offsets) | 2 |
 | and the cars' blocks made in a row before the first piece (`track.c`: a car's make, 3 KB of code once a frame, between two pieces threw the loop's lines out) | 17.98 / 21.2 | 2 |
 | **and the hottest code in the boot RAM** (`link_boot.ld`, below) | **16.84 / 19.2** | **0** |
 | the same with `RACE_OVERLAP` 1 | 16.83 / 19.2 | 0 |
 | 23.5 KB of code there instead of 20 KB (51 functions) | 17.01 / 19.2 | 0 |
 
 *Code in the boot RAM.* The 24 KB below the program's stack are free once the loader has started the program (they are cached, and a miss there takes about 11 clocks: a line a word a clock, no SDRAM, no arbiter).
-`link_prog.ld` has an output section `.bootcode` in the boot RAM whose image sits in `program.bin` (at `BOOTIMG`, past the data: an `ASSERT` says when the program has grown over it), `start_prog.S` copies it to the boot RAM
-before it clears the bss (which lies over the image) and executes `fence.i`. `firmware/link_boot.ld` lists the input sections: the functions with the most misses per byte in the trace of the replayed race
-(`python -I tools/s2/bootpick.py build/firmware-x/program.lst build/firmware-x/program.map build/sim/trace_ib.txt 76 20000 firmware/link_boot.ld`), 46 functions, 19.5 KB. The SDRAM misses fall from 6,400 to 2,600 a frame,
+`link_prog.ld` has an output section `.bootcode` in the boot RAM whose image sits in `program.bin` (behind the header since the second round; at a fixed address past the data in the first),
+`start_prog.S` copies it to the boot RAM and executes `fence.i`. `firmware/link_boot.ld` lists the input sections: the functions with the most misses per byte in the trace of the replayed race
+(`tools/s2/bootpick.py`, its use under "Reproduce"), 46 functions, 19.5 KB in the first round. The SDRAM misses fall from 6,400 to 2,600 a frame,
 the I-cache's outstanding clocks from 27 % to 17.5 % (the misses that remain in the boot RAM cost 11 clocks each). More code there did not help (17.01): which lines share a cache set matters as much as how many there are.
 A crash in that code shows in `debug.txt` with `mepc` under `0x5000`.
 
@@ -546,6 +560,52 @@ not a gain everywhere (track 3's mean is 0.2 worse). With the boot-RAM code the 
 (`m` 25 to 40, `s` 12 to 14.5 ms in the 10 November logs) are not reproduced by the simulation: there the puffs lie between the camera and a sideways car, large and see-through; it is probably the rasterizer's time,
 and it is open. The D-cache's size and the slice trigger do not matter, as the tables say.
 
+### The second round: the code in stages, what was left to gain (2026-11-13, M)
+
+After a review of the frame's code for speed and for structure. The same replay window and the grid runs (220 frames) as above; every variant's last frame equal below the overlay's rows.
+
+**Structure.**
+- `track.c`: `draw()` is three stages, `cull()` (what is in reach and in view, sorted far to near), `objects_make()` (the objects' blocks) and `hand_over()` (the pieces to the geometry unit).
+  Only `hand_over` and what a piece calls are the hot block now (5.1 of 8 KB; the cull ran once a frame inside it).
+- `viewer.c`: `visit()` (480 lines) is a loop over `frame_begin`, `race_buttons` / `ride_buttons`, `frame_scene`, `frame_hardware`, `frame_text`, `frame_stats`, with the visit's state in `struct visit` and
+  a frame's in `struct frame`. `RACE_OVERLAP` 0 (the computers' steps before the scene, 3 ms slower) is gone.
+- `link_prog.ld`: the boot RAM's image lies right behind the header in `program.bin` (no fixed address, no hole of 42 KB, no order of copy and bss clear to keep); `firmware/link_check.py`, run at
+  every build, checks that every section named for the boot RAM and for the hot block is where the list puts it, that no section is in both lists, and that no function of the hot block calls one
+  outside it (but for a short list with reasons). It found what the first round had wrong: `push_piece` was never in the hot block (it lay behind it by the link order), and `tl_mark` was in both lists.
+- `tools/s2/bootpick.py` lays each address of the trace to the input section it lies in, not to a symbol: the first list had asked for `.text._sinf` and `.text._cosf` (the symbols; the sections are
+  `.text.sinf`, `.text.cosf`), which the linker ignored: the two functions with the most misses per byte stayed in the SDRAM.
+- One `gu_oversize()` (inline in `geom.h`); the palette's search is `pal_nearest()` (`s2car.c` has a `nearest()` of the road's); `tools/s2/perf_patch.py` knows the new text of `track.c` and the old
+  (the first round's commit had broken the PC's counting tools: `framestats.sh`, `check_cull_s2.sh`).
+- The profile build (`PROF=1`) is no measure of the piece loop: a counter added to it moved its lines in the I-cache and the loop took twice as long (`prof.h`). The controller's counters and the trace
+  (`hwvariant.py stat`, `trace`) measure the firmware itself.
+
+**Speed.**
+
+| firmware | window mean / max ms | grid of track 4, track 3: mean / max ms |
+|---|---|---|
+| as it was (a762c80) | 18.12 / 21.3 | 11.9 / 13.6, 10.9 / 12.7 |
+| first round (boot-RAM code by symbol names) | 16.84 / 19.2 | 11.3 / 13.0, 10.6 / 12.0 |
+| second round without boot-RAM code (against 17.98 / 21.2 of the first round without) | 17.69 / 21.2 | |
+| **second round, boot-RAM code by sections** (52 sections, 20 KB: 65 % of the misses, the first list had 47 %) | **16.08 / 18.1** | **11.0 / 12.5, 10.4 / 11.8** |
+
+What the single changes are, all with the same pieces in the same order (`tools/s2/check_cull_s2.sh 8be2f4b`: the list of pieces, the faces and the vertices are equal in every one of 5,400 frames
+on the seven tracks):
+- *The wheels' turn within one turn for the drawing* (`s2car_look`): the game's sum grows without end, and above 201 rad the library's sine and cosine went the long way for large arguments
+  (`__kernel_rem_pio2f`, eight calls a frame after the first seconds of a race). This is the one change that moves pixels: the pixel count differs in 4 to 12 of 400 race frames a track, in one of them a triangle too (the hubs; no frame differs without it).
+- *A line per mesh* (`mesh_line`: the object, its blocks of the three levels of detail, level 0's middle) and *the level of detail by the square of the distance* (`lod_sq`: the thresholds are found at the
+  track's set-up by trying squares with `track_lod_level()`'s own expression, so the level is the same for every distance): the dropped table of 2026-11-11, now that the layout no longer hides it.
+- *A cell wholly in view and in reach has its placements taken without their tests*: placements tested one by one 197 -> 94 a frame on track 4 (about half on every track), the cull 1.52 -> 1.45 ms:
+  less than half a placement's work was its tests.
+- *A car's pose once a frame* (`car_draw_pose`: the 14 library calls, the blocks' middles and places kept for the picture's pass and the mirror's) and *the trigonometry's memo shared* by the physics and
+  the cars' drawing: the mirror run (track 4, the mirror on from the start) 18.7 -> 18.4 ms. Little, because a car is in the picture or in the mirror, seldom in both.
+
+**Hardware variants again, on this firmware** (window mean / max ms; none built): none 16.08 / 18.1; the arbiter 16.19 / 17.4 (`w` 2.8 ms: the frame is the hardware's path now); the arbiter and the I-cache in
+two ways of 4 KB 16.05 / 17.2; with 2 x 8 KB 15.92 / 17.1; the CPU's branch prediction `DYNAMIC_TARGET` alone 15.93 / 18.1; branches resolved a stage earlier (`earlyBranch`) alone 15.94 / 17.9; arbiter,
+two ways, prediction and early branches together 15.86 / 17.0. The CPU's side is nearly used up by the software: these take 1 ms off the peaks and 0.2 ms off the mean. What is left is the path both sides
+share: a line of the geometry unit or the rasterizer is waiting for the arbiter in a fifth of all clocks (25,700 lines a frame), a miss of the CPU takes 30 to 85 clocks. A faster SDRAM path (the chip's
+clock, more than one job in the controller) and the geometry unit's side (its 4 KB read cache; the 1,400 cycles the CPU spends handing over each placement, most of which the unit could work out from
+the placement itself) are projects, not parameters, and not measured.
+
 ### What to read in `debug.txt` after the test
 
 The first line (the last state when the core is quit) ends with the longest frame: ` | a.. c.. s.. o.. w.. f.. p.. n..`.
@@ -573,6 +633,10 @@ from the Pocket's CHOICE.DAT (main part: set[6], view). On the PC, `REPLAY=<file
 race with the same buttons, but after a crash the computers' cars part from the Pocket's (the PC's float results are not the target's), so the position is only near.
 
 ### Reproduce
+
+A build checks its own code layout: `firmware/link_check.py` (the Makefile runs it) fails if a section named for the boot RAM or for the hot block is not there, or a function of the hot block
+calls one outside it. A new boot-RAM list: build with an empty `firmware/link_boot.ld`, trace it (`hwvariant.py t=trace=<clock>`), `python -I tools/s2/bootpick.py <map> <trace> <frames> 20000
+firmware/link_prog.ld firmware/link_boot.ld`.
 
 The hardware variants and the trace of the CPU's line reads: `python -I tools/s2/hwvariant.py i8w2p1=i8w2,p1 t=trace=271581184` (testbench directories `sim/soc_<name>/`, git-ignored), run with
 `tools/s2/sim_race_tb.sh soc_<name> <dir with firmware.bin and program.bin> <image> 4 76 <name>` like `sim_race.sh`; `python -I tools/s2/lsum.py build/sim/<name>_log.txt` sums a replay's `L` lines;

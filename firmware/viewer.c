@@ -89,7 +89,7 @@
 #ifndef RACE_OVERLAP
 #define RACE_OVERLAP    2               /* the computers' cars' steps: 2 while the pieces are handed on, whenever the geometry unit's buffer is full, the
                                            rest after the last piece and while the rasterizer finishes the picture (race.h); 1 only after the last
-                                           piece; 0 before the scene (one step with the player's) */
+                                           piece (as fast in the replayed race). Before the scene, the 0 there was, cost 3 ms and is gone. */
 #endif
 #define FALL_UNITS      3000.0f
 #define OFFER_FRAMES    50              /* the finished race offers "A: race again, B: menu" a second after the line */
@@ -641,6 +641,508 @@ static int other_track(int n, uint32_t press)
     return (press & KEY_RIGHT) ? n % TRACKS + 1 : (n + TRACKS - 2) % TRACKS + 1;
 }
 
+/* A visit's state from frame to frame, and what one frame's stages hand on (visit() below) */
+struct visit {
+    int n, *cars, *overlay, *drive;             /* the track and the caller's switches (visit()) */
+    const uint32_t *pal;
+    uint8_t col_text, col_bg;
+    float floor_z, s;                           /* the height a car is put back under; the ride's place on the road */
+    uint32_t keys_before, last_vf, drawn, window_vf, fin_frames;    /* (fin_frames: the frames the player has been finished) */
+    uint32_t in_prev, in_step, in_bytes, late_n;                    /* the log of the buttons and of the late frames (LATE_LOG_MAX, INPUT_LOG_BYTES) */
+    struct stats st_all;
+    uint32_t win_n, win_sum, win_max, shown_mean, shown_max, shown_faces, shown_n;      /* the overlay's last second */
+};
+struct frame {
+    uint32_t st, t_frame, vf, dvf;              /* the video status at the swap, the cycle counter then, the video frame, the video frames since the last frame started */
+    uint32_t keys, press;                       /* the buttons, and those that went down */
+    int sel, mode;
+    struct track_cam cam;
+    int nobj, rows, mirror_now;                 /* the scene: its objects (objs), the picture's rows, the mirror drawn */
+    uint32_t race_pending, others_cycles;       /* steps the computers' cars still have to take, what they took */
+    uint32_t hud_steps;                         /* the 20 ms steps this frame took, for the race screen's timers */
+    uint32_t phys_cycles, t_scene, t_wait, work, faces;
+    struct track_stats ts;
+    int veiled, hud;                            /* nothing of the scene is seen (the sequence's logos); the race screen is drawn */
+    volatile uint8_t *fb;
+};
+enum { BTN_GO, BTN_SKIP, BTN_LEAVE };           /* what the buttons ask of the frame: go on, no picture this time (the pause menu was up), the visit ends (with *out) */
+
+static float resume_s;                              /* where the road was left when only the cars changed */
+static int timeline_done;
+static struct track_object objs[ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX];     /* the cars, in a race the shadows and the puffs (s2fx.h), then the track's animated scenery (s2anim.h), the obstacles and the sparks (s2props.h) */
+_Static_assert(S2FX_CARS >= RACE_CARS, "s2fx.c keeps state for every car of the race");
+_Static_assert(ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX <= TRACK_MAX_OBJS, "track.c draws TRACK_MAX_OBJS objects at most");
+static struct track_object car_objs[ROAD_CARS];     /* followed is taken off the draw list */
+
+/* The frame begins when the last one is on the screen: the buttons, the video frames gone by */
+static void frame_begin(struct visit *v, struct frame *f)
+{
+    f->st = wait_swap_done();
+    f->t_frame = rdcycle();
+    f->vf = VID_FRAME(f->st);
+    f->keys = in_keys();
+    f->press = f->keys & ~v->keys_before;
+    v->keys_before = f->keys;
+    f->sel = (f->keys & KEY_SELECT) != 0;
+    f->mode = *v->drive ? -1 : *v->cars;
+    tl_begin(f->t_frame);
+    frames_shown = v->drawn;                           /* every frame drawn so far has been swapped in */
+    if (sim && v->drawn == sim_frames) {               /* the simulation ends: the last frame is up */
+        SYS_SIM = SIM_DONE | results;
+        dlog_str("SYS_SIM=");
+        dlog_hex(SIM_DONE | results);
+        dlog_char('\n');
+    }
+    f->dvf = v->drawn ? (f->vf - v->last_vf) & 0xFFFF : 0;     /* video frames since the last frame started */
+    if (v->drawn == 0) v->window_vf = f->vf;
+    v->st_all.video += f->dvf;
+    v->last_vf = f->vf;
+}
+
+/* The buttons of a race: the end screen's choices, the pause menu, the replay's keys, the view, the mirror, the overlay */
+static int race_buttons(struct visit *v, struct frame *f, int *out)
+{
+    if (!ui_ready && f->sel && (f->press & KEY_B)) {  /* Select + B: back to the menu, where there is no pause menu */
+        leave(v->n, f->mode, &v->st_all);
+        *out = 0;
+        return BTN_LEAVE;
+    }
+    if (end_choice == S2END_EXIT) {             /* the end screen's choices */
+        leave(v->n, f->mode, &v->st_all);
+        end_choice = 0;
+        attack_keep(v->n);
+        *out = 0;
+        return BTN_LEAVE;
+    }
+    if (end_choice == S2END_CONTINUE) {         /* the championship's end screen: the race is over, on to the report */
+        leave(v->n, f->mode, &v->st_all);
+        end_choice = 0;
+        if (!lg_res_valid && !race_replaying()) race_get_results(lg_res), lg_res_valid = 1;
+        *out = 0;
+        return BTN_LEAVE;
+    }
+    if (end_choice == S2END_REPLAY) {           /* the race again from the recording of this one (the places of the championship's are the ones taken now, 0x47e75) */
+        end_choice = 0;
+        if (league_mode && !race_replaying() && !lg_res_valid) race_get_results(lg_res), lg_res_valid = 1;
+        if (!replay_start(v->n, v->floor_z, v->pal)) {
+            leave(v->n, f->mode, &v->st_all);
+            *out = 0;
+            return BTN_LEAVE;
+        }
+        v->fin_frames = 0;
+    }
+    if (end_choice == S2END_AGAIN) {
+        end_choice = 0;
+        if (attack_mode == 1) {                 /* time attack: the run is kept if it is quicker, and what the next race loads depends on it (the ghost's car) */
+            leave(v->n, f->mode, &v->st_all);
+            attack_keep(v->n);
+            *out = VISIT_AGAIN;
+            return BTN_LEAVE;
+        }
+        race_start(v->n, v->floor_z);
+        v->fin_frames = 0;
+    }
+    if (!ui_ready && v->fin_frames > OFFER_FRAMES) {   /* without the toolkit, after the finish: A the race again, B the menu */
+        if (f->press & KEY_B) {
+            leave(v->n, f->mode, &v->st_all);
+            *out = 0;
+            return BTN_LEAVE;
+        }
+        if (f->press & KEY_A) {
+            race_start(v->n, v->floor_z);
+            v->fin_frames = 0;
+        }
+    }
+    if (race_replaying()) {                     /* the replay: there is no pause (ESC ends it, 0x2d7c0), and no controls to give; the views and the car followed are the keys (s2cam.h) */
+        struct race_hud hk;
+        race_get_hud(&hk);
+        if (f->press & (KEY_START | KEY_A | KEY_SELECT)) race_replay_stop();
+        if (!hk.finished) {                     /* (the keys of the views and of the car followed are taken while the player's car is racing, 0x132b4, 0x2d7c0) */
+            if (f->press & KEY_L) { s2cam_view(S2CAM_TRACKSIDE); follow(s2cam_get_follow()); }
+            if (f->press & KEY_R) { s2cam_view(S2CAM_BACK); follow(s2cam_get_follow()); }
+            if (f->press & (KEY_B | KEY_X)) { s2cam_next_view(); follow(s2cam_get_follow()); }         /* the views from the car in turn, the original's F1 .. F4 (the player's own are not kept: a replay) */
+            if (f->press & KEY_UP) follow((s2cam_get_follow() + 1) % race_cars());
+        }
+    } else if (f->press & KEY_START) {
+        if (ui_ready && v->drawn && !v->fin_frames) {      /* Start: the pause menu (not once the player has finished; the championship's has no RESTART) */
+            int choice = s2pause_run_items(!!(f->st & VID_FRONT), v->pal, !league_mode);
+            if (choice == S2PAUSE_EXIT) {
+                leave(v->n, f->mode, &v->st_all);
+                *out = 0;
+                return BTN_LEAVE;
+            }
+            if (choice == S2PAUSE_RESTART) {
+                race_start(v->n, v->floor_z);
+                v->fin_frames = 0;
+            }
+            v->keys_before = in_keys();            /* (what is held now, the gas, is no press) */
+            v->window_vf = v->last_vf = VID_FRAME(VID_STATUS);    /* the pause is not racing time: the next frame is one step */
+            return BTN_SKIP;
+        }
+    }
+    if ((f->press & KEY_X) && !race_replaying() && !cut_done) set_view(s2cam_next_view());     /* X: the next view from the car, as Screamer 1's X changes its camera (the original's F1 .. F4 in turn: full screen, at the wheel, the roof, from behind; not once the player has finished) */
+    if ((f->press & KEY_SELECT) && !race_replaying() && !cut_done && s2cam_get_view() != S2CAM_TRACKSIDE) mirror_on = !mirror_on;      /* Select: the rear-view mirror on and off (the original's M; not in a replay, where Select ends it) */
+    if ((f->press & (KEY_L | KEY_R)) && (f->keys & KEY_L) && (f->keys & KEY_R)) *v->overlay = !*v->overlay;     /* L and R together: the timing overlay (the owner's measuring tool; nothing else uses both) */
+    if (!race_replaying() && race_car(0)->manual != manual) {   /* nothing in a race changes the gearbox (the TRANSMISSION page and GAME SETTINGS choose it; d-pad up used to toggle it and was pressed by mistake while steering): if it differs it is a fault, logged once with the step and put back */
+        static int logged;
+        if (!logged++) {
+            dlog_str("race: the gearbox changed by itself at step ");
+            dlog_dec((int32_t)race_steps());
+            dlog_str("\n");
+        }
+        race_car(0)->manual = manual;
+    }
+    return BTN_GO;
+}
+
+/* The buttons of the ride: another track, the cars, the race, the overlay */
+static int ride_buttons(struct visit *v, struct frame *f, int *out)
+{
+    if (f->press & (KEY_LEFT | KEY_RIGHT)) {
+        leave(v->n, f->mode, &v->st_all);
+        *out = other_track(v->n, f->press);
+        return BTN_LEAVE;
+    }
+    if (f->press & KEY_A) {
+        leave(v->n, f->mode, &v->st_all);
+        *v->cars = *v->cars == 4 ? 0 : *v->cars == 0 ? 1 : 4;
+        resume_s = v->s;
+        *out = -v->n;                              /* the same track, the statistics from the start */
+        return BTN_LEAVE;
+    }
+    if (f->press & KEY_START) {
+        leave(v->n, f->mode, &v->st_all);
+        *v->drive = 1;
+        *out = -v->n;
+        return BTN_LEAVE;
+    }
+    if (f->press & KEY_B) {
+        if (f->sel) {                              /* Select + B: back to the menu */
+            leave(v->n, f->mode, &v->st_all);
+            *out = 0;
+            return BTN_LEAVE;
+        }
+        *v->overlay = !*v->overlay;
+    }
+    return BTN_GO;
+}
+
+/* The physics' steps (a race: the player's, and all but the last step's computers') and the scene: the camera, the objects (objs), the mirror's pass, the sound */
+static void frame_scene(struct visit *v, struct frame *f)
+{
+    f->rows = FB_H;
+    f->mirror_now = 0;
+    f->race_pending = 0;
+    f->others_cycles = 0;
+    f->hud_steps = 1;
+    /* the scene moves with real time: a video frame is 1/50 s whatever the frame took */
+    struct s2car_state *rc[RACE_CARS];                  /* the race's cars, the views from the car (s2cockpit.h): the view, the car followed, the scene's rows, the mirror, and the cars' objects before the car */
+    int view_now = S2CAM_BACK, follow_now = 0, ncar = 0;
+    others_in_scene = 0;
+    if (*v->drive) {
+        /* the physics at 50 steps a second, one per video frame since the last picture (in the simulation, one a
+           frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
+        uint32_t steps = sim || !v->drawn ? 1 : f->dvf > DRIVE_MAX_STEPS ? DRIVE_MAX_STEPS : f->dvf;
+        const uint32_t pv = ((f->keys >> 2) & 3) | (((f->keys >> 4) & 3) << 2) | (((f->keys >> 7) & 1) << 4);     /* left, right, A, B, Y (the frame's steps all take these) */
+        if (!sim && !attract_mode && pv != v->in_prev && v->in_bytes < INPUT_LOG_BYTES) {
+            char l[12], *q = fmt_udec(l, race_steps() - v->in_step);
+            *q++ = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"[pv];
+            *q++ = '\n';
+            *q = 0;
+            dlog_str(l);
+            v->in_bytes += (uint32_t)(q - l);
+            v->in_prev = pv;
+            v->in_step = race_steps();
+        }
+        for (uint32_t k = 0; k < steps; k++) {
+            struct s2car_input in = car_input(sim ? sim_keys(race_steps()) : f->keys);
+            in.gear_up = k == 0 && (f->press & KEY_R);         /* a gear on the one step the button went down */
+            in.gear_down = k == 0 && (f->press & KEY_L);
+            race_step_player(&in);
+            if (attract_mode && !att.over) {                /* the screen of the sequence, a step of it for each step of the race; the cameras' ten seconds */
+                s2cam_attract_tick(race_get_clock(), STEP_S);
+                s2att_step(&att, k == 0 && f->press != 0, &att_view);
+                if (att_view.music) s2snd_music(v->n);         /* (in the one step of the sequence that cues it: the frame's last view may not say so) */
+            }
+            /* the race is the same race whatever the frames took (a replay of it is exact): every step is the player's and then the computers', so that
+               a late frame's extra steps run in that order and only the last step's computers overlap the scene */
+            if (k + 1 < steps) race_step_others(1);
+        }
+        f->race_pending = 1;
+        f->hud_steps = steps;
+        if (f->race_pending && RACE_OVERLAP > 1) race_others_begin(f->race_pending);
+        for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
+        PF_VAR(pf);
+        f->nobj = road_race_scene(rc, race_cars(), &f->cam, objs);
+        view_now = s2cam_get_view();
+        follow_now = s2cam_get_follow();
+        ncar = f->nobj;
+        memcpy(car_objs, objs, (size_t)ncar * sizeof car_objs[0]);
+        if (s2ck_hides_car(view_now) && follow_now < f->nobj) {      /* INCAR and INSIDE: the car and its shadow are not in the picture (0x2b6b4) */
+            memmove(&objs[follow_now], &objs[follow_now + 1], (size_t)(f->nobj - follow_now - 1) * sizeof objs[0]);
+            f->nobj--;
+        }
+        f->rows = s2ck_rows(view_now, s2dash_row(s2ck_model(&race_grid[follow_now])));
+        f->mirror_now = mirror_on && view_now != S2CAM_TRACKSIDE && !race_replaying() && !attract_mode;
+        s2anim_frame((float)race_steps() * STEP_S, (int)rc[0]->pos[0], (int)rc[0]->pos[1], (int32_t)rc[0]->rec[0x4A8 / 4]);       /* the race clock is the steps run (0x13335c) */
+        f->nobj += s2anim_objects(objs + f->nobj, S2ANIM_OBJECTS);
+        if (!cut_done && attack_mode != 2) {        /* the player has done his laps: the camera cuts to the trackside cameras, following his car (0x201ee; the free run has no end) */
+            struct race_hud hc;
+            race_get_hud(&hc);
+            if (hc.finished) {
+                cut_done = 1;
+                cam_mode = 1;
+                s2cam_view(S2CAM_TRACKSIDE);
+                follow(0);
+            }
+        }
+        if (cam_mode || view_now != S2CAM_BACK) s2cam_frame((const struct s2car_state *const *)rc, race_cars(), (float)f->hud_steps * STEP_S, &f->cam);
+        if (f->mirror_now) draw_mirror(rc, race_cars(), follow_now, car_objs, ncar, !(f->st & VID_FRONT), f->race_pending && RACE_OVERLAP > 1);
+        s2fx_hide_shadow(s2ck_hides_car(view_now) ? follow_now : -1);
+        f->nobj += s2fx_objects(&f->cam, rc, race_cars(), objs + f->nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS - f->nobj);       /* (seen from the camera of this frame) */
+        f->nobj += s2props_objects(&f->cam, objs + f->nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - f->nobj);        /* (last: should the frame be over the limit, the cars and their effects stay) */
+        PF_ADD(PF_SCENE, pf); PF_SET(pf);
+        s2snd_frame(&f->cam);                          /* the race's sound (s2sound.h) */
+        PF_ADD(PF_SOUND, pf);
+    } else {
+        uint32_t steps = v->drawn ? (f->dvf > 10 ? 10 : f->dvf) : 1;
+        v->s += (float)steps * STEP_S * SPEED;
+        if (v->s > road_length()) v->s -= road_length();
+        f->nobj = road_scene(v->s, *v->cars, &f->cam, objs);
+    }
+    tl_mark(TL_PHYS);
+    f->phys_cycles = rdcycle() - f->t_frame;
+}
+
+/* The picture: the backdrop, the pieces to the geometry unit, the race screen, and the computers' steps while the hardware draws */
+static void frame_hardware(struct visit *v, struct frame *f)
+{
+    const struct rs_clip clip = { 0, 0, FB_W, f->rows };
+    struct su_view view;
+    track_view(&clip, &view);
+
+    /* the backdrop (the game's 0x83a68): the blitter copies it while the CPU culls the scene; the first
+       piece for the geometry unit waits until it is done (hw_piece) */
+    f->fb = FB(!(f->st & VID_FRONT));
+    draw_buf = !(f->st & VID_FRONT);
+    f->veiled = attract_mode && (att_view.black || att_view.exit);    /* the sequence's logos and its last frame: the screen is black, nothing of the scene is seen (s2attract.h): not drawn */
+    blit_start(&back, (int)draw_buf);
+    if (!f->veiled) track_backdrop_blit(&back, &clip, &f->cam);
+    if (f->rows < FB_H && !f->veiled) blit_fill(&back, 0, f->rows, FB_W, FB_H - f->rows, 0);       /* (INSIDE: the dashboard's picture is drawn over it, but for the pixels it leaves open) */
+    BL_CLOCKS = 0;
+    back_clocks = back_cycles = 0;
+    back_wait = 1;
+    if (!f->veiled) hw_blit(&back);
+    pal_faded(v->pal, 0x8000);
+    if (attract_mode) {                                     /* the picture out of white at the third stage, and into black at the end */
+        static uint32_t ap[256];                            /* (not on the stack: the race's 5.2 of 8 KB) */
+        if (s2att_palette(v->pal, &att_view, ap))
+            for (int i = 0; i < 256; i++) VID_PAL[i] = ap[i];
+    }
+
+    /* the pieces from the CPU to the geometry unit, its faces to the setup unit, the triangles to the
+       rasterizer */
+    if (f->veiled) memset(&f->ts, 0, sizeof f->ts);          /* (nothing drawn: the statistics have nothing) */
+    RS_PIXELS = 0;
+    RS_MISSES = 0;
+    RS_CLOCKS = 0;
+    SU_CLOCKS = 0;
+    GU_CLOCKS = 0;
+    GU_FACES = 0;
+    GU_MODE = draw_buf << 8;
+    draw_wait = 0;
+    tl_mark(TL_PREP);
+    RS_CLIP0 = RS_XY(clip.x0, clip.y0);
+    RS_CLIP1 = RS_XY(clip.x1, clip.y1);
+    su_view_regs(&view);
+    tl_scene = 1;
+    f->t_scene = rdcycle();
+    if (f->race_pending && RACE_OVERLAP > 1) hw_idle = others_slice;
+    if (!f->veiled) track_draw_cam(0, &clip, &f->cam, objs, f->nobj, &f->ts);
+    hw_idle = 0;
+    tl_scene = 0;
+    tl_mark(TL_SCENE);
+    /* the race screen (s2hud.c): its blitter list is made and handed on now, the blitter draws it over the finished scene as soon as
+       the 3D units are done, while the CPU goes on with the computers' steps; the timing overlay's two lines come after it, and
+       the screen's elements near them move down 16 rows while the overlay is on */
+    f->hud = *v->drive && !attract_mode && s2hud_ready();
+    if (f->hud) {
+        s2hud_scene(f->mirror_now ? mirror_strip : 0, f->rows);
+        s2hud_draw(&f->cam, &view, f->hud_steps, *v->overlay ? 16 : 0);
+    }
+    if (attract_mode) {                             /* the sequence's screen instead of the race screen (0x45882 calls 0x37ec1 in its place) */
+        static struct blit_list att_list;
+        blit_start(&att_list, (int)draw_buf);
+        s2att_draw(&att_list, &att, &att_view);
+        hw_blit(&att_list);
+    }
+    if (*v->drive) {                                   /* the computers' cars' steps (what is left of them) while the rasterizer finishes the picture */
+        uint32_t t_o = rdcycle();
+        if (RACE_OVERLAP > 1) while (race_others_slice())
+            ;
+        else race_step_others(f->race_pending);
+        f->others_cycles = rdcycle() - t_o + others_in_scene;
+        tl_mark(TL_OTHERS);                         /* (the timeline: the computers' steps after the scene, not a wait) */
+        struct s2car_state *fc[RACE_CARS];          /* the puffs of the steps just taken, from the cars as they stand now (s2fx.h; they show in the next frame) */
+        for (int i = 0; i < race_cars(); i++) fc[i] = race_car(i);
+        s2fx_update(fc, race_cars(), (int)f->hud_steps, race_steps() * 2, s2cam_get_view() == S2CAM_BACK ? s2cam_get_follow() : -1);
+    }
+    f->t_wait = rdcycle();
+    while (RS_DRAW & RS_BUSY)
+        ;
+    tl_mark(TL_WAIT);
+    f->work = rdcycle() - f->t_frame;
+    f->faces = GU_FACES;
+
+}
+
+/* The text over the finished picture: the timing overlay, the race's text, the end screen */
+static void frame_text(struct visit *v, struct frame *f)
+{
+    /* the timing, drawn over the picture once the rasterizer and the blitter are done; in the driving mode without the race screen also the
+       speed and the gear (top right) */
+    if (*v->overlay) {
+        char l[40], *p;
+        p = fmt_ms(l, v->shown_mean);
+        p = fmt_ms(fmt_str(p, " ms  max "), v->shown_max);
+        p = fmt_str(p, " ms");
+        if (v->shown_n) fmt_str(fmt_udec(fmt_str(p, "  "), v->shown_n), " fps");     /* the pictures of the last second (the ms are the work of a picture, not the time between two) */
+        con_text(f->fb, 0, 0, l, v->col_text, v->col_bg);
+        p = fmt_udec(fmt_str(l, "T"), (uint32_t)v->n);
+        p = *v->drive ? fmt_str(p, "  drive") : fmt_udec(fmt_str(p, "  cars "), (uint32_t)*v->cars);
+        fmt_udec(fmt_str(p, "  faces "), v->shown_faces);
+        con_text(f->fb, 0, 1, l, v->col_text, v->col_bg);
+    }
+    if (*v->drive && !attract_mode) {
+        const struct s2car_state *pc = race_car(0);
+        char l[24], *p = fmt_udec(l, (uint32_t)(pc->speed_mph + 0.5f));
+        p = fmt_str(p, " mph  G");
+        p = pc->gear > 0 ? fmt_udec(p, (uint32_t)pc->gear) : fmt_str(p, "N");
+        fmt_str(p, manual ? " MAN" : " AUTO");
+        if (!f->hud) con_text(f->fb, CON_COLS - (int)__builtin_strlen(l), 0, l, v->col_text, v->col_bg);
+        int finished = race_text(f->fb, v->col_text, v->col_bg, v->fin_frames > OFFER_FRAMES, f->hud);
+        if (!finished && race_replaying() && f->hud) s2hud_band(f->fb, (int)draw_buf, band_text());       /* the replay's band while the player's car runs (0x4658c) */
+        if (finished && ui_ready) end_screen(v->n, f->fb, v->pal, v->fin_frames, f->vf, f->press);
+        v->fin_frames = finished ? v->fin_frames + 1 : 0;
+#ifdef S2_SIM_END
+        if (sim && v->drawn >= 2 && v->drawn <= 9) {          /* a measurement build (tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_END=1 TAG=simend): the end screen over the first frames */
+            uint32_t t_e = rdcycle();
+            end_screen(v->n, f->fb, v->pal, v->drawn == 2 ? 0 : 1, v->drawn == 2 ? 1000 : v->drawn == 3 ? 1200 : 1201 + v->drawn - 4, 0);
+            dlog_str("end screen frame ");
+            dlog_dec((int32_t)v->drawn);
+            dlog_str(": ");
+            dlog_dec((int32_t)((rdcycle() - t_e) / (CPU_HZ / 1000000)));
+            dlog_str(" us\n");
+        }
+#endif
+    }
+    tl_mark(TL_HUD);
+
+}
+
+/* The statistics of the visit and of the last second, debug.txt's lines */
+static void frame_stats(struct visit *v, struct frame *f)
+{
+    /* the statistics of the visit and of the last second (a frame the sequence's logos veil drew nothing: it is left out) */
+    static struct stats scrap;
+    struct stats *sa = f->veiled ? &scrap : &v->st_all;
+    sa->sum += f->work;
+    sa->n++;
+    sa->faces += f->faces;
+    sa->phys += f->phys_cycles;
+    if (f->phys_cycles > sa->phys_max) sa->phys_max = f->phys_cycles;
+    sa->others += f->others_cycles;
+    if (f->others_cycles > sa->others_max) sa->others_max = f->others_cycles;
+    sa->pieces += f->ts.pieces;
+    sa->over += f->work > LATE_CYCLES;
+    if (LATE_FRAME(f->work) && *v->drive && !f->veiled && LATE_SIM_OK && !attract_mode && v->late_n < LATE_LOG_MAX) {
+        v->late_n++;
+        float lnode;
+        memcpy(&lnode, &race_car(0)->rec[0x4b8 / 4], 4);
+        char l[88], *q = fmt_udec(fmt_str(l, "L"), race_steps() / 50);
+        *q++ = '.';
+        *q++ = (char)('0' + race_steps() % 50 / 5);
+        q = fmt_ms(fmt_str(q, " "), f->work);
+        q = fmt_udec(fmt_str(q, " k"), f->hud_steps);
+        q = fmt_ms(fmt_str(q, " a"), f->t_scene - f->t_frame);
+        q = fmt_ms(fmt_str(q, " c"), f->ts.cyc_cull);
+        q = fmt_ms(fmt_str(q, " s"), f->t_wait - f->t_scene - f->others_cycles - f->ts.cyc_cull);
+        q = fmt_ms(fmt_str(q, " o"), f->others_cycles);
+        q = fmt_ms(fmt_str(q, " i"), others_in_scene);        /* (of it, the part done in the scene's gaps: hw_idle) */
+        q = fmt_ms(fmt_str(q, " w"), f->work - (f->t_wait - f->t_frame));
+        q = fmt_udec(fmt_str(q, " p"), f->ts.pieces);
+        q = fmt_udec(fmt_str(q, " n"), lnode > 0.0f ? (uint32_t)lnode : 0);
+        q = fmt_udec(fmt_str(q, " m"), (uint32_t)s2fx_puffs());
+        *q++ = '\n';
+        *q = 0;
+        dlog_str(l);
+    }
+    if (f->work > sa->max) {
+        sa->max = f->work;
+        sa->worst_s = v->s;
+        if (*v->drive) {
+            float node;
+            memcpy(&node, &race_car(0)->rec[0x4b8 / 4], 4);       /* where the player is on the line (node, a float) */
+            sa->worst_s = node > 0.0f ? node : 0.0f;
+        }
+        sa->w_pre = f->t_scene - f->t_frame;
+        sa->w_cull = f->ts.cyc_cull;
+        sa->w_scene = f->t_wait - f->t_scene - f->others_cycles - f->ts.cyc_cull;
+        sa->w_others = f->others_cycles;
+        sa->w_wait = f->work - (f->t_wait - f->t_frame);
+        sa->w_faces = f->faces;
+        sa->w_pieces = f->ts.pieces;
+    }
+    v->win_n++;
+    v->win_sum += f->work > 0x20000000u ? 0x20000000u : f->work;
+    if (f->work > v->win_max) v->win_max = f->work;
+    v->shown_faces = f->faces;
+    if (v->drawn == 0) v->shown_mean = v->shown_max = f->work;      /* until the first second is full */
+    if (((f->vf - v->window_vf) & 0xFFFF) >= VID_HZ && v->win_n) {
+        v->shown_mean = v->win_sum / v->win_n;
+        v->shown_max = v->win_max;
+        v->shown_n = v->win_n;
+        v->win_n = v->win_sum = v->win_max = 0;
+        v->window_vf = f->vf;
+    }
+    if (v->drawn % 25 == 0) {
+        char head[128];
+        stats_text(head, v->n, f->mode, &v->st_all, 0);
+        dlog_head(head);                            /* debug.txt's first line, live */
+#ifndef S2_PROF                                         /* (the profile's log needs the room) */
+        if (sim && *v->drive) {                        /* the driving mode's progress in the simulation */
+            dlog_str("d");
+            dlog_dec((int32_t)v->drawn);
+            dlog_str(": ");
+            dlog_dec((int32_t)(race_car(0)->speed_mph + 0.5f));
+            dlog_str(" mph G");
+            dlog_dec(race_car(0)->gear);
+            dlog_str(" yaw ");
+            dlog_dec((int32_t)(race_car(0)->yaw * 100.0f));
+            dlog_str(" pos ");
+            dlog_dec((int32_t)race_car(0)->pos[0]);
+            dlog_char(' ');
+            dlog_dec((int32_t)race_car(0)->pos[1]);
+            dlog_char('\n');
+        }
+#endif
+    }
+    /* the timeline of the frame before, once: it is a kilobyte */
+    if (!timeline_done && (sim ? v->drawn + 1 == sim_frames : VIEWER_TIMELINE && v->st_all.video >= 5 * VID_HZ)) {
+        timeline_done = 1;
+        tl_log();
+    }
+    if (sim && v->drawn + 1 == sim_frames) {
+        log_stats(v->n, f->mode, &v->st_all);
+#ifdef S2_PROF
+        prof_log(v->drawn + 1);
+#endif
+        dlog_str("stack used ");
+        dlog_dec((int32_t)stack_used());
+        dlog_str(" bytes\n");
+    }
+}
+
 /* A visit to track n until the player picks another (its number), asks for the menu (0: Select + B, or B after the finish), or a
    button changes the cars, the mode or the overlay (they stay: -n, the same track again). The image is set up (load_track).
    Ride mode (*drive 0): the camera rides the road at a constant speed, the player's stand-in car and up to
@@ -648,9 +1150,10 @@ static int other_track(int n, uint32_t press)
    cars on the grid with him, the camera is the physics' chase camera. */
 static int visit(int n, int *cars, int *overlay, int *drive)
 {
-    const uint32_t *pal = track_palette();
-    const uint8_t col_text = pal_nearest((const volatile uint32_t *)pal, 255, 255, 255);
-    const uint8_t col_bg = pal_nearest((const volatile uint32_t *)pal, 0, 0, 0);
+    struct visit vs = { .n = n, .cars = cars, .overlay = overlay, .drive = drive }, *const v = &vs;
+    v->pal = track_palette();
+    v->col_text = pal_nearest((const volatile uint32_t *)v->pal, 255, 255, 255);
+    v->col_bg = pal_nearest((const volatile uint32_t *)v->pal, 0, 0, 0);
     track_mode = TRACK_HW;
     track_hw_piece = hw_piece;
     GU_MLB = (uint32_t)((uintptr_t)track_mlb() - SDRAM_BASE);
@@ -658,15 +1161,11 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     if (track_fx(&fx)) smg_load(fx.table);              /* the see-through table of the image (smg.h) */
     GU_INVAL = 1;
     RS_CTRL = 1;
-    static float resume_s;                              /* where the road was left when only the cars changed */
-    static int timeline_done;
-    uint32_t keys_before = in_keys(), last_vf = 0, drawn = 0, window_vf = 0, fin_frames = 0;    /* (frames the player has been finished) */
-    uint32_t in_prev = 0, in_step = 0, in_bytes = 0, late_n = 0;     /* the log of the buttons and of the late frames (LATE_LOG_MAX, INPUT_LOG_BYTES) */
-    struct stats st_all = { 0 };
-    float s = resume_s, floor_z = road_floor() - FALL_UNITS;
+    v->keys_before = in_keys();
+    v->s = resume_s;
+    v->floor_z = road_floor() - FALL_UNITS;
     resume_s = 0.0f;
-    uint32_t win_n = 0, win_sum = 0, win_max = 0, shown_mean = 0, shown_max = 0, shown_faces = 0, shown_n = 0;
-    if (*drive && !race_start(n, floor_z)) {          /* no race on this track: the ride instead (the championship stops) */
+    if (*drive && !race_start(n, v->floor_z)) {       /* no race on this track: the ride instead (the championship stops) */
         *drive = 0;
         return league_mode || attack_mode ? 0 : -n;
     }
@@ -688,440 +1187,23 @@ static int visit(int n, int *cars, int *overlay, int *drive)
 #endif
     s2load_fade();                                      /* the LOADING picture was up through the track's build and the race's set-up (no-op if none) */
     for (;;) {
-        uint32_t st = wait_swap_done(), t_frame = rdcycle(), vf = VID_FRAME(st);
-        uint32_t keys = in_keys(), press = keys & ~keys_before;
-        keys_before = keys;
-        int sel = (keys & KEY_SELECT) != 0, mode = *drive ? -1 : *cars;
-        tl_begin(t_frame);
-        frames_shown = drawn;                           /* every frame drawn so far has been swapped in */
-        if (sim && drawn == sim_frames) {               /* the simulation ends: the last frame is up */
-            SYS_SIM = SIM_DONE | results;
-            dlog_str("SYS_SIM=");
-            dlog_hex(SIM_DONE | results);
-            dlog_char('\n');
-        }
-        uint32_t dvf = drawn ? (vf - last_vf) & 0xFFFF : 0;     /* video frames since the last frame started */
-        if (drawn == 0) window_vf = vf;
-        st_all.video += dvf;
-        last_vf = vf;
-        /* the buttons: another track (this visit ends), the cars, the mode, the overlay */
-        if (attract_mode) {
-            /* (no button but the one that ends it: the screen's step takes it below) */
-        } else if (*drive) {
-            if (!ui_ready && sel && (press & KEY_B)) {  /* Select + B: back to the menu, where there is no pause menu */
-                leave(n, mode, &st_all);
-                return 0;
-            }
-            if (end_choice == S2END_EXIT) {             /* the end screen's choices */
-                leave(n, mode, &st_all);
-                end_choice = 0;
-                attack_keep(n);
-                return 0;
-            }
-            if (end_choice == S2END_CONTINUE) {         /* the championship's end screen: the race is over, on to the report */
-                leave(n, mode, &st_all);
-                end_choice = 0;
-                if (!lg_res_valid && !race_replaying()) race_get_results(lg_res), lg_res_valid = 1;
-                return 0;
-            }
-            if (end_choice == S2END_REPLAY) {           /* the race again from the recording of this one (the places of the championship's are the ones taken now, 0x47e75) */
-                end_choice = 0;
-                if (league_mode && !race_replaying() && !lg_res_valid) race_get_results(lg_res), lg_res_valid = 1;
-                if (!replay_start(n, floor_z, pal)) {
-                    leave(n, mode, &st_all);
-                    return 0;
-                }
-                fin_frames = 0;
-            }
-            if (end_choice == S2END_AGAIN) {
-                end_choice = 0;
-                if (attack_mode == 1) {                 /* time attack: the run is kept if it is quicker, and what the next race loads depends on it (the ghost's car) */
-                    leave(n, mode, &st_all);
-                    attack_keep(n);
-                    return VISIT_AGAIN;
-                }
-                race_start(n, floor_z);
-                fin_frames = 0;
-            }
-            if (!ui_ready && fin_frames > OFFER_FRAMES) {   /* without the toolkit, after the finish: A the race again, B the menu */
-                if (press & KEY_B) {
-                    leave(n, mode, &st_all);
-                    return 0;
-                }
-                if (press & KEY_A) {
-                    race_start(n, floor_z);
-                    fin_frames = 0;
-                }
-            }
-            if (race_replaying()) {                     /* the replay: there is no pause (ESC ends it, 0x2d7c0), and no controls to give; the views and the car followed are the keys (s2cam.h) */
-                struct race_hud hk;
-                race_get_hud(&hk);
-                if (press & (KEY_START | KEY_A | KEY_SELECT)) race_replay_stop();
-                if (!hk.finished) {                     /* (the keys of the views and of the car followed are taken while the player's car is racing, 0x132b4, 0x2d7c0) */
-                    if (press & KEY_L) { s2cam_view(S2CAM_TRACKSIDE); follow(s2cam_get_follow()); }
-                    if (press & KEY_R) { s2cam_view(S2CAM_BACK); follow(s2cam_get_follow()); }
-                    if (press & (KEY_B | KEY_X)) { s2cam_next_view(); follow(s2cam_get_follow()); }         /* the views from the car in turn, the original's F1 .. F4 (the player's own are not kept: a replay) */
-                    if (press & KEY_UP) follow((s2cam_get_follow() + 1) % race_cars());
-                }
-            } else if (press & KEY_START) {
-                if (ui_ready && drawn && !fin_frames) {      /* Start: the pause menu (not once the player has finished; the championship's has no RESTART) */
-                    int choice = s2pause_run_items(!!(st & VID_FRONT), pal, !league_mode);
-                    if (choice == S2PAUSE_EXIT) {
-                        leave(n, mode, &st_all);
-                        return 0;
-                    }
-                    if (choice == S2PAUSE_RESTART) {
-                        race_start(n, floor_z);
-                        fin_frames = 0;
-                    }
-                    keys_before = in_keys();            /* (what is held now, the gas, is no press) */
-                    window_vf = last_vf = VID_FRAME(VID_STATUS);    /* the pause is not racing time: the next frame is one step */
-                    continue;
-                }
-            }
-            if ((press & KEY_X) && !race_replaying() && !cut_done) set_view(s2cam_next_view());     /* X: the next view from the car, as Screamer 1's X changes its camera (the original's F1 .. F4 in turn: full screen, at the wheel, the roof, from behind; not once the player has finished) */
-            if ((press & KEY_SELECT) && !race_replaying() && !cut_done && s2cam_get_view() != S2CAM_TRACKSIDE) mirror_on = !mirror_on;      /* Select: the rear-view mirror on and off (the original's M; not in a replay, where Select ends it) */
-            if ((press & (KEY_L | KEY_R)) && (keys & KEY_L) && (keys & KEY_R)) *overlay = !*overlay;     /* L and R together: the timing overlay (the owner's measuring tool; nothing else uses both) */
-            if (!race_replaying() && race_car(0)->manual != manual) {   /* nothing in a race changes the gearbox (the TRANSMISSION page and GAME SETTINGS choose it; d-pad up used to toggle it and was pressed by mistake while steering): if it differs it is a fault, logged once with the step and put back */
-                static int logged;
-                if (!logged++) {
-                    dlog_str("race: the gearbox changed by itself at step ");
-                    dlog_dec((int32_t)race_steps());
-                    dlog_str("\n");
-                }
-                race_car(0)->manual = manual;
-            }
-        } else {
-            if (press & (KEY_LEFT | KEY_RIGHT)) {
-                leave(n, mode, &st_all);
-                return other_track(n, press);
-            }
-            if (press & KEY_A) {
-                leave(n, mode, &st_all);
-                *cars = *cars == 4 ? 0 : *cars == 0 ? 1 : 4;
-                resume_s = s;
-                return -n;                              /* the same track, the statistics from the start */
-            }
-            if (press & KEY_START) {
-                leave(n, mode, &st_all);
-                *drive = 1;
-                return -n;
-            }
-            if (press & KEY_B) {
-                if (sel) {                              /* Select + B: back to the menu */
-                    leave(n, mode, &st_all);
-                    return 0;
-                }
-                *overlay = !*overlay;
-            }
-        }
-
-        /* the scene moves with real time: a video frame is 1/50 s whatever the frame took */
-        struct track_cam cam;
-        static struct track_object objs[ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX];     /* the cars, in a race the shadows and the puffs (s2fx.h), then the track's animated scenery (s2anim.h), the obstacles and the sparks (s2props.h) */
-        _Static_assert(S2FX_CARS >= RACE_CARS, "s2fx.c keeps state for every car of the race");
-        _Static_assert(ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX <= TRACK_MAX_OBJS, "track.c draws TRACK_MAX_OBJS objects at most");
-        int nobj;
-        struct s2car_state *rc[RACE_CARS];                  /* the race's cars, the views from the car (s2cockpit.h): the view, the car followed, the scene's rows, the mirror, and the cars' objects before the car */
-        static struct track_object car_objs[ROAD_CARS];     /* followed is taken off the draw list */
-        int view_now = S2CAM_BACK, follow_now = 0, rows = FB_H, ncar = 0, mirror_now = 0;
-        uint32_t race_pending = 0, others_cycles = 0;       /* steps the computers' cars still have to take, what they took */
-        uint32_t hud_steps = 1;                             /* the 20 ms steps this frame took, for the race screen's timers */
-        others_in_scene = 0;
-        if (*drive) {
-            /* the physics at 50 steps a second, one per video frame since the last picture (in the simulation, one a
-               frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
-            uint32_t steps = sim || !drawn ? 1 : dvf > DRIVE_MAX_STEPS ? DRIVE_MAX_STEPS : dvf;
-            const uint32_t pv = ((keys >> 2) & 3) | (((keys >> 4) & 3) << 2) | (((keys >> 7) & 1) << 4);     /* left, right, A, B, Y (the frame's steps all take these) */
-            if (!sim && !attract_mode && pv != in_prev && in_bytes < INPUT_LOG_BYTES) {
-                char l[12], *q = fmt_udec(l, race_steps() - in_step);
-                *q++ = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"[pv];
-                *q++ = '\n';
-                *q = 0;
-                dlog_str(l);
-                in_bytes += (uint32_t)(q - l);
-                in_prev = pv;
-                in_step = race_steps();
-            }
-            for (uint32_t k = 0; k < steps; k++) {
-                struct s2car_input in = car_input(sim ? sim_keys(race_steps()) : keys);
-                in.gear_up = k == 0 && (press & KEY_R);         /* a gear on the one step the button went down */
-                in.gear_down = k == 0 && (press & KEY_L);
-                race_step_player(&in);
-                if (attract_mode && !att.over) {                /* the screen of the sequence, a step of it for each step of the race; the cameras' ten seconds */
-                    s2cam_attract_tick(race_get_clock(), STEP_S);
-                    s2att_step(&att, k == 0 && press != 0, &att_view);
-                    if (att_view.music) s2snd_music(n);         /* (in the one step of the sequence that cues it: the frame's last view may not say so) */
-                }
-                /* the race is the same race whatever the frames took (a replay of it is exact): every step is the player's and then the computers', so that
-                   a late frame's extra steps run in that order and only the last step's computers overlap the scene */
-                if (!RACE_OVERLAP || k + 1 < steps) race_step_others(1);
-            }
-            race_pending = RACE_OVERLAP ? 1 : 0;
-            hud_steps = steps;
-            if (race_pending && RACE_OVERLAP > 1) race_others_begin(race_pending);
-            for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
-            PF_VAR(pf);
-            nobj = road_race_scene(rc, race_cars(), &cam, objs);
-            view_now = s2cam_get_view();
-            follow_now = s2cam_get_follow();
-            ncar = nobj;
-            memcpy(car_objs, objs, (size_t)ncar * sizeof car_objs[0]);
-            if (s2ck_hides_car(view_now) && follow_now < nobj) {      /* INCAR and INSIDE: the car and its shadow are not in the picture (0x2b6b4) */
-                memmove(&objs[follow_now], &objs[follow_now + 1], (size_t)(nobj - follow_now - 1) * sizeof objs[0]);
-                nobj--;
-            }
-            rows = s2ck_rows(view_now, s2dash_row(s2ck_model(&race_grid[follow_now])));
-            mirror_now = mirror_on && view_now != S2CAM_TRACKSIDE && !race_replaying() && !attract_mode;
-            s2anim_frame((float)race_steps() * STEP_S, (int)rc[0]->pos[0], (int)rc[0]->pos[1], (int32_t)rc[0]->rec[0x4A8 / 4]);       /* the race clock is the steps run (0x13335c) */
-            nobj += s2anim_objects(objs + nobj, S2ANIM_OBJECTS);
-            if (!cut_done && attack_mode != 2) {        /* the player has done his laps: the camera cuts to the trackside cameras, following his car (0x201ee; the free run has no end) */
-                struct race_hud hc;
-                race_get_hud(&hc);
-                if (hc.finished) {
-                    cut_done = 1;
-                    cam_mode = 1;
-                    s2cam_view(S2CAM_TRACKSIDE);
-                    follow(0);
-                }
-            }
-            if (cam_mode || view_now != S2CAM_BACK) s2cam_frame((const struct s2car_state *const *)rc, race_cars(), (float)hud_steps * STEP_S, &cam);
-            if (mirror_now) draw_mirror(rc, race_cars(), follow_now, car_objs, ncar, !(st & VID_FRONT), race_pending && RACE_OVERLAP > 1);
-            s2fx_hide_shadow(s2ck_hides_car(view_now) ? follow_now : -1);
-            nobj += s2fx_objects(&cam, rc, race_cars(), objs + nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS - nobj);       /* (seen from the camera of this frame) */
-            nobj += s2props_objects(&cam, objs + nobj, ROAD_CARS + S2FX_MAX + S2ANIM_OBJECTS + S2PROPS_MAX - nobj);        /* (last: should the frame be over the limit, the cars and their effects stay) */
-            PF_ADD(PF_SCENE, pf); PF_SET(pf);
-            s2snd_frame(&cam);                          /* the race's sound (s2sound.h) */
-            PF_ADD(PF_SOUND, pf);
-        } else {
-            uint32_t steps = drawn ? (dvf > 10 ? 10 : dvf) : 1;
-            s += (float)steps * STEP_S * SPEED;
-            if (s > road_length()) s -= road_length();
-            nobj = road_scene(s, *cars, &cam, objs);
-        }
-        tl_mark(TL_PHYS);
-        const uint32_t phys_cycles = rdcycle() - t_frame;
-        const struct rs_clip clip = { 0, 0, FB_W, rows };
-        struct su_view view;
-        track_view(&clip, &view);
-
-        /* the backdrop (the game's 0x83a68): the blitter copies it while the CPU culls the scene; the first
-           piece for the geometry unit waits until it is done (hw_piece) */
-        volatile uint8_t *fb = FB(!(st & VID_FRONT));
-        draw_buf = !(st & VID_FRONT);
-        const int veiled = attract_mode && (att_view.black || att_view.exit);    /* the sequence's logos and its last frame: the screen is black, nothing of the scene is seen (s2attract.h): not drawn */
-        blit_start(&back, (int)draw_buf);
-        if (!veiled) track_backdrop_blit(&back, &clip, &cam);
-        if (rows < FB_H && !veiled) blit_fill(&back, 0, rows, FB_W, FB_H - rows, 0);       /* (INSIDE: the dashboard's picture is drawn over it, but for the pixels it leaves open) */
-        BL_CLOCKS = 0;
-        back_clocks = back_cycles = 0;
-        back_wait = 1;
-        if (!veiled) hw_blit(&back);
-        pal_faded(pal, 0x8000);
-        if (attract_mode) {                                     /* the picture out of white at the third stage, and into black at the end */
-            static uint32_t ap[256];                            /* (not on the stack: the race's 5.2 of 8 KB) */
-            if (s2att_palette(pal, &att_view, ap))
-                for (int i = 0; i < 256; i++) VID_PAL[i] = ap[i];
-        }
-
-        /* the pieces from the CPU to the geometry unit, its faces to the setup unit, the triangles to the
-           rasterizer */
-        struct track_stats ts;
-        if (veiled) memset(&ts, 0, sizeof ts);          /* (nothing drawn: the statistics have nothing) */
-        RS_PIXELS = 0;
-        RS_MISSES = 0;
-        RS_CLOCKS = 0;
-        SU_CLOCKS = 0;
-        GU_CLOCKS = 0;
-        GU_FACES = 0;
-        GU_MODE = draw_buf << 8;
-        draw_wait = 0;
-        tl_mark(TL_PREP);
-        RS_CLIP0 = RS_XY(clip.x0, clip.y0);
-        RS_CLIP1 = RS_XY(clip.x1, clip.y1);
-        su_view_regs(&view);
-        tl_scene = 1;
-        const uint32_t t_scene = rdcycle();
-        if (race_pending && RACE_OVERLAP > 1) hw_idle = others_slice;
-        if (!veiled) track_draw_cam(0, &clip, &cam, objs, nobj, &ts);
-        hw_idle = 0;
-        tl_scene = 0;
-        tl_mark(TL_SCENE);
-        /* the race screen (s2hud.c): its blitter list is made and handed on now, the blitter draws it over the finished scene as soon as
-           the 3D units are done, while the CPU goes on with the computers' steps; the timing overlay's two lines come after it, and
-           the screen's elements near them move down 16 rows while the overlay is on */
-        const int hud = *drive && !attract_mode && s2hud_ready();
-        if (hud) {
-            s2hud_scene(mirror_now ? mirror_strip : 0, rows);
-            s2hud_draw(&cam, &view, hud_steps, *overlay ? 16 : 0);
-        }
-        if (attract_mode) {                             /* the sequence's screen instead of the race screen (0x45882 calls 0x37ec1 in its place) */
-            static struct blit_list att_list;
-            blit_start(&att_list, (int)draw_buf);
-            s2att_draw(&att_list, &att, &att_view);
-            hw_blit(&att_list);
-        }
-        if (*drive) {                                   /* the computers' cars' steps (what is left of them) while the rasterizer finishes the picture */
-            uint32_t t_o = rdcycle();
-            if (RACE_OVERLAP > 1) while (race_others_slice())
-                ;
-            else race_step_others(race_pending);
-            others_cycles = rdcycle() - t_o + others_in_scene;
-            tl_mark(TL_OTHERS);                         /* (the timeline: the computers' steps after the scene, not a wait) */
-            struct s2car_state *fc[RACE_CARS];          /* the puffs of the steps just taken, from the cars as they stand now (s2fx.h; they show in the next frame) */
-            for (int i = 0; i < race_cars(); i++) fc[i] = race_car(i);
-            s2fx_update(fc, race_cars(), (int)hud_steps, race_steps() * 2, s2cam_get_view() == S2CAM_BACK ? s2cam_get_follow() : -1);
-        }
-        const uint32_t t_wait = rdcycle();
-        while (RS_DRAW & RS_BUSY)
-            ;
-        tl_mark(TL_WAIT);
-        uint32_t work = rdcycle() - t_frame, faces = GU_FACES;
-
-        /* the timing, drawn over the picture once the rasterizer and the blitter are done; in the driving mode without the race screen also the
-           speed and the gear (top right) */
-        if (*overlay) {
-            char l[40], *p;
-            p = fmt_ms(l, shown_mean);
-            p = fmt_ms(fmt_str(p, " ms  max "), shown_max);
-            p = fmt_str(p, " ms");
-            if (shown_n) fmt_str(fmt_udec(fmt_str(p, "  "), shown_n), " fps");     /* the pictures of the last second (the ms are the work of a picture, not the time between two) */
-            con_text(fb, 0, 0, l, col_text, col_bg);
-            p = fmt_udec(fmt_str(l, "T"), (uint32_t)n);
-            p = *drive ? fmt_str(p, "  drive") : fmt_udec(fmt_str(p, "  cars "), (uint32_t)*cars);
-            fmt_udec(fmt_str(p, "  faces "), shown_faces);
-            con_text(fb, 0, 1, l, col_text, col_bg);
-        }
-        if (*drive && !attract_mode) {
-            const struct s2car_state *pc = race_car(0);
-            char l[24], *p = fmt_udec(l, (uint32_t)(pc->speed_mph + 0.5f));
-            p = fmt_str(p, " mph  G");
-            p = pc->gear > 0 ? fmt_udec(p, (uint32_t)pc->gear) : fmt_str(p, "N");
-            fmt_str(p, manual ? " MAN" : " AUTO");
-            if (!hud) con_text(fb, CON_COLS - (int)__builtin_strlen(l), 0, l, col_text, col_bg);
-            int finished = race_text(fb, col_text, col_bg, fin_frames > OFFER_FRAMES, hud);
-            if (!finished && race_replaying() && hud) s2hud_band(fb, (int)draw_buf, band_text());       /* the replay's band while the player's car runs (0x4658c) */
-            if (finished && ui_ready) end_screen(n, fb, pal, fin_frames, vf, press);
-            fin_frames = finished ? fin_frames + 1 : 0;
-#ifdef S2_SIM_END
-            if (sim && drawn >= 2 && drawn <= 9) {          /* a measurement build (tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_END=1 TAG=simend): the end screen over the first frames */
-                uint32_t t_e = rdcycle();
-                end_screen(n, fb, pal, drawn == 2 ? 0 : 1, drawn == 2 ? 1000 : drawn == 3 ? 1200 : 1201 + drawn - 4, 0);
-                dlog_str("end screen frame ");
-                dlog_dec((int32_t)drawn);
-                dlog_str(": ");
-                dlog_dec((int32_t)((rdcycle() - t_e) / (CPU_HZ / 1000000)));
-                dlog_str(" us\n");
-            }
-#endif
-        }
-        tl_mark(TL_HUD);
-
-        /* the statistics of the visit and of the last second (a frame the sequence's logos veil drew nothing: it is left out) */
-        static struct stats scrap;
-        struct stats *sa = veiled ? &scrap : &st_all;
-        sa->sum += work;
-        sa->n++;
-        sa->faces += faces;
-        sa->phys += phys_cycles;
-        if (phys_cycles > sa->phys_max) sa->phys_max = phys_cycles;
-        sa->others += others_cycles;
-        if (others_cycles > sa->others_max) sa->others_max = others_cycles;
-        sa->pieces += ts.pieces;
-        sa->over += work > LATE_CYCLES;
-        if (LATE_FRAME(work) && *drive && !veiled && LATE_SIM_OK && !attract_mode && late_n < LATE_LOG_MAX) {
-            late_n++;
-            float lnode;
-            memcpy(&lnode, &race_car(0)->rec[0x4b8 / 4], 4);
-            char l[88], *q = fmt_udec(fmt_str(l, "L"), race_steps() / 50);
-            *q++ = '.';
-            *q++ = (char)('0' + race_steps() % 50 / 5);
-            q = fmt_ms(fmt_str(q, " "), work);
-            q = fmt_udec(fmt_str(q, " k"), hud_steps);
-            q = fmt_ms(fmt_str(q, " a"), t_scene - t_frame);
-            q = fmt_ms(fmt_str(q, " c"), ts.cyc_cull);
-            q = fmt_ms(fmt_str(q, " s"), t_wait - t_scene - others_cycles - ts.cyc_cull);
-            q = fmt_ms(fmt_str(q, " o"), others_cycles);
-            q = fmt_ms(fmt_str(q, " i"), others_in_scene);        /* (of it, the part done in the scene's gaps: hw_idle) */
-            q = fmt_ms(fmt_str(q, " w"), work - (t_wait - t_frame));
-            q = fmt_udec(fmt_str(q, " p"), ts.pieces);
-            q = fmt_udec(fmt_str(q, " n"), lnode > 0.0f ? (uint32_t)lnode : 0);
-            q = fmt_udec(fmt_str(q, " m"), (uint32_t)s2fx_puffs());
-            *q++ = '\n';
-            *q = 0;
-            dlog_str(l);
-        }
-        if (work > sa->max) {
-            sa->max = work;
-            sa->worst_s = s;
-            if (*drive) {
-                float node;
-                memcpy(&node, &race_car(0)->rec[0x4b8 / 4], 4);       /* where the player is on the line (node, a float) */
-                sa->worst_s = node > 0.0f ? node : 0.0f;
-            }
-            sa->w_pre = t_scene - t_frame;
-            sa->w_cull = ts.cyc_cull;
-            sa->w_scene = t_wait - t_scene - others_cycles - ts.cyc_cull;
-            sa->w_others = others_cycles;
-            sa->w_wait = work - (t_wait - t_frame);
-            sa->w_faces = faces;
-            sa->w_pieces = ts.pieces;
-        }
-        win_n++;
-        win_sum += work > 0x20000000u ? 0x20000000u : work;
-        if (work > win_max) win_max = work;
-        shown_faces = faces;
-        if (drawn == 0) shown_mean = shown_max = work;      /* until the first second is full */
-        if (((vf - window_vf) & 0xFFFF) >= VID_HZ && win_n) {
-            shown_mean = win_sum / win_n;
-            shown_max = win_max;
-            shown_n = win_n;
-            win_n = win_sum = win_max = 0;
-            window_vf = vf;
-        }
-        if (drawn % 25 == 0) {
-            char head[128];
-            stats_text(head, n, mode, &st_all, 0);
-            dlog_head(head);                            /* debug.txt's first line, live */
-#ifndef S2_PROF                                         /* (the profile's log needs the room) */
-            if (sim && *drive) {                        /* the driving mode's progress in the simulation */
-                dlog_str("d");
-                dlog_dec((int32_t)drawn);
-                dlog_str(": ");
-                dlog_dec((int32_t)(race_car(0)->speed_mph + 0.5f));
-                dlog_str(" mph G");
-                dlog_dec(race_car(0)->gear);
-                dlog_str(" yaw ");
-                dlog_dec((int32_t)(race_car(0)->yaw * 100.0f));
-                dlog_str(" pos ");
-                dlog_dec((int32_t)race_car(0)->pos[0]);
-                dlog_char(' ');
-                dlog_dec((int32_t)race_car(0)->pos[1]);
-                dlog_char('\n');
-            }
-#endif
-        }
-        /* the timeline of the frame before, once: it is a kilobyte */
-        if (!timeline_done && (sim ? drawn + 1 == sim_frames : VIEWER_TIMELINE && st_all.video >= 5 * VID_HZ)) {
-            timeline_done = 1;
-            tl_log();
-        }
-        if (sim && drawn + 1 == sim_frames) {
-            log_stats(n, mode, &st_all);
-#ifdef S2_PROF
-            prof_log(drawn + 1);
-#endif
-            dlog_str("stack used ");
-            dlog_dec((int32_t)stack_used());
-            dlog_str(" bytes\n");
-        }
+        struct frame f;
+        int out = 0;
+        frame_begin(v, &f);
+        const int act = attract_mode ? BTN_GO : *drive ? race_buttons(v, &f, &out) : ride_buttons(v, &f, &out);      /* (the attract sequence: no button but the one that ends it, its screen's step takes it) */
+        if (act == BTN_LEAVE) return out;
+        if (act == BTN_SKIP) continue;
+        frame_scene(v, &f);
+        frame_hardware(v, &f);
+        frame_text(v, &f);
+        frame_stats(v, &f);
         tl_mark(TL_END);
         VID_SWAP = 1;
-        drawn++;
+        v->drawn++;
         if (attract_mode && att.over) {                 /* the sequence is over: its last frame (the S2 logo on black) is up; the log gets the statistics of the first one only (it has 4 KB) */
             static int logged;
-            if (logged++) st_all.n = 0;
-            leave(n, mode, &st_all);
+            if (logged++) v->st_all.n = 0;
+            leave(n, f.mode, &v->st_all);
             return 0;
         }
     }
