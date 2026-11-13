@@ -1455,12 +1455,20 @@ static int league_race(struct zip *z, int n, int *cars, int *overlay)
 
 /* The championship (STARTL.EXE 0x4337d ..): LEAGUE SELECTION, WELCOME TO LEAGUE n, then the league's races on the tracks in the menu's order, each followed by the
    LEAGUE REPORT; after the last the report shows the win or the loss and the selection comes back. The player's team and car are the menu's, the laps and the
-   gearbox the GAME SETTINGS', the computers' level the league's (s2league.h). Returns when the player leaves for the start menu. */
+   gearbox the GAME SETTINGS', the computers' level the league's (s2league.h). Returns when the player leaves for the start menu.
+   A shortcut for looking at the desk scenes (the core's own): L and R held while ENTER takes a league on LEAGUE SELECTION, and still held when the page has faded, show the scene
+   a win of that league shows (league 4: the fifth car's after it, always) with the menu's team and car, then the selection again; nothing is saved. */
 static void league_run(struct zip *z, int *cars, int *overlay)
 {
     static int league_at;                               /* the cursor of LEAGUE SELECTION stays where it was (the original's 0x128a10) */
     for (;;) {
         if (s2lp_select(&league_at) != S2LP_GO) return;                 /* (ESC, or the picture is missing) */
+        if ((in_keys() & (KEY_L | KEY_R)) == (KEY_L | KEY_R)) {         /* the shortcut to the league's desk scene */
+            dlog_str("league: desk scene by L + R\n");
+            s2desk_won(league_at, cfg.team, cfg.car);
+            if (league_at == 3 && cfg.car == 5) s2desk_won(4, cfg.team, 5);     /* (a win with the fifth car does not show its scene again: here it does) */
+            continue;
+        }
         if (s2lp_welcome(league_at) == S2LP_BACK) continue;             /* (a missing picture leaves the page out) */
         struct s2_league L;
         s2l_begin(&L, league_at, cfg.team, cfg.car > 4 && !s2save_car5_open(cfg.team) ? 1 : cfg.car);
