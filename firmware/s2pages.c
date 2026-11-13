@@ -29,7 +29,16 @@ static const uint8_t value_first[8] = { 0, 2, 5, 9, 12, 14, 16, 18 };       /* w
 
 /* ------------------------------------------------------------------------------------------------ GAME SETTINGS */
 
-#define ROWS        9                   /* the eight settings and VIEW HIGH SCORES */
+/* The page's rows: settings of the save (S2S_TRANS + k, STRINGS.TXT's lines in that order), then VIEW HIGH SCORES. The original has all eight; the core leaves DETAIL LEVEL
+   out (it draws the H sets only, the row did nothing; the save keeps the value) and closes the list up. The PC tests that lay the page beside the original's build with every
+   row (-DS2_SETTINGS_ORIGINAL: tools/menu_screens.sh, tools/room.sh). */
+#ifdef S2_SETTINGS_ORIGINAL
+static const uint8_t setting_of[] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+#else
+static const uint8_t setting_of[] = { 0, 2, 3, 4, 5, 6, 7 };
+#endif
+#define SETTINGS    ((int)sizeof setting_of)
+#define ROWS        (SETTINGS + 1)      /* and VIEW HIGH SCORES */
 #define ROW_Y0      0x30                /* the rows' y: 48, then 12 x 1.2 = 14.4 more each, cut to whole pixels */
 #define ROW_STEP    14
 #define LABEL_X     10
@@ -47,10 +56,11 @@ static void set_frame(void *self, uint32_t tick)
 
 static void step(int row, int d)
 {
-    int n = s2save_count(S2S_TRANS + row);
-    s2save_set(S2S_TRANS + row, (s2save_get(S2S_TRANS + row) + d + n) % n);
+    const int k = S2S_TRANS + setting_of[row];
+    int n = s2save_count(k);
+    s2save_set(k, (s2save_get(k) + d + n) % n);
     s2sound_menu(S2PAGE_SND_ROW);
-    if (S2S_TRANS + row == S2S_MUSIC) s2mm_song();      /* 0x42451 / 0x42462: the song stops, or begins from its start */
+    if (k == S2S_MUSIC) s2mm_song();                    /* 0x42451 / 0x42462: the song stops, or begins from its start */
 }
 
 static int set_key(void *self, uint32_t press)
@@ -84,13 +94,14 @@ static void set_draw(void *self, struct blit_list *l, uint32_t tick)
     s2gfx_text_centred(l, S2G_FONT_TITLE, WHITE, 2, 4, s2gfx_line("GAME SETTINGS", 0, "GAME SETTINGS"));
     for (int i = 0; i < ROWS; i++) {
         int y = ROW_Y0 + ROW_STEP * i, lit = s->cursor == i && !(s->blink & BLINK_BIT);
-        const char *name = s2gfx_line("DETAIL LEVEL", i - 1, label[i]);
+        const int r = i == ROWS - 1 ? 8 : setting_of[i];        /* the original's row: its label and its values */
+        const char *name = s2gfx_line("DETAIL LEVEL", r - 1, label[r]);
         if (i == ROWS - 1) {
             s2gfx_text(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, LABEL_X, y, name);
             continue;
         }
         s2gfx_text(l, SMALL, WHITE, 2, LABEL_X, y, name);
-        int k = value_first[i] + s2save_get(S2S_TRANS + i);
+        int k = value_first[r] + s2save_get(S2S_TRANS + r);
         const char *text = s2gfx_line(":AUTO", k, value[k]);
         if (lit) {
             s2gfx_text(l, SMALL_HOT, HOT, 2, VALUE_X, y, text);

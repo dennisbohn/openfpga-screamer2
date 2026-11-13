@@ -989,7 +989,10 @@ static void frame_hardware(struct visit *v, struct frame *f)
     if (attract_mode) {                             /* the sequence's screen instead of the race screen (0x45882 calls 0x37ec1 in its place) */
         static struct blit_list att_list;
         blit_start(&att_list, (int)draw_buf);
-        s2att_draw(&att_list, &att, &att_view);
+        /* The sequence's last frame is black. The original lays its big S2 logo on it, which stays while its next page loads (s2attract.h); here the next page is up a
+           frame later and the logo was a flicker before the menu: left out at the owner's wish (2026-11-13). s2att_draw() still draws it: the model of the original's screen. */
+        if (att_view.exit) blit_fill(&att_list, 0, 0, FB_W, FB_H, 0);
+        else s2att_draw(&att_list, &att, &att_view);
         hw_blit(&att_list);
     }
     if (*v->drive) {                                   /* the computers' cars' steps (what is left of them) while the rasterizer finishes the picture */

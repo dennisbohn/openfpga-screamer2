@@ -11,7 +11,8 @@
  *   stage 4      the credits: the lines up to the next '#' of ATTRACT.TXT, one a 16 rows from y 100, for 4 s, then a second of nothing, group after group; a group with no
  *                line (the file's end) ends it
  *   the end      a press (the original's ENTER or ESC; on the Pocket any button) or the end of the credits: at once before stage 3, else the palette goes to black in
- *                half a second; the last frame is black with the big S2 logo (0x70, y 40), which stays while the next page loads
+ *                half a second; the last frame is black with the big S2 logo (0x70, y 40), which stays while the next page loads (the viewer shows
+ *                the black frame without the logo: its next page is up a frame later, the logo was a flicker)
  *
  * s2att_step() is the screen of one 20 ms step as the original's routine runs it for one frame at 50 frames a second (its numbers are the program's, each in the order and the
  * precision the code does it); the viewer calls it for each step a frame takes. Nothing here touches the hardware but s2att_draw(), which only adds blitter commands.
