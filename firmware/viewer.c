@@ -827,6 +827,20 @@ static int ride_buttons(struct visit *v, struct frame *f, int *out)
     return BTN_GO;
 }
 
+/* The engine's animation clock while the race's frames run (STARTL.EXE 0x4b149, called by the race's frame routines 0x2bae5, 0x2bd89, 0x2c13c: the float at 0x133358 grows by
+   0.3 of the step's length, 0x133350, goes back by 1 at 1 and is set nowhere else, so it runs on from race to race; 0x1347a0 is it x 65535). The textures with several pictures
+   play by it (the helicopter's rotor: 20) and the meshes with frames turn (track.c multi_pieces). The original's step is 0.022 s at its 50 pictures a second (1.1 x the raw
+   time, docs/screamer2/driving.md), so the clock turns once in 3.03 s. Until 2026-11-13 nothing ran it in a race here: the rotor stood still. */
+#define ANIM_STEP   (0.022f * 0.3f)
+static float race_anim;
+
+static void race_anim_steps(uint32_t steps)
+{
+    race_anim += (float)steps * ANIM_STEP;
+    while (race_anim >= 1.0f) race_anim -= 1.0f;
+    track_clock_set(race_anim);
+}
+
 /* The physics' steps (a race: the player's, and all but the last step's computers') and the scene: the camera, the objects (objs), the mirror's pass, the sound */
 static void frame_scene(struct visit *v, struct frame *f)
 {
@@ -870,6 +884,7 @@ static void frame_scene(struct visit *v, struct frame *f)
         }
         f->race_pending = 1;
         f->hud_steps = steps;
+        race_anim_steps(steps);
         if (f->race_pending && RACE_OVERLAP > 1) race_others_begin(f->race_pending);
         for (int i = 0; i < race_cars(); i++) rc[i] = race_car(i);
         PF_VAR(pf);
@@ -908,6 +923,7 @@ static void frame_scene(struct visit *v, struct frame *f)
         uint32_t steps = v->drawn ? (f->dvf > 10 ? 10 : f->dvf) : 1;
         v->s += (float)steps * STEP_S * SPEED;
         if (v->s > road_length()) v->s -= road_length();
+        race_anim_steps(steps);
         f->nobj = road_scene(v->s, *v->cars, &f->cam, objs);
     }
     tl_mark(TL_PHYS);
@@ -1123,6 +1139,8 @@ static void frame_stats(struct visit *v, struct frame *f)
             dlog_dec((int32_t)race_car(0)->pos[0]);
             dlog_char(' ');
             dlog_dec((int32_t)race_car(0)->pos[1]);
+            dlog_str(" anim ");                         /* (the texture phase: it has to move from line to line, race_anim_steps) */
+            dlog_dec((int32_t)track_phase());
             dlog_char('\n');
         }
 #endif

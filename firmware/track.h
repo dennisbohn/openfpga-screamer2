@@ -71,7 +71,7 @@ const struct track_wall *track_walls(int *n);
 void track_clock(uint32_t steps);
 /* the texture phase the clock gives (a record's +0x20 of -1: the pieces, the moving scenery) */
 uint32_t track_phase(void);
-/* the clock set to a, 0 .. 1 of its turn, by something that runs it at its own pace (the options room: 0.2 a second, the race 0.3) */
+/* the clock set to a, 0 .. 1 of its turn, by something that runs it at its own pace (the options room: 0.2 a second; Screamer 2's race: 0.3 of the step's length a frame, viewer.c) */
 void track_clock_set(float a);
 
 /* where the player starts: place and heading (forward = (sin a, -cos a)) */
