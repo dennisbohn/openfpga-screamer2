@@ -377,11 +377,13 @@ static void desk_draw(void *self, struct blit_list *l, uint32_t tick)
     blit_fill(l, 0, BACKDROP_H, FB_W, FB_H - BACKDROP_H, track_ground_colour());
     struct track_fx fx;
     if (p->fresh && track_fx(&fx)) smg_load(fx.table);
-    /* the car: a track object, so that it is sorted in among the room's pieces as the engine sorts one */
+    /* the car: a track object, so that it is sorted in among the room's pieces as the engine sorts one: 300 nearer as any moving object, and its mesh's class key (0x7e9a5) on
+       top, which is 500 for every car of the four SCCAR files (the race's and the menus' cars have 0): 800 together, the class of the figures that stand round the car
+       (the scenes' meshes with entry 43 = -800), so that the car and they are sorted by their places. Without it the figures behind the car were drawn over it. */
     const struct car_look lk = { (float)p->st.car[0], (float)p->st.car[2], (float)p->st.car[1], s2scene_rad(p->st.car_a1), 0.0f, 0.0f, 0.0f, 0.0f,
                                  scene_no == 4 ? p->st.wheels : 0.0f, 0.0f, 0 };
     const int nb = car_mesh_draw(car_mesh, &lk, &cam, p->block);
-    p->obj = (struct track_object){ lk.x, lk.y, lk.z, 1200.0f, nb, p->block, 0, 0, 0, &refl, 0 };
+    p->obj = (struct track_object){ lk.x, lk.y, lk.z, 1200.0f, nb, p->block, 0, 0, track_class_key(car_mesh), &refl, 0 };
     s2scene_begin(track_mlb(), buffer, p->fresh);
     p->fresh = 0;
     p->in_car = 0;
