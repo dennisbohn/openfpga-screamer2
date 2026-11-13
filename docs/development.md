@@ -248,7 +248,7 @@ Menus row 8 (docs/screamer2/menus.md section 6, which has the numbers): after TE
 no walls: `firmware/track_build.c`, 3.0 to 3.6 MB in the track window, 0.8 to 0.9 MB of container read first; about two seconds the first time, estimated, the log has `room: T1 3120640 bytes in N ms`), drawn by the track's engine from the five stations of its `P_<t>.MCM` (read from `DATA/GEN.DAT`, whose file has the CAR pages' and CUSTOMIZE's records too: "The garage")
 (`firmware/s2room.c`). LEFT / RIGHT glide the camera to the next station (about 1.4 s, the original's easing frame by frame), the name of the choice and arrows show at the bottom, B or Start take it (the picture fades out over half a second while the camera drifts
 towards the point it looks at), A or Select go back to TEAM SELECTION. The stations: ARCADE (the arcade pages), CHAMPIONSHIP (LEAGUE SELECTION), TIME ATTACK (TRACK SELECTION with the turning map), MULTIPLAYER (the MULTIPLAYER MENU as the original shows it without a network or a serial link:
-`firmware/s2pages.c`, `s2_page_multi()`; COMBAT MODE answers NOT AVAILABLE, the original's page for it is not built), GAME SETTINGS (the page of row 3, with VIEW HIGH SCORES). Each page's own ESC comes back to the room, at the station it left.
+`firmware/s2pages.c`, `s2_page_multi()`; COMBAT MODE starts the two players' race on a split screen where the Dock has a second controller, docs/screamer2/menus.md "Combat mode"), GAME SETTINGS (the page of row 3, with VIEW HIGH SCORES). Each page's own ESC comes back to the room, at the station it left.
 
 | Button (options room) | |
 |---|---|

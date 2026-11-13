@@ -18,6 +18,7 @@ module soc_system (
     output  wire    [31:0]  bridge_log_rd_data,
 
     input   wire    [31:0]  cont1_key,
+    input   wire    [31:0]  cont2_key,
 
     output  wire    [23:0]  vid_rgb,
     output  wire            vid_de,
@@ -86,6 +87,7 @@ soc soc (
     .bridge_wr_data     ( bridge_wr_data ),
     .bridge_log_rd_data ( bridge_log_rd_data ),
     .cont1_key          ( cont1_key ),
+    .cont2_key          ( cont2_key ),
     .cont1_joy          ( 32'd0 ),
     .cont1_trig         ( 16'd0 ),
     .fb_wr_en           ( fb_wr_en ),

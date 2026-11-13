@@ -240,3 +240,57 @@ int s2end_frame(volatile uint8_t *fb, int buffer, const uint32_t *pal, const str
     s2gfx_flush();
     return result;
 }
+
+int s2end_split(int buffer, const struct s2_end_split *in, uint32_t vf, uint32_t press)
+{
+    static struct { int up, choice; uint32_t last_vf, blink; } C;
+    static const char *const ord[2] = { "1ST", "2ND" };
+    int result = S2END_NONE;
+    if (!in->done[0] && !in->done[1]) {
+        C.up = 0;
+        return result;
+    }
+    struct blit_list *l = s2gfx_begin_on(buffer);
+    for (int k = 0; k < 2; k++) {
+        if (!in->done[k]) continue;
+        char t[24], *p = t;
+        const int place = in->place[k] == 1 ? 1 : 2;
+        for (const char *s = s2gfx_line("1ST", place - 1, ord[place - 1]); *s; s++) *p++ = *s;
+        *p++ = ' ';
+        for (const char *s = s2gfx_line("1ST", 4, "POSITION"); *s && p < t + 22; s++) *p++ = *s;
+        *p = 0;
+        s2gfx_text_centred(l, FONT, WHITE, 2, 100 * k + 43, t);
+        s2_time_text(t, in->time[k]);
+        s2gfx_text_centred(l, FONT, WHITE, 2, 100 * k + 60, t);
+    }
+    if (in->offer) {
+        if (!C.up) {
+            C.up = 1;
+            C.choice = 0;
+            C.blink = BLINK_BIT;
+            C.last_vf = vf;
+        }
+        C.blink += 2 * ((vf - C.last_vf) & 0xFFFF);
+        C.last_vf = vf;
+        if ((press & KEY_LEFT) && C.choice > 0) {
+            C.choice--;
+            C.blink = BLINK_BIT;
+        }
+        if ((press & KEY_RIGHT) && C.choice < 1) {
+            C.choice++;
+            C.blink = BLINK_BIT;
+        }
+        if (press & S2PAGE_ENTER) {
+            result = C.choice ? S2END_EXIT : S2END_AGAIN;
+            C.up = 0;
+        }
+        for (int k = 0; k < 2; k++) {
+            const int lit = C.choice == k && (C.blink & BLINK_BIT);
+            s2gfx_text_boxed(l, lit ? SMALL_HOT : SMALL, lit ? HOT : WHITE, 2, 160 * k, 160, 184, s2gfx_line("RACE AGAIN", k, k ? "EXIT" : "RACE AGAIN"));
+        }
+    } else {
+        C.up = 0;
+    }
+    s2gfx_flush();
+    return result;
+}

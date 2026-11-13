@@ -216,6 +216,10 @@ ROOM_BYTES = [(0x131f34, 3 * 0x16c), (0x127eec, 4), (0x127ef4, 20)]
 # from 0x128a9c: the chosen car, the fifth car won, 4 cars x 4 set-ups x 6 words)
 CUSTOM_BYTES = [(0x1324d4, 4), (0x13237c, 4), (0x1324e8, 4), (0x1324c4, 4), (0x132494, 4), (0x4cfd6, 4), (0x1289ec, 4), (0x128a9c, 0x188)]
 
+# combat mode (two players on a split screen; STARTL.EXE 0x39901, the race's set-up 0x34d4a): the page's choices (0x1289ec .. 0x128a34), the race's record (the cars' number
+# 0x130c48, the track 0x130c4c, the four entries of 0x2c bytes from 0x130c58), the kind of game 0x130d10, the laps 0x130d48, the next page 0x132494 and the page's state 0x1324dc
+COMBAT_BYTES = [(0x1289e0, 0x60), (0x130c40, 0xd0), (0x130d10, 4), (0x130d48, 4), (0x132494, 4), (0x1324dc, 4)]
+
 # time attack's lists (the totals of kind 2 for three laps, the best laps): 300 bytes a track in columns of 15 (times, names, replay numbers, teams, models), the files' track order
 TA_LISTS = [(0x12d388 + 0x4b0 * t, 300) for t in range(7)] + [(0x12f32c + 0x1068 + 0x12c * t, 300) for t in range(7)]
 
@@ -388,6 +392,11 @@ def session(steps):
                     mem.race(work, 4, 1)
                 elif st[1:] == "free":
                     mem.race(work, 8)
+                elif st[1:] == "cw":                        # --combat: Xcw waits for the split screen's race (mode 0x40) and sets one lap, Xcd hands both cars to the game's driver
+                    ok = mem.wait(lambda: mem.word(0x130d10) == 0x40, 120)
+                    print("the split screen's race:", "set up" if ok and mem.g.poke(0x130d48, struct.pack("<i", 1)) else "NOT set up in time")
+                elif st[1:] == "cd":
+                    print("both cars handed to the game's driver:", all([mem.g.poke(0x1193b4 + 0xcc0 * i, struct.pack("<i", 0)) for i in range(2)]))
                 elif st[1:] == "arc":                       # --replay: the arcade's race (mode 1), one lap
                     mem.race(work, 1)
                 else:
@@ -408,6 +417,10 @@ def session(steps):
             mem = Mem.open(pid) if mem is None else mem
             if mem:
                 mem.bytes_at(st[1:], work, CUSTOM_BYTES)
+        elif st[0] == "N":                      # --combat: N<label> the combat page's choices and the race's record to bytes_<label>.txt
+            mem = Mem.open(pid) if mem is None else mem
+            if mem:
+                mem.bytes_at(st[1:], work, COMBAT_BYTES)
         elif st[0] == "B":                      # --timeattack: Bfree<label> the bytes of the free run's text tables to bytes_<label>.txt
             mem = Mem.open(pid) if mem is None else mem
             if mem:
@@ -697,6 +710,20 @@ def options(which):
                 steps += "ke4d w3.5 "
         steps += "Wesc:4:k01@0.3:sesc_team@2 q"
     shots = session(steps)
+    print(f"{len(shots)} screenshots in {work}")
+
+
+# ------------------------------------------------------------------------------------------------ combat mode (two players on a split screen)
+
+def combat(steps):
+    """the MULTIPLAYER station's COMBAT MODE in the running original: the options room's fourth station, ENTER, COMBAT MODE (the menu's first item), ENTER; then `steps` (session()'s
+    words; N<label> writes the page's choices and the race's record to bytes_<label>.txt). The screenshots go to build/check/dosbox_combat/."""
+    global work
+    work = os.path.join(root, "build", "check", "dosbox_combat")
+    atexit.register(drop_junctions)
+    make_private(4, team=0, car=1, name="MIL")
+    boot = "w3 M k1c w6 k1c w6 k1c w6 ke4d w4 ke4d w4 ke4d w4 k1c w6 Lmenu r1,0.5 k1c w4 "
+    shots = session(boot + steps)
     print(f"{len(shots)} screenshots in {work}")
 
 
@@ -1168,6 +1195,9 @@ def main():
             customize()
         work = os.path.join(root, "build", "check", "dosbox_custom")
         print("%d screenshots in %s: compared by tools/custom.sh" % (len(glob.glob(os.path.join(work, "*.png"))), work))
+        return
+    if "--combat" in sys.argv:
+        combat(" ".join(sys.argv[sys.argv.index("--combat") + 1:]))
         return
     if "--timeattack" in sys.argv:
         which = next((a for a in sys.argv if a in ("closed", "race", "free")), "")

@@ -41,7 +41,7 @@ extern const uint8_t s2_menu_laps[S2M_LAPS];
 
 /* what the menu ends with (s2menu_run() carries out the other stations itself): a race on the choices, or the championship or time attack, which the viewer runs, or the attract
    sequence (s2attract.h): the room, or TEAM SELECTION, was left alone for 30 s; the viewer runs it and calls s2menu_run() again, which shows the page the sequence interrupted */
-enum { S2M_NONE, S2M_RACE, S2M_CHAMP, S2M_ATTACK, S2M_ATTRACT };
+enum { S2M_NONE, S2M_RACE, S2M_CHAMP, S2M_ATTACK, S2M_ATTRACT, S2M_COMBAT };
 
 /* The names from STRINGS.TXT of DATA/LOCAL.DAT in the ZIP (up to 8 KB read, 3 KB kept); whatever is not found keeps the built-in English text,
    which is the same. Once, before the first menu. Returns how many of the 3 texts (the tracks, the teams, the levels) were read from the file. */

@@ -264,6 +264,8 @@ void s2_page_hiscores(void)
 #define MULTI_STEP      20
 #define MESSAGE_FRAMES  250                 /* 5.0 s: the original's timer is 5.0 and runs down by the frame's time */
 
+#define COMBAT          2                   /* the page's result: COMBAT MODE was chosen */
+
 struct multi { int cursor; uint32_t blink; int message_frames, message; };
 
 static void multi_frame(void *self, uint32_t tick)
@@ -284,7 +286,8 @@ static int multi_key(void *self, uint32_t press)
         m->cursor++;
         m->blink = 0;
     }
-    if (press & S2PAGE_ENTER) {                         /* none of the three can be done here: what the original shows when it finds no network and no link, 5 s long */
+    if ((press & S2PAGE_ENTER) && m->cursor == 0 && IN_PAD2_THERE()) return COMBAT;      /* COMBAT MODE with a second controller at the Dock: the page ends, combat mode follows (viewer.c) */
+    if (press & S2PAGE_ENTER) {                         /* the other two cannot be done here: what the original shows when it finds no network and no link, 5 s long; COMBAT MODE without a second controller says so */
         m->message = m->cursor;
         m->message_frames = MESSAGE_FRAMES;
     }
@@ -293,7 +296,8 @@ static int multi_key(void *self, uint32_t press)
 
 /* The title, the three items (the one under the cursor is out while bit 0x20 of the clock is clear), the message under them while its timer runs. NETWORK GAME and SERIAL LINK
    are answered as the original does when it finds no network and no serial link (0xb68b0 and 0xb4b50 fail: NETWORK INITIALIZATION FAILED, UNABLE TO ESTABLISH CONNECTION). COMBAT MODE is
-   a page of its own in the original (two players on a split screen, 0x39901): not built here, the item answers NOT AVAILABLE (the two words of LEAGUE SELECTION's cup, not the original's text). */
+   the two players' race on the screen's halves (0x39901; viewer.c combat_run): the second player's controller is the Dock's second, and without one the item answers SECOND CONTROLLER
+   NEEDED (the core's own words: the original's second player has keys of his own on the keyboard). */
 static void multi_draw(void *self, struct blit_list *l, uint32_t tick)
 {
     struct multi *m = self;
@@ -304,26 +308,21 @@ static void multi_draw(void *self, struct blit_list *l, uint32_t tick)
         if ((m->blink & BLINK_BIT) || m->cursor != i)
             s2gfx_text_centred(l, S2G_FONT_MEDIUM, WHITE, 2, MULTI_Y0 + MULTI_STEP * i, s2gfx_line("MULTIPLAYER MENU", 1 + i, item[i]));
     if (m->message_frames > 0) {
-        static char not_available[40];
         const char *text = m->message == 1 ? s2gfx_line("MULTIPLAYER MENU", 4, "NETWORK INITIALIZATION FAILED") :
-                           m->message == 2 ? s2gfx_line("MULTIPLAYER MENU", 9, "UNABLE TO ESTABLISH CONNECTION") : not_available;
-        if (m->message == 0) {
-            const char *a = s2gfx_line("NOT", 0, "NOT"), *b = s2gfx_line("NOT", 1, "AVAILABLE");
-            fmt_str(fmt_str(fmt_str(not_available, a), " "), b);
-        }
+                           m->message == 2 ? s2gfx_line("MULTIPLAYER MENU", 9, "UNABLE TO ESTABLISH CONNECTION") : "SECOND CONTROLLER NEEDED";
         s2gfx_text_centred(l, SMALL_HOT, HOT, 2, 180, text);
         m->message_frames--;
     }
 }
 
-void s2_page_multi(void)
+int s2_page_multi(void)
 {
     static uint32_t pal[256];
     if (!s2gfx_bkk("BKG_6L.BKK", s2gfx_pic(0), pal)) {
         dlog_str("ui: BKG_6L.BKK not usable\n");
-        return;
+        return 0;
     }
     struct multi m = { 0, 0, 0, 0 };
     const struct s2_page page = { s2gfx_pic(0), pal, 0, FADE_OUT, multi_frame, multi_key, multi_draw };
-    s2page_run(&page, &m);
+    return s2page_run(&page, &m) == COMBAT;
 }

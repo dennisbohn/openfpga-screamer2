@@ -438,6 +438,7 @@ static void car_draw(void *self, struct blit_list *l, uint32_t tick)
     (void)tick;
     car_scene(self, l);
     car_overlay(self, l);
+    s2page_player_draw(l);
 }
 
 static const char *const picture[S2ARC_PAGES] = { "ARCADE_L.BKK", "BKG_1L.BKK", "BKG_2L.BKK", "BKG_2L.BKK", "BKG_2L.BKK", "BKG_2L.BKK" };

@@ -246,5 +246,5 @@
   <!-- notes -->
   <text x="40" y="798" class="l">Per frame: the CPU selects the pieces in range, sorts them back to front (painter's algorithm) and writes them into the geometry unit's buffer (107 pieces); behind that, geometry, setup and rasterizer work at the same time.</text>
   <text x="40" y="816" class="l">Only a finished frame is shown (double buffering, swap in the blanking gap, at most 50 frames per second).</text>
-  <text x="40" y="834" class="l">Start with all ten cars: 50 fps (start frame 1.34 M clocks, 90 % of a frame). Usage: 11,334 of 18,480 ALMs (61 %), 292 of 308 M10K (95 %), 34 of 66 DSP (52 %); timing holds at 74.25 MHz.</text>
+  <text x="40" y="834" class="l">Start with all ten cars: 50 fps (start frame 1.34 M clocks, 90 % of a frame). Usage: 11,432 of 18,480 ALMs (62 %), 292 of 308 M10K (95 %), 34 of 66 DSP (52 %); timing holds at 74.25 MHz.</text>
 </svg>

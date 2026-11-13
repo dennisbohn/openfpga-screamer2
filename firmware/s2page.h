@@ -38,6 +38,12 @@ int s2page_run(const struct s2_page *p, void *self);
    the palette's colours times 1 - level, the level 0 on the frame after the key and 0.08 more each frame) is 2621 with fade_out 13: 13 frames, the last at 0.04 of the colours */
 int s2page_run_step(const struct s2_page *p, void *self, int fade_step);
 
+/* Combat mode (viewer.c combat_run): the player whose page is up, 1 or 2 (0: nobody's, as ever). TEAM SELECTION (s2pages3d.h) and the CAR page (s2arcade.h) then show
+   PLAYER n under their title: the original has both players' pages on the screen at once, each on his half. */
+extern int s2page_player;
+struct blit_list;
+void s2page_player_draw(struct blit_list *l);
+
 /* The keys with repeat for a loop of your own (the race's pause menu uses the runner; the start menu has its own copy): the state
    starts at the buttons held now */
 struct s2_keys { uint32_t before, held; };

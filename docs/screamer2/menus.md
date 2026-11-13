@@ -25,7 +25,7 @@ firmware menus in this tree (`menu.c`, `champ.c`, `intro.c`, `hud.c`, `save.c`; 
   ZIP read on demand (the comparison table's slot count predates the ZIP). `ANIMS/` is not for the arcade page (the earlier study took it for its scene: the page has none, see row 11);
   it is the championship's desk scene's (0x3bc38, built 2026-11-06: section 6), and optional in the ZIP. What does need a change is the **save**: the original's `CHOICE.DAT` is 33,244 bytes (best times, set-ups,
   leagues), the core's slot is 1,120 (`core/data.json` `size_maximum`: a JSON edit, not RTL).
-- **Not feasible or not worth it**: the multiplayer pages (network, serial link, combat mode, two players on a split screen), the CD check
+- **Not feasible or not worth it**: the multiplayer pages over a network or a serial link (combat mode, two players on a split screen, is built since 2026-11-13: "Combat mode" below), the CD check
   ("PLEASE INSERT SCREAMER 2 DISK"), the 640 x 400 and 65K-colour variants. The pages' camera moves and fades are cheap.
 - Proposed order (section 7): the 2D page toolkit with the loading screen and the pause menu (about 2 days, first), the end-of-race
   screen and game settings, the arcade pages (track pictures, transmission, the 3D car page), the team and name pages, then the
@@ -59,7 +59,7 @@ ATTRACT (0x3ca20): Virgin logo, AND, Milestone, PRESENTS, then an AI race on one
         selection; after league 4 a second desk scene with the new fifth car, built, section 6) or BETTER LUCK NEXT TIME ! (then the selection)
    TIME ATTACK: TRACK SELECTION (0x3f79e, 3D map) -> CAR page (the cars, then the set-up list Standard / Custom 1 .. 4, then 3 LAPS / FREE RUN at the bottom: seen in the running original) -> LOADING -> RACE with the ghost car (FREE RUN: alone, five splits) -> END SCREEN (TOTAL, LAP TIME,
         RACE AGAIN / EXIT, best times); built in row 7 without the set-up list
-   MULTIPLAYER (0x3bf7a): MULTIPLAYER MENU (COMBAT MODE, NETWORK GAME, SERIAL LINK; where there is no network and no link the last two answer with a message for 5 s), COMBAT MODE, split screen (mode 0x40); built in row 8 as the page, the two messages and a stand-in message for COMBAT MODE
+   MULTIPLAYER (0x3bf7a): MULTIPLAYER MENU (COMBAT MODE, NETWORK GAME, SERIAL LINK; where there is no network and no link the last two answer with a message for 5 s), COMBAT MODE, split screen (mode 0x40); built in row 8 as the page and the two messages; COMBAT MODE is built ("Combat mode" below)
    GAME SETTINGS (0x4228a): TRANSMISSION, DETAIL LEVEL, NUMBER OF LAPS (1/3/5/10), ARCADE ENEMIES SKILL, MULTIPLAYER ENEMIES, TIME ATTACK
         GHOST CAR, DAMAGES, MUSIC, VIEW HIGH SCORES -> HI SCORES TABLE (0x42719: total / lap, arcade / championship / time attack,
         1/3/5/10 laps, track, 15 rows, VIEW REPLAY)
@@ -85,7 +85,7 @@ a scene built like a track (the track's engine). Sizes are stored in the ZIP / u
 | TEAM SELECTION | `LOGO1.DAT` (166 KB / 595 KB): `A1LOG-00 .. A4LOG-00.3DX` (4 badges, 6 to 15 KB), `LOGO.MLB` 560 KB, `LOGO.COL` (not used: the page's palette is `logoL.BKK`'s, checked against the running original); `logoL.BKK` (the S2 watermark) | 3D-o | built (row 5, `firmware/s2pages3d.c`, section 6): four meshes turning (left/right turns the chosen one to the front) |
 | ENTER YOUR NAME | `ALETTER.3DX` (2.6 KB, one letter tyre; the page loads 64 objects of it, a frame of `LOGO.MLB` each: 26 are used), `MENUL.FNT` | 3D-o | built (row 5): the same page as TEAM SELECTION in its second state; the ring of 26 tyres in 3D as the original has it, not a stand-in |
 | OPTIONS ROOM | `MENU<t>1.DAT` (806 to 925 KB / 2.75 to 3.3 MB): `MAP1.MLB` 2.4 to 3 MB, `MAP1.UNR` 0.3 MB, `MAP1.MMP` 10 KB (at most 150 piece records), `MAP1.BCK` 60 KB (backdrop), `MAP1.COL`, `ASHADOW.3DX`; `P_t.MCM` (252 B, five camera stations, also in `DATA/GEN`) | 3D-r | the entries are a track's (`MAPn.*`), the game loads it "as a track"; materials are routines 16 and 208 (shadows, the see-through table the race already has); one room per team, 4 | built (row 8, `firmware/s2room.c`, section 6): the room is built by `track_build_s2()` without cars (the images 3.0 to 3.6 MB), the camera is the original's, the picture is the engine's perspective-correct drawing of the room, not the original's affine one |
-| MULTIPLAYER MENU (0x3bf7a) | `BKG_6L.BKK`, `STRINGS.TXT` (the title, COMBAT MODE, NETWORK GAME, SERIAL LINK, the two messages) | 2D | built (row 8, `firmware/s2pages.c`, section 6); the three items at y 70, 90, 110, the message at y 180; compared with the running original: pixel for pixel equal |
+| MULTIPLAYER MENU (0x3bf7a) | `BKG_6L.BKK`, `STRINGS.TXT` (the title, COMBAT MODE, NETWORK GAME, SERIAL LINK, the two messages) | 2D | built (row 8, `firmware/s2pages.c`, section 6); the three items at y 70, 90, 110, the message at y 180; compared with the running original: pixel for pixel equal. COMBAT MODE starts combat mode when the Dock has a second controller, else it answers SECOND CONTROLLER NEEDED (the core's words) |
 | ARCADE page (0x3b6e8) | `ARCADE_L.BKK` (S2 ARCADE title over a blue grid, 6 KB), the prompt `ACCELERATE TO CONTINUE` (`STRINGS.TXT` line 15) blinking at y 184, the team's `CARS<t>01.DAT` (`AUTO1..4`, the page loads five) and `ENVM<t>1.DAT` (the windows), `DATA/GEN` `SCENE0..3.PTH` (four takes of four cars' paths and the camera's place and target) | 2D + 3D-o | built (`firmware/s2arcade.c`, `s2arcscene.c`, row 11): the picture, four cars driving past a still camera, the prompt. **There is no scene behind the picture**: the page loads no map (its load list, `0x113340`: font, sprites, texts, the picture, the team's room left over from the options room, the five cars, the screen); `ANIMS/SCENEnn1.DAT` is read by `0x11298`, whose one caller `0x3bcd6` is the championship's desk scene (page 0x3bc38) |
 | TRACK page (0x41a69) | `BKG_1L.BKK` and `MENUL.SPR` only: sprite 105 `TRACK selection`, 0 the lit frame (104 x 126), 1 / 2 the arrows, 5 .. 11 the seven tracks' pictures with their name banners lit and 12 .. 18 dim (92 x 116; in the original's order England, Egypt, California, Finland, Switzerland, Columbia, The Tunnel). **Not `TKG_nL.BKK`**: those (`tkg_%c%c`, 0x3ee6b) are the background of the 3D map pages of time attack and league (page 0x3ee28), see below | 2D | built, section 6. The seventh place (THE TUNNEL) opens when all four extra tracks are won, as the save has it (`s2save_track_open`) |
 | CAR page (0x40c31, state 0; the arcade's: the pages of the championship and time attack are 0x3cc2c, in the team's room, section 6 "The garage") | `CARS<t>01.DAT` (the team's cars `AUTO1..5` .MLB + .3DX), `ENVM<t>1.DAT` (windows), `PLATES1.DAT` (138 KB / 452 KB: `A1..A7PLATE.3DX` 5 KB each, `PLATES.MLB` 416 KB), `BKG_2L.BKK` (blue grid), `CARS.DTR` (max speed, grip), `MENUL.SPR`: 34 `CAR selection`, 35 .. 38 the team's badge, the car's name plate 26 .. 29 (RADIANCE, HORIZON, NEBULA, SPARK: cars 1 to 4 of every team) or 30 .. 33 (BLACK CLAW, AFRODYTE, HORNET, THUNDER: the team's fifth), 106 .. 110 MAXSPEED, the drive and MPH | 3D-o | the five cars round a carousel, the plate with the name, MAX SPEED as `MENUL.SPR` pieces and text; built (row 5, `firmware/s2showroom.c` and `s2arcade.c`, section 6): the 3D carousel is the original's (a ring of radius 3000, not S1's row of cars 4000 apart); the **names are the plate sprites' art** (`MENUL.SPR` 26 to 33), not `PLATES1.DAT`'s meshes (seven plates `A1 .. A7PLATE`, 184 x 232 textures: not loaded by this page, `STARTL.EXE`'s load list of 0x40c31 has no plates) |
@@ -102,7 +102,7 @@ a scene built like a track (the track's engine). Sizes are stored in the ZIP / u
 | Replay | the player's controls per 20 ms step (the original records 0x20 bytes a frame: two times and six control words), `CAMERAS<n>.MCM` of `DATA/MAP<n>.DAT` (the trackside cameras), GAME.TXT 15 and 40 .. 44 | race | built (row 10, `firmware/race.c`, `s2ghost.c`, `s2cam.c`, section 6): the race run again from the recorded controls of the player |
 | Credits | `ATTRACT.TXT` | 2D | built, in the attract sequence: groups of lines that come and go (not a scroll) |
 
-Not feasible here: MULTIPLAYER (network, serial link, combat mode, split screen), CD check, the 640 x 400 set (`*H.BKK`, 2.7 MB of it in
+Not feasible here: MULTIPLAYER over a network or a serial link, CD check, the 640 x 400 set (`*H.BKK`, 2.7 MB of it in
 `GRAF1.DAT`), the 65K-colour containers (`*2`).
 
 ## 4. The formats (checked on the files)
@@ -580,6 +580,41 @@ in every kind of game (the championship's `s2l_grid()` had it; the last league's
 second car, an arcade race on tracks 2 and 5: the entries at `0x130c58 + 0x2c i` hold teams 2 3 0 1 and cars 1 2 3 0 (`dosbox_polish.py`, `bytes_grid.txt`), which is the rule. The old rule
 (the other teams in order, each with the car of its own number) differed for most computers' cars of the 20 choices but those of the default; the test (`tools/host/menu_screen.c`) holds
 the new rule against a second writing of the code's loop and the old one as the negative control.
+
+### Combat mode: two players on a split screen (2026-11-13)
+
+The MULTIPLAYER MENU's first item. The original (`STARTL.EXE` 0x39901, 0x3a8e4, the race's set-up 0x34d4a, the mode word's bit 0x40), read from the program and from the running game
+(`tools/s2/dosbox_arcade.py --combat <steps>`: the two players' keys are those of `CONFIG/CONTROLS.CFG`, the arrows with right Shift and Ctrl, and W X A D with 2 and 1):
+
+- **The pages.** Both players' pages are on the screen at once, each on his half (320 x 100): TEAM SELECTION, then ENTER YOUR NAME (accelerate goes on, brake goes back, left / right
+  choose, the gear keys move the name's cursor), `WAITING PLAYER 2` on the half of the one who is done; then CAR SELECTION and TRANSMISSION the same way (0x3a8e4); then the arcade's
+  TRACK page on the whole screen, whose ENTER starts the race. No page asks for the laps: they are the settings' (0x130d48 from the table at 0x1131fc).
+- **The race.** Two cars and no computers (0x130c48 = 2), on the grid's first row with the second player in front (car i of n takes place n - 1 - i). The first player's view is the
+  screen's upper half, the second's the lower: the same routine draws both, the second 100 rows down (0x2b880 adds 32,000 to the buffer's address), each with the camera of its car
+  (camera flags 0x29 instead of 0x9: bit 0x20 is the half view, 0x12ffb: its rows are 200 / 2 - 2 and its eye line 0.65 of them, as the whole view's), then a line at row 99. Both
+  cameras start in the view the player left his last race in, INSIDE's dashboard becoming INCAR (0x2e9bc), and no key selects INSIDE in a half (0x1335d).
+- **The race screen** of each half is the single one's at its places from the half's top, the dial 100 rows up, without its words and clocks: the lap and the laps, the place
+  (the laurel for the leader), the bar, the bend's arrow, the dial. The start lights are drawn once, over both halves.
+- **The end.** A player who has done his laps gets `1ST POSITION` / `2ND POSITION` and his time on his half (white rows 45 to 55 and 62 to 74 of the half) while the other still
+  races; when both have, RACE AGAIN and EXIT in halves at the bottom of the screen, as the arcade's end without a replay. No times are kept.
+
+Here (`firmware/viewer.c` `combat_run()`, `frame_split()`; `race.h` `race_combat`; `s2hud.h` `s2hud_split()`; `s2end.h` `s2end_split()`):
+
+- **The second player's controller** is the Dock's second: the core's register `IN_KEY2` (`cont2_key`, docs/soc.md; the bitstream of 2026-11-13). Its d-pad steers: the core has no
+  register for a second controller's stick. Without a second controller the menu's item answers SECOND CONTROLLER NEEDED. `in_pad` (hw.h) says which controller `in_keys()` reads:
+  each player's pages read his own, the TRACK page, the pause menu and the end's choices either.
+- **The pages** are the arcade's own, whole-screen, one player after the other and not both at once on halves: TEAM SELECTION for player 1, for player 2, the CAR page with its
+  TRANSMISSION state for player 1, for player 2 (PLAYER 1 / PLAYER 2 under the title), then the TRACK page; ESC goes back a page. There are no names (the race shows none). The first
+  player's choices are the save's, as the arcade's; the second's are kept while the core runs (he begins with the next team's first car). **A stand-in**: the original's half pages
+  with both players choosing at once are not built.
+- **The race** is the arcade's with `race_combat`: two cars with a player's controls each (`race_step_player()`, `race_step_player2()`), the cars touching as the arcade's, no
+  recording and no replay. The buttons are each player's own controller's, as in every race (B gas, Y brake, A handbrake, L / R gears, X his next view: INCAR, NEAR, BACK). Start on
+  either is the pause menu. No mirror.
+- **The picture**: two passes of the scene a frame, each 99 rows from the half's top (rows 99 and 199 black; the eye line is 0.65 of the rows, row 64), each with its own camera,
+  backdrop and list of objects; the second view's objects are made when the rasterizer has drawn the first (the shadows' and the puffs' blocks are one set). A frame takes about twice
+  the single view's CPU work for the scene: the race runs at 25 pictures a second where the single one runs at 50.
+- **Not built**: the trackside cameras after the finish (the view stays the player's), the checkpoint gap and the 1ST mark over the leading car (the original's halves were not seen
+  to show them), names, the half pages.
 
 ## 8. Open
 

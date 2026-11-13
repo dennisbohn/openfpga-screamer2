@@ -67,6 +67,12 @@ void race_replay_stop(void);
    by), no car ends on its laps, nothing is recorded (no REPLAY is offered). race_step_player() still counts the clock, places and the lights; its argument is not read.
    The viewer clears it again when the race is left. */
 extern int race_attract;
+/* Combat mode (STARTL.EXE mode word 0x40, the race's set-up 0x34d4a; docs/screamer2/menus.md "Combat mode"): set before race_init() it makes the arcade's race one of two cars, race_grid's
+   slots 0 and 1, both with a player's controls: the first player's is car 0 (race_step_player), the second's car 1 (race_step_player2, called after it in every step), on the grid's
+   first row with the second player in front (car i of n takes place n - 1 - i, as every race's). The cars touch as the arcade's do, there are no computers, nothing is recorded (no
+   REPLAY). Car 1's gearbox is s2car_state.manual as the caller set it before race_init(). The viewer clears it again when the race is left. */
+extern int race_combat;
+void race_step_player2(const struct s2car_input *in);
 /* The race's clock in seconds (0x13335c): 0 at the start, 0.02 a step (float, as the game adds it); the lights go out at 3 */
 float race_get_clock(void);
 /* The set-ups of the cars (s2car.h; docs/screamer2/driving.md, "The set-up"), set before race_init(): the player's car (and the free run's) is made of race_setup when race_custom is 1,
@@ -127,6 +133,8 @@ struct s2car_state *race_car(int i);
 int race_cars(void);
 
 void race_get_hud(struct race_hud *h);
+/* the same of car i as the player's (combat mode's second player: car 1) */
+void race_get_hud_car(int i, struct race_hud *h);
 
 /* Where every car stands (the championship's end screen and report, s2league.h): its place (1 .. race_cars(), the player's is race_get_hud()'s), whether
    it has done all its laps (listed on the end screen, 0x1197a8 >= 0x130d48), whether it has finished (the car's flag +0x4c bit 1: the player's car, which

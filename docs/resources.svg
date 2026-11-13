@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 874" width="1120" height="874" role="img" aria-label="FPGA resource budget: logic 61 percent, below the 80 percent limit; block RAM 95 percent; DSP 52 percent. Largest items: Setup unit, FPU (RV32F), Geometry unit.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 874" width="1120" height="874" role="img" aria-label="FPGA resource budget: logic 62 percent, below the 80 percent limit; block RAM 95 percent; DSP 52 percent. Largest items: Setup unit, FPU (RV32F), Geometry unit.">
 <title>FPGA resource budget</title>
 <style>
   svg {
@@ -68,12 +68,12 @@
 <text x="40.0" y="189.0" class="t">Logic</text>
 <text x="88.0" y="189.0" class="m">18,480 ALMs</text>
 <text x="278.0" y="211.0" class="s" text-anchor="end">built</text>
-<rect x="290.0" y="198.0" width="16.7" height="18" class="f-frame"><title>Frame &amp; video: 541 (3 %) · built</title></rect>
-<rect x="308.7" y="198.0" width="92.5" height="18" class="f-cpu"><title>CPU: VexRiscv, FPU, boot RAM: 2,729 (15 %) · built</title></rect>
-<rect x="403.2" y="198.0" width="201.6" height="18" class="f-gfx"><title>Graphics: geometry to blitter: 5,880 (32 %) · built</title></rect>
-<rect x="606.9" y="198.0" width="30.7" height="18" class="f-mem"><title>SDRAM, bus, registers: 945 (5 %) · built</title></rect>
-<path d="M639.6,198.0 H678.5 A4,4 0 0 1 682.5,202.0 V212.0 A4,4 0 0 1 678.5,216.0 H639.6 Z" class="f-audio"><title>Audio: 1,239 (7 %) · built</title></path>
-<text x="690.5" y="211.0" class="v">11,334 · 61 %</text>
+<rect x="290.0" y="198.0" width="18.8" height="18" class="f-frame"><title>Frame &amp; video: 601 (3 %) · built</title></rect>
+<rect x="310.8" y="198.0" width="92.4" height="18" class="f-cpu"><title>CPU: VexRiscv, FPU, boot RAM: 2,725 (15 %) · built</title></rect>
+<rect x="405.2" y="198.0" width="204.1" height="18" class="f-gfx"><title>Graphics: geometry to blitter: 5,952 (32 %) · built</title></rect>
+<rect x="611.3" y="198.0" width="29.9" height="18" class="f-mem"><title>SDRAM, bus, registers: 922 (5 %) · built</title></rect>
+<path d="M643.2,198.0 H681.9 A4,4 0 0 1 685.9,202.0 V212.0 A4,4 0 0 1 681.9,216.0 H643.2 Z" class="f-audio"><title>Audio: 1,232 (7 %) · built</title></path>
+<text x="693.9" y="211.0" class="v">11,432 · 62 %</text>
 <line x1="802.0" y1="194" x2="802.0" y2="220" class="limit"/>
 <text x="796.0" y="234.0" class="m" text-anchor="end">above ~80 % timing closure gets hard</text>
 <text x="40.0" y="261.0" class="t">Block RAM</text>
@@ -100,47 +100,47 @@
 <text x="770.0" y="412.0" class="m" text-anchor="middle">3,000</text>
 <text x="930.0" y="412.0" class="m" text-anchor="middle">4,000</text>
 <text x="278.0" y="441.0" class="s" text-anchor="end">Setup unit</text>
-<path d="M290.0,429.0 H527.0 A4,4 0 0 1 531.0,433.0 V441.0 A4,4 0 0 1 527.0,445.0 H290.0 Z" class="f-gfx"><title>Setup unit: 1,506 ALMs</title></path>
-<text x="539.0" y="441.0" class="v">1,506</text>
+<path d="M290.0,429.0 H526.5 A4,4 0 0 1 530.5,433.0 V441.0 A4,4 0 0 1 526.5,445.0 H290.0 Z" class="f-gfx"><title>Setup unit: 1,503 ALMs</title></path>
+<text x="538.5" y="441.0" class="v">1,503</text>
 <text x="278.0" y="467.0" class="s" text-anchor="end">FPU (RV32F)</text>
-<path d="M290.0,455.0 H519.3 A4,4 0 0 1 523.3,459.0 V467.0 A4,4 0 0 1 519.3,471.0 H290.0 Z" class="f-cpu"><title>FPU (RV32F): 1,458 ALMs</title></path>
-<text x="531.3" y="467.0" class="v">1,458</text>
+<path d="M290.0,455.0 H518.0 A4,4 0 0 1 522.0,459.0 V467.0 A4,4 0 0 1 518.0,471.0 H290.0 Z" class="f-cpu"><title>FPU (RV32F): 1,450 ALMs</title></path>
+<text x="530.0" y="467.0" class="v">1,450</text>
 <text x="278.0" y="493.0" class="s" text-anchor="end">Geometry unit</text>
-<path d="M290.0,481.0 H488.6 A4,4 0 0 1 492.6,485.0 V493.0 A4,4 0 0 1 488.6,497.0 H290.0 Z" class="f-gfx"><title>Geometry unit: 1,266 ALMs</title></path>
-<text x="500.6" y="493.0" class="v">1,266</text>
+<path d="M290.0,481.0 H488.7 A4,4 0 0 1 492.7,485.0 V493.0 A4,4 0 0 1 488.7,497.0 H290.0 Z" class="f-gfx"><title>Geometry unit: 1,267 ALMs</title></path>
+<text x="500.7" y="493.0" class="v">1,267</text>
 <text x="278.0" y="519.0" class="s" text-anchor="end">VexRiscv + 2× 8 KB cache</text>
-<path d="M290.0,507.0 H487.9 A4,4 0 0 1 491.9,511.0 V519.0 A4,4 0 0 1 487.9,523.0 H290.0 Z" class="f-cpu"><title>VexRiscv + 2× 8 KB cache: 1,262 ALMs</title></path>
-<text x="499.9" y="519.0" class="v">1,262</text>
+<path d="M290.0,507.0 H488.6 A4,4 0 0 1 492.6,511.0 V519.0 A4,4 0 0 1 488.6,523.0 H290.0 Z" class="f-cpu"><title>VexRiscv + 2× 8 KB cache: 1,266 ALMs</title></path>
+<text x="500.6" y="519.0" class="v">1,266</text>
 <text x="278.0" y="545.0" class="s" text-anchor="end">Rasterizer</text>
-<path d="M290.0,533.0 H470.8 A4,4 0 0 1 474.8,537.0 V545.0 A4,4 0 0 1 470.8,549.0 H290.0 Z" class="f-gfx"><title>Rasterizer: 1,155 ALMs</title></path>
-<text x="482.8" y="545.0" class="v">1,155</text>
+<path d="M290.0,533.0 H484.1 A4,4 0 0 1 488.1,537.0 V545.0 A4,4 0 0 1 484.1,549.0 H290.0 Z" class="f-gfx"><title>Rasterizer: 1,238 ALMs</title></path>
+<text x="496.1" y="545.0" class="v">1,238</text>
 <text x="278.0" y="571.0" class="s" text-anchor="end">Clipper</text>
-<path d="M290.0,559.0 H438.2 A4,4 0 0 1 442.2,563.0 V571.0 A4,4 0 0 1 438.2,575.0 H290.0 Z" class="f-gfx"><title>Clipper: 951 ALMs</title></path>
-<text x="450.2" y="571.0" class="v">951</text>
+<path d="M290.0,559.0 H437.0 A4,4 0 0 1 441.0,563.0 V571.0 A4,4 0 0 1 437.0,575.0 H290.0 Z" class="f-gfx"><title>Clipper: 944 ALMs</title></path>
+<text x="449.0" y="571.0" class="v">944</text>
 <text x="278.0" y="597.0" class="s" text-anchor="end">FM music: OPL2 chip + write queue</text>
 <path d="M290.0,585.0 H389.4 A4,4 0 0 1 393.4,589.0 V597.0 A4,4 0 0 1 389.4,601.0 H290.0 Z" class="f-audio"><title>FM music: OPL2 chip + write queue: 646 ALMs</title></path>
 <text x="401.4" y="597.0" class="v">646</text>
 <text x="278.0" y="623.0" class="s" text-anchor="end">Bus, registers, arbiters</text>
-<path d="M290.0,611.0 H387.8 A4,4 0 0 1 391.8,615.0 V623.0 A4,4 0 0 1 387.8,627.0 H290.0 Z" class="f-mem"><title>Bus, registers, arbiters: 636 ALMs</title></path>
-<text x="399.8" y="623.0" class="v">636</text>
+<path d="M290.0,611.0 H385.0 A4,4 0 0 1 389.0,615.0 V623.0 A4,4 0 0 1 385.0,627.0 H290.0 Z" class="f-mem"><title>Bus, registers, arbiters: 619 ALMs</title></path>
+<text x="397.0" y="623.0" class="v">619</text>
 <text x="278.0" y="649.0" class="s" text-anchor="end">Audio: 32-voice mixer + music, I²S</text>
-<path d="M290.0,637.0 H380.9 A4,4 0 0 1 384.9,641.0 V649.0 A4,4 0 0 1 380.9,653.0 H290.0 Z" class="f-audio"><title>Audio: 32-voice mixer + music, I²S: 593 ALMs</title></path>
-<text x="392.9" y="649.0" class="v">593</text>
+<path d="M290.0,637.0 H379.8 A4,4 0 0 1 383.8,641.0 V649.0 A4,4 0 0 1 379.8,653.0 H290.0 Z" class="f-audio"><title>Audio: 32-voice mixer + music, I²S: 586 ALMs</title></path>
+<text x="391.8" y="649.0" class="v">586</text>
 <text x="278.0" y="675.0" class="s" text-anchor="end">Textures: pipeline + cache</text>
-<path d="M290.0,663.0 H366.3 A4,4 0 0 1 370.3,667.0 V675.0 A4,4 0 0 1 366.3,679.0 H290.0 Z" class="f-gfx"><title>Textures: pipeline + cache: 502 ALMs</title></path>
-<text x="378.3" y="675.0" class="v">502</text>
+<path d="M290.0,663.0 H367.3 A4,4 0 0 1 371.3,667.0 V675.0 A4,4 0 0 1 367.3,679.0 H290.0 Z" class="f-gfx"><title>Textures: pipeline + cache: 508 ALMs</title></path>
+<text x="379.3" y="675.0" class="v">508</text>
 <text x="278.0" y="701.0" class="s" text-anchor="end">Blitter (backdrop, HUD)</text>
-<path d="M290.0,689.0 H366.0 A4,4 0 0 1 370.0,693.0 V701.0 A4,4 0 0 1 366.0,705.0 H290.0 Z" class="f-gfx"><title>Blitter (backdrop, HUD): 500 ALMs</title></path>
-<text x="378.0" y="701.0" class="v">500</text>
+<path d="M290.0,689.0 H364.7 A4,4 0 0 1 368.7,693.0 V701.0 A4,4 0 0 1 364.7,705.0 H290.0 Z" class="f-gfx"><title>Blitter (backdrop, HUD): 492 ALMs</title></path>
+<text x="376.7" y="701.0" class="v">492</text>
 <text x="278.0" y="727.0" class="s" text-anchor="end">Analogue frame (bridge, PLLs)</text>
-<path d="M290.0,715.0 H353.4 A4,4 0 0 1 357.4,719.0 V727.0 A4,4 0 0 1 353.4,731.0 H290.0 Z" class="f-frame"><title>Analogue frame (bridge, PLLs): 421 ALMs</title></path>
-<text x="365.4" y="727.0" class="v">421</text>
+<path d="M290.0,715.0 H362.5 A4,4 0 0 1 366.5,719.0 V727.0 A4,4 0 0 1 362.5,731.0 H290.0 Z" class="f-frame"><title>Analogue frame (bridge, PLLs): 478 ALMs</title></path>
+<text x="374.5" y="727.0" class="v">478</text>
 <text x="278.0" y="753.0" class="s" text-anchor="end">SDRAM controller + ports</text>
-<path d="M290.0,741.0 H335.4 A4,4 0 0 1 339.4,745.0 V753.0 A4,4 0 0 1 335.4,757.0 H290.0 Z" class="f-mem"><title>SDRAM controller + ports: 309 ALMs</title></path>
-<text x="347.4" y="753.0" class="v">309</text>
+<path d="M290.0,741.0 H334.5 A4,4 0 0 1 338.5,745.0 V753.0 A4,4 0 0 1 334.5,757.0 H290.0 Z" class="f-mem"><title>SDRAM controller + ports: 303 ALMs</title></path>
+<text x="346.5" y="753.0" class="v">303</text>
 <text x="278.0" y="779.0" class="s" text-anchor="end">Framebuffer ×2 + video</text>
-<path d="M290.0,767.0 H305.2 A4,4 0 0 1 309.2,771.0 V779.0 A4,4 0 0 1 305.2,783.0 H290.0 Z" class="f-frame"><title>Framebuffer ×2 + video: 120 ALMs</title></path>
-<text x="317.2" y="779.0" class="v">120</text>
+<path d="M290.0,767.0 H305.7 A4,4 0 0 1 309.7,771.0 V779.0 A4,4 0 0 1 305.7,783.0 H290.0 Z" class="f-frame"><title>Framebuffer ×2 + video: 123 ALMs</title></path>
+<text x="317.7" y="779.0" class="v">123</text>
 <text x="278.0" y="805.0" class="s" text-anchor="end">CFU (16.16 multiply)</text>
 <rect x="290.0" y="793.0" width="1.4" height="16" class="f-cpu"><title>CFU (16.16 multiply): 9 ALMs</title></rect>
 <text x="299.4" y="805.0" class="v">9</text>

@@ -59,6 +59,7 @@ static struct page {
     int fresh;
     const uint8_t *mlb, *badge_mesh[BADGES], *letter_mesh;
     const char *title, *name_title;
+    int pick;                               /* the page chooses a team and nothing else (s2_page_team_pick) */
 } P;
 
 static uint32_t pal[256];
@@ -151,7 +152,7 @@ static int team_key(void *self, uint32_t press)
     uint32_t keys = in_keys(), edge = keys & ~p->before;
     p->before = keys;
     if (p->leaving) return p->fade_frames > FADE_FRAMES ? p->result : 0;
-    if (keys) s2att_idle_reset(&p->idle);   /* (0x405ed ..: a key resets the timer in every state; it runs down in the team state only, 0x4083c) */
+    if (keys || p->pick) s2att_idle_reset(&p->idle);   /* (0x405ed ..: a key resets the timer in every state; it runs down in the team state only, 0x4083c; combat mode's page does not time out) */
     else if (p->state == 0 && s2att_idle_step(&p->idle)) return S2P3D_IDLE;     /* (0x4085d: the fade is set to 1.0 at once: a cut to black, no fade out) */
     uint32_t enter = S2PAGE_ENTER, esc = S2PAGE_ESC;
     if (edge & esc) {
@@ -163,7 +164,11 @@ static int team_key(void *self, uint32_t press)
             p->result = S2P3D_QUIT;
         }
     } else if (edge & enter) {
-        if (p->state == 0) {
+        if (p->state == 0 && p->pick) {         /* (combat mode: the team alone, no name) */
+            sound(SOUND_KEEP);
+            p->leaving = 1;
+            p->result = S2P3D_DONE;
+        } else if (p->state == 0) {
             p->state = 1;
             p->t = 1.0f;
             sound(SOUND_NAME);
@@ -281,6 +286,7 @@ static void team_draw(void *self, struct blit_list *l, uint32_t tick)
     blit_start(l, buffer);                                      /* the text goes over the 3D (the blitter waits for the units) */
     if (p->state != 1) {
         s2gfx_text_centred(l, S2G_FONT_TITLE, S2G_WHITE, 2, 4, p->title);
+        s2page_player_draw(l);
         s2gfx_text_centred(l, S2G_FONT_MEDIUM, S2G_WHITE, 2, 175, s2menu_team_name(p->team + 1));
     } else {
         s2gfx_text_centred(l, S2G_FONT_TITLE, S2G_WHITE, 2, 4, p->name_title);
@@ -321,7 +327,7 @@ static int load(struct page *p, struct zip *z)
     return s2scene_entry(&c, "ALETTER.3DX", to, room) != 0;
 }
 
-int s2_page_team(struct s2_menu_cfg *c)
+static int team_page(struct s2_menu_cfg *c, int pick)
 {
     struct zip *z = s2gfx_zip();
     if (!s2gfx_ready() || !s2gfx_bkk("LOGOL.BKK", s2gfx_pic(0), pal)) return S2P3D_FAIL;
@@ -337,6 +343,7 @@ int s2_page_team(struct s2_menu_cfg *c)
         return S2P3D_FAIL;
     }
     p->cfg = c;
+    p->pick = pick;
     p->team = c->team - 1;
     p->title = s2gfx_line("TEAM SELECTION", 0, "TEAM SELECTION");
     p->name_title = s2gfx_line("ENTER YOUR NAME", 0, "ENTER YOUR NAME");
@@ -352,7 +359,10 @@ int s2_page_team(struct s2_menu_cfg *c)
     struct s2_page pg = { s2gfx_pic(0), p->pal_work, 0, 0, team_frame, team_key, team_draw };
     p->before = in_keys();
     int r = s2page_run(&pg, p);
-    if (r == S2P3D_DONE) {
+    if (r == S2P3D_DONE && pick) {
+        c->team = p->team + 1;
+        if (c->car > 4 && !s2save_car5_open(c->team)) c->car = 1;
+    } else if (r == S2P3D_DONE) {
         for (int i = 0; i < 3; i++)
             if (p->name[i] < 'A' || p->name[i] > 'Z') p->name[i] = 'A';
         c->team = p->team + 1;
@@ -362,4 +372,14 @@ int s2_page_team(struct s2_menu_cfg *c)
         if (c->car > 4 && !s2save_car5_open(c->team)) c->car = 1;
     }
     return r;
+}
+
+int s2_page_team(struct s2_menu_cfg *c)
+{
+    return team_page(c, 0);
+}
+
+int s2_page_team_pick(struct s2_menu_cfg *c)
+{
+    return team_page(c, 1);
 }

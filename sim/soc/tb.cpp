@@ -212,6 +212,7 @@ struct Sim {
     bool viewer = false;                                // SIM_IMAGE: the track viewer runs (firmware/viewer.c): its 3D picture ends the run
     int slot_reads = 0;
     uint32_t keys = 0;                                  // SIM_KEYS, held from the program's first read
+    uint32_t keys2 = 0;                                 // SIM_KEYS2: the second controller's (cont2_key), the same way
 
     // The CD image: read from the file where asked, its words over the bridge at the APF's
     // measured rate (1.3 MB/s: one every 220 clocks) while run() goes on (cd_tick); done goes
@@ -259,6 +260,7 @@ struct Sim {
         rise_74(8);
         uint32_t id = top.ds_id, off = top.ds_offset, addr = top.ds_addr, len = top.ds_length, err = 2;
         if (id >= 3) top.cont1_key = keys;              // the program runs: the boot loader is past its keys
+        if (id >= 3) top.cont2_key = keys2;
         if (id == cd_id && cd_size) {
             uint64_t end = len == 0xFFFFFFFFu ? cd_size : uint64_t(off) + len;
             if (off < cd_size && end <= cd_size && read_part(cd_path, off, end - off, cd_part)) {
@@ -553,11 +555,12 @@ int main(int argc, char **argv) {
     // them) held from the program's first read of a game file on (the boot loader reads the
     // buttons at its start: Select there asks for the full memory test); none without it
     if (const char *k = getenv("SIM_KEYS")) s.keys = uint32_t(strtoul(k, nullptr, 16));
+    if (const char *k = getenv("SIM_KEYS2")) s.keys2 = uint32_t(strtoul(k, nullptr, 16));
     if (s.keys) printf("buttons held: 0x%04x, from the program's first game file read\n", s.keys);
     if (const char *w = getenv("SIM_WAV")) if (*w) wav.open(w);
 
     Vsoc_system &top = s.top;
-    top.clk_74a = 0; top.clk_vid = 0; top.reset_n = 0; top.bridge_wr = 0; top.bridge_rd = 0; top.cont1_key = 0;
+    top.clk_74a = 0; top.clk_vid = 0; top.reset_n = 0; top.bridge_wr = 0; top.bridge_rd = 0; top.cont1_key = 0; top.cont2_key = 0;
     top.ds_done = 0; top.ds_err = 0;
     top.eval();
 
@@ -647,7 +650,7 @@ int main(int argc, char **argv) {
         uint64_t limit = s.now + 4 * FRAME_PS;
         while (!(top.swap_req && top.front) && s.now < limit) s.step();
         if (!(top.swap_req && top.front)) { printf("FAIL: buffer 1 never in front with no swap pending\n"); fails++; }
-        top.reset_n = 0; top.cont1_key = 0; top.eval();
+        top.reset_n = 0; top.cont1_key = 0; top.cont2_key = 0; top.eval();
         s.rise_74(16);
         printf("in reset: swap request %d, buffer in front %d, SYS_SIM 0x%08x\n", top.swap_req, top.front, top.sim_status);
         if (top.swap_req || top.front || top.sim_status) { printf("FAIL: all three should be 0\n"); fails++; }
@@ -658,7 +661,7 @@ int main(int argc, char **argv) {
         // and one in the middle of the memory test's SDRAM traffic
         s.run(timeout_frames, last, done, unasked, 1500000);
         printf("==== reset in the middle of the memory test, firmware loaded again ====\n");
-        top.reset_n = 0; top.cont1_key = 0; top.eval();
+        top.reset_n = 0; top.cont1_key = 0; top.cont2_key = 0; top.eval();
         s.load(0, fw);
         s.rise_74(16);
         top.reset_n = 1; top.eval();

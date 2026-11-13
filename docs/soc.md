@@ -128,6 +128,7 @@ All registers are 32 bits wide, accessed as words.
 | `0xF000_2000` | `IN_KEY` | R | buttons (`cont1_key`): bit 0 up, 1 down, 2 left, 3 right, 4 A, 5 B, 6 X, 7 Y, 8 L, 9 R, 14 Select, 15 Start; bits 31..28 device type (1 Pocket, 2 dock controller without, 3 with analog part) |
 | `0xF000_2004` | `IN_JOY` | R | analog sticks (`cont1_joy`): bits 7..0 left x, 15..8 left y, 23..16 right x, 31..24 right y; unsigned, centre `0x80`, 0 = left/up. Only for type 3, otherwise 0 |
 | `0xF000_2008` | `IN_TRIG` | R | analog triggers (`cont1_trig`): bits 7..0 left, 15..8 right; 0 = released |
+| `0xF000_2010` | `IN_KEY2` | R | the second controller's buttons (`cont2_key`), the bits of `IN_KEY`; bits 31..28 are 0 when there is none (the Pocket alone, or one controller at the Dock) |
 | `0xF000_3000`-`3008` | `RS_V0`-`RS_V2` | W | rasterizer (`raster.v`, same pixels as `firmware/raster.c`): vertex, bits 15..0 x, bits 31..16 y, signed in 1/16 pixel; may be written while a triangle is being drawn |
 | `0xF000_300C`, `3010` | `RS_CLIP0`, `RS_CLIP1` | W | clip rectangle in pixels: x0/y0, x1/y1 (exclusive), bits 15..0 x, bits 31..16 y |
 | `0xF000_3014` | `RS_DRAW` | R/W | Write: bits 7..0 colour, bit 8 buffer, starts the triangle; the write waits while the rasterizer draws, and so do CPU framebuffer accesses. Read: bit 0 still drawing |

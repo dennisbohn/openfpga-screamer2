@@ -937,15 +937,15 @@ predates routine 160; with it the track 1 start frame is 1,338,092 clocks = 18.0
 
 ## Resource usage
 
-Measured (Quartus build with the FM music; timing holds at 74.25 MHz: setup +0.94 ns, hold
-+0.11 ns; five fitter seeds tried): 11,334 of 18,480 ALMs (61 %), 292 of
+Measured (Quartus build of 2026-11-13, with the second controller's register; timing holds at 74.25 MHz: setup +0.96 ns, hold
++0.10 ns): 11,432 of 18,480 ALMs (62 %), 292 of
 308 M10K (95 %, of which 16 the table of routine 224), 34 of 66 DSP (52 %). The FM music costs 646
 ALMs, 10 M10K (the write queue 1, JTOPL's shift registers 6, its sine and exponential tables 2 and a
 register 1; they could go into MLABs for logic if block RAM runs out) and 3 DSP. From build to build the
 logic fluctuates by a few hundred ALMs: placement packs differently densely, and where timing is
 tight the fitter rebuilds logic and registers (physical synthesis).
 
-![Space budget in the FPGA: logic 61 %, block RAM 95 %, DSP 52 %](resources.svg)
+![Space budget in the FPGA: logic 62 %, block RAM 95 %, DSP 52 %](resources.svg)
 
 The picture is produced by `tools/make_budget_svg.py`: the measured rows from the fitter report
 (`core/src/fpga/output_files/ap_core.fit.rpt`, table "Resource Utilization by Entity"). Regenerate

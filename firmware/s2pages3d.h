@@ -23,3 +23,6 @@ enum { S2P3D_FAIL = 0, S2P3D_DONE = 1, S2P3D_IDLE = 2, S2P3D_QUIT = -1 };
 /* The page until the name is kept (S2P3D_DONE: c->team and the save's name and profile are set) or the player presses ESC
    (S2P3D_QUIT: nothing is changed, the start menu comes). S2P3D_FAIL if the files could not be read (nothing is shown). Needs s2gfx_init(). */
 int s2_page_team(struct s2_menu_cfg *c);
+/* TEAM SELECTION alone, for a player of combat mode (s2page_player says whose: PLAYER n under the title): ENTER keeps the team in c->team (S2P3D_DONE) and nothing goes into the
+   save, there is no name and the page does not time out; ESC is S2P3D_QUIT. */
+int s2_page_team_pick(struct s2_menu_cfg *c);

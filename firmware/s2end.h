@@ -48,6 +48,17 @@ struct s2_end_in {
 
 enum { S2END_NONE, S2END_AGAIN, S2END_EXIT, S2END_CONTINUE, S2END_REPLAY };
 
+/* Combat mode's end (two players on the screen's halves; measured on the running original, tools/s2/dosbox_arcade.py --combat): the half of a player who has done his laps shows
+   his place and time ("1ST POSITION", the time: the end screen's letters, centred at the half's rows 43 and 60) while the other still races; once both have and `offer` is set
+   RACE AGAIN and EXIT in halves at y 184, as the arcade's end has them: LEFT / RIGHT choose, ENTER takes it. One call a frame, after the rasterizer is done, into the
+   race's buffer; vf and press as s2end_frame()'s. No list of times: the original keeps none of these races. Returns S2END_AGAIN, S2END_EXIT or S2END_NONE. */
+struct s2_end_split {
+    int done[2], place[2];              /* each player: he has done his laps; his place, 1 or 2 */
+    float time[2];                      /* his total time */
+    int offer;                          /* the choices are up */
+};
+int s2end_split(int buffer, const struct s2_end_split *in, uint32_t vf, uint32_t press);
+
 /* One frame of the end screen, drawn into framebuffer `buffer` (fb) of the race with its palette pal (256 x 0x00RRGGBB). fin_frames: the
    frames the player has been finished so far (0 on the first: the screen starts over, the table for darkening is made); vf: the video frame
    counter (the 16 bits of VID_FRAME, 50 a second: the clocks run by it); press: the buttons that went down in this frame. Returns

@@ -62,6 +62,10 @@ static struct {
     int chk[RACE_CARS], chk_max[RACE_CARS];     /* each car's checkpoint (car + 0x4b0) and the furthest it has been (+ 0x4b4) */
     int32_t leader[MAX_CHK];                    /* the whole seconds at which the car leading got to each checkpoint (0x11ccec) */
     char msg[16];                               /* the gap as the text of 0x132f98: control byte 1, '+', mm:ss:hh */
+    struct {                                    /* combat mode (s2hud_split): each player's own dial, wrong way timer and bend */
+        float speed, revs, wrong, bend_left;
+        int bend_next, bend_id;
+    } sp[2];
 } S;
 
 int s2hud_init(struct zip *z)
@@ -408,6 +412,94 @@ void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_
     }
     if (((int)S.wrong & 1) && hud_view != 1) txt_centred(FONT_TITLE, 1, 2, 0xf + top, text[T_WRONG_WAY]);
     if (h.count >= 0 && !h.finished) centred(SPR_LIGHTS + 3 - h.count, 60);
+    hw_blit(&list);
+}
+
+/* ------------------------------------------------------------------------------------------------ combat mode: a race screen in each half */
+
+#define SPLIT_H     100                         /* a half; its view and its screen end a row above (the black row 99, 0x2b8cc) */
+
+/* player k's numbers, `steps` of 20 ms on: the dial's (update()'s easing), the seconds the wrong way round, the next bend's arrow */
+static void split_update(int k, const struct s2car_state *p, uint32_t steps, int finished)
+{
+    const float dt = (float)steps * 0.02f;
+    float e = 1.0f;
+    for (uint32_t i = 0; i < steps; i++) e *= 0.75f;
+    const float speed = RF(p, 0x500) * 1.513f, revs = RF(p, 0x60) != 0.0f ? RF(p, 0xc78) / RF(p, 0x60) : 0.0f;
+    S.sp[k].speed = (S.sp[k].speed - speed) * e + speed;
+    S.sp[k].revs = (S.sp[k].revs - revs) * e + revs;
+    S.sp[k].wrong = RF(p, 0x1f0) == -1.0f ? S.sp[k].wrong + dt : 0.0f;
+    if (finished || !S.nbends) return;
+    const int32_t dx = (int32_t)RF(p, 0x4d8) - S.bend[S.sp[k].bend_next].x, dz = (int32_t)RF(p, 0x4e0) - S.bend[S.sp[k].bend_next].z;
+    const float fx = (float)dx * 0.01f, fz = (float)dz * 0.01f;
+    if (sqrtf(fx * fx + fz * fz) < 80.0f) {
+        S.sp[k].bend_left = 1.0f;
+        S.sp[k].bend_id = S.bend[S.sp[k].bend_next].id;
+        if (++S.sp[k].bend_next >= S.nbends) S.sp[k].bend_next = 0;
+    }
+    S.sp[k].bend_left = S.sp[k].bend_left > dt ? S.sp[k].bend_left - dt : 0.0f;
+}
+
+/* Combat mode's race screen (the original's with the mode word's bit 0x40; measured on its screenshots, tools/s2/dosbox_arcade.py --combat): in each half the single screen's
+   elements at their places from the half's top, the dial 100 rows up, and none of its words and clocks: the lap and the laps, the place with the leader's laurel, the bar with the
+   other car's mark, the bend's arrow, WRONG WAY, the dial with the speed, the gear and the needle; a player who has done his laps keeps the dial alone (his place and time are the
+   end's, s2end_split). The start lights are drawn once, over both halves, where the single screen has them. Rows 99 and 199 are black (the original's line at row 99; the views
+   end there). top: rows the upper half's elements at its top left go down by (the timing overlay's two lines). */
+void s2hud_split(uint32_t steps, int top)
+{
+    if (!ready) return;
+    const int n = race_cars();
+    struct race_hud h;
+    char t[16], *q;
+    blit_start(&list, (int)draw_buf);
+    for (int k = 0; k < 2 && k < n; k++) {
+        const struct s2car_state *p = race_car(k), *o = race_car(1 - k);
+        const int y0 = SPLIT_H * k, up = k ? 0 : top;
+        race_get_hud_car(k, &h);
+        split_update(k, p, steps, h.finished);
+        blit_fill(&list, 0, y0 + SPLIT_H - 1, 320, 1, 0);
+        s2gfx_clip(y0, y0 + SPLIT_H - 1, y0, y0 + SPLIT_H - 1);
+        sprite(SPR_DIAL, 238, y0 + 32);                         /* the dial (dial(), 100 rows up) */
+        const float shown = miles ? S.sp[k].speed / 1.6f : S.sp[k].speed;
+        const uint32_t v = shown > 0.0f ? (uint32_t)shown : 0;
+        q = t;
+        if (v < 100) *q++ = '0';
+        if (v < 10) *q++ = '0';
+        fmt_udec(q, v);
+        txt(FONT_GEAR, 5, 1, 267, y0 + 77, t);
+        fmt_udec(t, (uint32_t)(RI(p, 0xc7c) > 0 ? RI(p, 0xc7c) : 0));
+        txt(FONT_GEAR, 4, 2, 299, y0 + 77, t);
+        float a = S.sp[k].revs * 3.1415927f - 2.0f;
+        if (fabsf(a) < 0.001f) a = 0.0f;
+        const float s = sinf(a), c = cosf(a);
+        const int px = 271, py = y0 + 68, tx = (int)((float)px + s * 30.0f), ty = (int)((float)py - c * 30.0f);
+        blit_line(out, px, py, tx, ty, 0, y0, 320, y0 + SPLIT_H - 1, NEEDLE_COLOUR);
+        blit_line(out, (int)((float)px + c), (int)((float)py + s), tx, ty, 0, y0, 320, y0 + SPLIT_H - 1, NEEDLE_COLOUR);
+        blit_line(out, (int)((float)px - c), (int)((float)py - s), tx, ty, 0, y0, 320, y0 + SPLIT_H - 1, NEEDLE_COLOUR);
+        if (!h.finished) {
+            if (S.sp[k].bend_left > 0.0f) centred(SPR_ARROW + S.sp[k].bend_id, y0 + 18 + up);
+            if (h.place == 1) sprite(SPR_LAUREL, 0x10e, y0 + 4);
+            fmt_udec(t, (uint32_t)h.place);
+            txt(FONT_BIG, 1, 2, 0x11e, y0 + 0xb, t);
+            q = fmt_udec(t, (uint32_t)h.lap);
+            *q++ = ':';
+            *q = 0;
+            const int w = txt(FONT_BIG, 1, 2, 8, y0 + 0xb + up, t);
+            fmt_udec(t, (uint32_t)h.laps);
+            txt(FONT_MID, 1, 2, w + 5, y0 + 0x14 + up, t);
+            blit_fill(out, 0x6c, y0 + BAR_Y + up + 1, 0x68, 7, 0);
+            sprite(SPR_BAR, 0x6c, y0 + BAR_Y + up - 1);
+            float d = (RF(p, 0x4bc) - RF(o, 0x4bc)) / 200000.0f;
+            if (d > 1.0f) d = 1.0f;
+            if (d < -1.0f) d = -1.0f;
+            if (n > 1) sprite(SPR_MARK + race_grid[1 - k].team - 1, (int)((160.0f - d * 50.0f) + -4.0f), y0 + BAR_Y + up);
+            sprite(SPR_PLAYER, 0x9c, y0 + BAR_Y + up);
+            if ((int)S.sp[k].wrong & 1) txt_centred(FONT_TITLE, 1, 2, y0 + 0xf + up, text[T_WRONG_WAY]);
+        }
+    }
+    s2gfx_clip(0, 200, 0, 200);
+    race_get_hud(&h);
+    if (h.count >= 0) centred(SPR_LIGHTS + 3 - h.count, 60);
     hw_blit(&list);
 }
 

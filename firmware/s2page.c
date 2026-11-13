@@ -27,6 +27,15 @@ uint32_t s2page_press(struct s2_keys *k)
     return press;
 }
 
+int in_pad;                             /* the controller in_keys() reads (hw.h): 0 the first, 1 the second, 2 either; here so that every program with a page has it */
+int s2page_player;
+
+void s2page_player_draw(struct blit_list *l)
+{
+    static const char *const who[2] = { "PLAYER 1", "PLAYER 2" };
+    if (s2page_player == 1 || s2page_player == 2) s2gfx_text_centred(l, S2G_FONT_SMALL, S2G_WHITE, 2, 24, who[s2page_player - 1]);
+}
+
 int s2page_run(const struct s2_page *p, void *self)
 {
     return s2page_run_step(p, self, 0);

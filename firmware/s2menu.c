@@ -169,8 +169,11 @@ int s2menu_run(struct s2_menu_cfg *c)
             s2_page_settings();
             s2menu_load(c);
             break;
-        case S2ROOM_MULTI:
-            s2_page_multi();
+        case S2ROOM_MULTI:                                  /* COMBAT MODE chosen with a second controller there: the viewer runs it */
+            if (s2_page_multi()) {
+                s2menu_store(c);
+                return S2M_COMBAT;
+            }
             break;
         case S2ROOM_IDLE:                                   /* 30 s without a button: the attract sequence, then the room again */
             s2menu_store(c);

@@ -34,6 +34,7 @@
 #define IN_KEY          REG32(0xF0002000u)
 #define IN_JOY          REG32(0xF0002004u)
 #define IN_TRIG         REG32(0xF0002008u)
+#define IN_KEY2         REG32(0xF0002010u)      /* the second controller's buttons (cont2_key: one at the Dock), IN_KEY's bits; 0 without one */
 #define KEY_UP          (1u << 0)
 #define KEY_DOWN        (1u << 1)
 #define KEY_LEFT        (1u << 2)
@@ -54,7 +55,7 @@
 
 /* The keys, and the left stick of such a controller as the d-pad when it is pushed more than
    half way (for the menus) */
-static inline uint32_t in_keys(void)
+static inline uint32_t in_keys_first(void)
 {
     uint32_t keys = IN_KEY, joy = IN_JOY;
     if(IN_ANALOG(keys, joy)) {
@@ -63,6 +64,22 @@ static inline uint32_t in_keys(void)
               | (y < 0x40 ? KEY_UP : 0) | (y >= 0xC0 ? KEY_DOWN : 0);
     }
     return keys;
+}
+
+/* The second controller (one more at the Dock): its buttons, 0 while there is none; the core has no register for its sticks, the d-pad steers */
+#define IN_PAD2_THERE()     ((IN_KEY2 >> 28) != 0)
+static inline uint32_t in_keys_second(void)
+{
+    return IN_KEY2;
+}
+
+/* The buttons everything reads: the first controller's (in_pad 0, as ever), the second's (1), or either's (2: the bits of both, the first's type). Combat mode sets in_pad for the
+   page of each player and for its race (viewer.c) and puts it back to 0; in_pad is s2page.c's. */
+extern int in_pad;
+static inline uint32_t in_keys(void)
+{
+    if(in_pad == 1) return in_keys_second();
+    return in_pad ? in_keys_first() | (in_keys_second() & 0x0FFFFFFFu) : in_keys_first();
 }
 
 /* Debug log: the non-volatile data slot debug.txt (dlog.h) */

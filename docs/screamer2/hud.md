@@ -183,6 +183,25 @@ visibility test (`0x7e9d2`) is not copied (the unit's cull is by the mirror's ow
 of another car becomes INCAR) and the second player are not built; the view's saved word is the save's `S2S_VIEW` (no layout change); the dashboard of a replay's followed car is that car's (as the original, `[0x11f0c8]`). Not measured against the original: NEAR and INCAR pictures of the 3D scene
 beyond the camera records (the scene's pixels are the renderer's, as in every view); the cockpit's cost on the Pocket.
 
+### Combat mode: a race screen in each half (2026-11-13)
+
+Two players on the screen's halves (docs/screamer2/menus.md "Combat mode"; the original's race screen with the mode word's bit 0x40, measured on screenshots of the running game,
+`tools/s2/dosbox_arcade.py --combat`). `s2hud_split()` draws, for car 0 in the upper half and car 1 in the lower, the single screen's elements at their places from the half's top
+and the dial 100 rows up (at y 32 of the half), each clipped to its half:
+
+| Element | Place in the half | Notes |
+|---|---|---|
+| the lap and the laps | x 8, y 11 (the laps y 20) | no LAP word |
+| the place, the leader's laurel | x 286, y 11; the laurel x 270, y 4 | no POSITION word |
+| the bar | x 108, y 3 | the other car's mark by how far it is ahead or behind, the player's in the middle |
+| the bend's arrow | centred, y 18 | each player's own next bend |
+| WRONG WAY | centred, y 15 | each player's own |
+| the dial | x 238, y 32 | the speed, the gear and the needle of the half's car, eased as the single one |
+
+None of the single screen's words and clocks (THIS LAP, TOTAL, the records), no checkpoint gap, no 1ST mark. The start lights are drawn once at y 60, over both halves. Rows 99 and
+199 are black (the original draws a line at row 99). A player who has done his laps keeps the dial; his place and time are the end's (`s2end_split()`): two lines centred at the
+half's rows 43 and 60, and RACE AGAIN / EXIT at y 184 once both have.
+
 ## 6. Open
 
 - The original's pictures of the whole race screen to compare pixel for pixel exist now for the views from the car's 2D parts only (above); the rest of section 1's screen was read from the code.

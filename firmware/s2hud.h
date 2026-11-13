@@ -29,6 +29,9 @@ void s2hud_begin(int track);
    hands it to the blitter, which draws it when the 3D units are done; the caller waits for the blitter (RS_DRAW & RS_BUSY) before the swap. */
 void s2hud_draw(const struct track_cam *cam, const struct su_view *view, uint32_t steps, int top);
 
+/* Combat mode's frame (two players on the screen's halves, race.h race_combat) in s2hud_draw()'s place: the race screen of car 0 in the upper half and of car 1 in the lower (the lap,
+   the place, the bar, the bend's arrow, WRONG WAY, the dial; none of the single screen's words and clocks), the start lights once over both, rows 99 and 199 black. */
+void s2hud_split(uint32_t steps, int top);
 /* The view the scene is drawn in (s2cam.h: 1 the trackside cameras, 3 the chase camera, the default) and the car it follows: in view 1 the race screen shows no dial and none of
    its texts or WRONG WAY (0x45d17, 0x463fc, 0x46fea), only the leader's mark, the start lights and the replay's band; the dial is that of the car followed. Reset by s2hud_begin(). */
 void s2hud_view(int view, int follow);

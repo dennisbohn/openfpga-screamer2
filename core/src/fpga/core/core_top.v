@@ -584,6 +584,7 @@ soc soc (
     .bridge_wr_data     ( bridge_wr_data ),
     .bridge_log_rd_data ( soc_log_rd_data ),
     .cont1_key          ( cont1_key ),
+    .cont2_key          ( cont2_key ),
     .cont1_joy          ( cont1_joy ),
     .cont1_trig         ( cont1_trig ),
     .fb_wr_en           ( fb_wr_en ),
