@@ -8,7 +8,7 @@
  *                   the viewer runs it (S2M_CHAMP)
  *   TIME ATTACK     the original's TRACK SELECTION with the turning 3D maps (s2trackpage.h), the CAR page with 3 LAPS / FREE RUN, then the race against the
  *                   ghost of the track's best run, or the free run (s2ghost.h); the viewer runs it (S2M_ATTACK)
- *   MULTIPLAYER     the MULTIPLAYER MENU (s2pages.h) as the original answers it with no network
+ *   MULTIPLAYER     the MULTIPLAYER MENU (s2pages.h): COMBAT MODE, the two players' race on a split screen (S2M_COMBAT)
  *   GAME SETTINGS   the page of the laps, the level, the gearbox, ... with VIEW HIGH SCORES (s2pages.h)
  *
  * ESC in the room is TEAM SELECTION and ENTER YOUR NAME (s2pages3d.h), which come back to the room. The choices (track, team, car, laps, level, gearbox) are kept in

@@ -19,7 +19,8 @@
 /* Both need s2gfx_init(). A missing picture leaves the call at once (the log says so). */
 void s2_page_settings(void);
 void s2_page_hiscores(void);
-/* The MULTIPLAYER MENU (STARTL.EXE 0x3bf7a, BKG_6L picture): COMBAT MODE, NETWORK GAME, SERIAL LINK under the title; up / down choose, ENTER (B or Start) answers as the original
-   does without a network and a serial link (a message for 5 s under the items), ESC (A or Select) leaves at once. Nothing is played on it. Run by the options room's fourth station.
+/* The MULTIPLAYER MENU (STARTL.EXE 0x3bf7a, BKG_6L picture): COMBAT MODE under the title, at its place of the original's three items (NETWORK GAME and SERIAL LINK are left out:
+   the core has neither; the PC tests build the page with them, where ENTER answers as the original does without a network and a serial link, a message for 5 s under the items).
+   ESC (A or Select) leaves at once. Nothing is played on it. Run by the options room's fourth station.
    COMBAT MODE with a second controller at the Dock ends the page with 1: combat mode follows (viewer.c combat_run); without one it answers SECOND CONTROLLER NEEDED. Else 0. */
 int s2_page_multi(void);

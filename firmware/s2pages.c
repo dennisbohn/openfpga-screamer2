@@ -259,7 +259,13 @@ void s2_page_hiscores(void)
 
 /* ------------------------------------------------------------------------------------------------ MULTIPLAYER MENU */
 
+/* The original's three items are COMBAT MODE, NETWORK GAME, SERIAL LINK. The core shows the first alone (2026-11-13, the owner's wish: a network it never has, and a serial link
+   over the Pocket's link port is not built); the PC tests that lay the page beside the original's build with all three (-DS2_SETTINGS_ORIGINAL, as GAME SETTINGS' rows above). */
+#ifdef S2_SETTINGS_ORIGINAL
 #define MULTI_ITEMS     3
+#else
+#define MULTI_ITEMS     1
+#endif
 #define MULTI_Y0        70                  /* 0x3c5d7 ..: the items at y 70, 90, 110 (font 1), the message at 180 (font 3, colour 3) */
 #define MULTI_STEP      20
 #define MESSAGE_FRAMES  250                 /* 5.0 s: the original's timer is 5.0 and runs down by the frame's time */
@@ -287,15 +293,15 @@ static int multi_key(void *self, uint32_t press)
         m->blink = 0;
     }
     if ((press & S2PAGE_ENTER) && m->cursor == 0 && IN_PAD2_THERE()) return COMBAT;      /* COMBAT MODE with a second controller at the Dock: the page ends, combat mode follows (viewer.c) */
-    if (press & S2PAGE_ENTER) {                         /* the other two cannot be done here: what the original shows when it finds no network and no link, 5 s long; COMBAT MODE without a second controller says so */
+    if (press & S2PAGE_ENTER) {                         /* COMBAT MODE without a second controller says so, 5 s long (the tests' other two items: what the original shows when it finds no network and no link) */
         m->message = m->cursor;
         m->message_frames = MESSAGE_FRAMES;
     }
     return 0;
 }
 
-/* The title, the three items (the one under the cursor is out while bit 0x20 of the clock is clear), the message under them while its timer runs. NETWORK GAME and SERIAL LINK
-   are answered as the original does when it finds no network and no serial link (0xb68b0 and 0xb4b50 fail: NETWORK INITIALIZATION FAILED, UNABLE TO ESTABLISH CONNECTION). COMBAT MODE is
+/* The title, the items (the one under the cursor is out while bit 0x20 of the clock is clear), the message under them while its timer runs. NETWORK GAME and SERIAL LINK, which
+   the tests' page alone has, are answered as the original does when it finds no network and no serial link (0xb68b0 and 0xb4b50 fail: NETWORK INITIALIZATION FAILED, UNABLE TO ESTABLISH CONNECTION). COMBAT MODE is
    the two players' race on the screen's halves (0x39901; viewer.c combat_run): the second player's controller is the Dock's second, and without one the item answers SECOND CONTROLLER
    NEEDED (the core's own words: the original's second player has keys of his own on the keyboard). */
 static void multi_draw(void *self, struct blit_list *l, uint32_t tick)
@@ -303,7 +309,7 @@ static void multi_draw(void *self, struct blit_list *l, uint32_t tick)
     struct multi *m = self;
     (void)tick;
     s2gfx_text_centred(l, S2G_FONT_TITLE, WHITE, 2, 4, s2gfx_line("MULTIPLAYER MENU", 0, "MULTIPLAYER MENU"));
-    static const char *const item[MULTI_ITEMS] = { "COMBAT MODE", "NETWORK GAME", "SERIAL LINK" };
+    static const char *const item[3] = { "COMBAT MODE", "NETWORK GAME", "SERIAL LINK" };
     for (int i = 0; i < MULTI_ITEMS; i++)
         if ((m->blink & BLINK_BIT) || m->cursor != i)
             s2gfx_text_centred(l, S2G_FONT_MEDIUM, WHITE, 2, MULTI_Y0 + MULTI_STEP * i, s2gfx_line("MULTIPLAYER MENU", 1 + i, item[i]));
