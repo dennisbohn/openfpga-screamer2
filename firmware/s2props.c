@@ -338,33 +338,37 @@ static void pose(const struct prop *o, const struct kind *k, struct track_block 
     b->phase = track_phase();
 }
 
+/* (Every object's blocks are made before the pass's first piece is drawn, track.h: each obstacle and each spark has a block of its own for the pass. With one for all of them,
+   as it was while a block was made just before it was drawn, every obstacle in view was drawn at the place of the one made last, the nearest: a cone came into the picture only
+   when it was the nearest one, 2026-11-13 to 2026-11-14.) */
 static int make_obst(int id, const struct track_cam *cam, struct track_object *ob)
 {
-    static struct track_block tb;
+    static struct track_block drawn[S2PROPS_OBSTACLES];
+    struct track_block *const tb = &drawn[id];
     struct prop *o = &obst[id];
     const struct kind *k = &kinds[o->kind];
     if(o->dirty) {
         pose(o, k, &block[id]);
         o->dirty = 0;
     }
-    tb = block[id];
+    *tb = block[id];
     const float dx = ob->x - cam->x, dy = ob->y - cam->y, dh = ob->h - cam->h;
     const int lvl = track_lod_level(sqrtf(dx * dx + dy * dy + dh * dh), 1);       /* the level of detail by the object's distance: the moving objects' rule */
     if(lvl) {
         const int32_t at = (int32_t)rd32(k->file + 0x18 + 4 * 13 * lvl);
         if(!at) return ob->n = 0;
-        tb.blk = k->file + at;
+        tb->blk = k->file + at;
     }
-    ob->b = &tb;
+    ob->b = tb;
     return ob->n = 1;
 }
 
 static int make_spark(int id, const struct track_cam *cam, struct track_object *ob)
 {
-    static struct track_block tb;
+    static struct track_block drawn[S2PROPS_SPARKS];
     (void)cam;
-    pose(&spark[id], &kinds[spark_kind[id < 30]], &tb);
-    ob->b = &tb;
+    pose(&spark[id], &kinds[spark_kind[id < 30]], &drawn[id]);
+    ob->b = &drawn[id];
     return ob->n = 1;
 }
 

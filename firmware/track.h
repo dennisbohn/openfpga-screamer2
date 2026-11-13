@@ -187,9 +187,10 @@ void track_backdrop_blit_mirror(struct blit_list *l, const struct rs_clip *clip,
 /* An object besides the track's pieces (a car, a shadow, a puff of smoke): its blocks in the
    order they are drawn, each with its own place: world = o + m . local (m rows: world x, y,
    height; columns: the block's x, y up, z), and its texture phase (geom.h). With make, the
-   blocks are made only when the object comes up in the drawing (make(id, cam, object) fills
-   n and b): the CPU makes a near car while the geometry unit works on the scenery further
-   off. key: what its mesh's class adds to its key (track_class_key; a shadow -200).
+   blocks are made only if the object is in view (make(id, cam, object) fills n and b), all
+   the objects' of a pass in a row before its first piece is drawn (track.c objects_make()):
+   **the blocks a make hands back must stay as they are until the pass is drawn, so two
+   objects of a pass must not share them** (a block of its own for each id). key: what its mesh's class adds to its key (track_class_key; a shadow -200).
    refl: a moving object's reflection state (0: offsets 0, as a static object's), refl_phase
    its reflection picture (the record's +0x3c, geom.h). */
 struct track_block { const uint8_t *file, *blk; float m[9], o[3]; uint32_t phase; };

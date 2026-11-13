@@ -282,7 +282,8 @@ void s2anim_frame(float clock, int px, int py, int lap)
    turned to the camera (the engine's billboard, 0x4bca0: the camera's heading less a half turn, its pitch, its roll the other way) */
 static int make(int id, const struct track_cam *cam, struct track_object *ob)
 {
-    static struct track_block blocks[CAR_BLOCKS];
+    static struct track_block row_blocks[S2ANIM_ROWS][CAR_BLOCKS];      /* a row's own: every object's blocks are made before the pass's first piece is drawn (track.h) */
+    struct track_block *const blocks = row_blocks[id];
     const struct row *r = &rows[id];
     struct car_look lk = { ob->x, ob->y, ob->h, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, track_phase() };
     if(r->flags & 4) {
