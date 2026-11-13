@@ -214,9 +214,7 @@ static void push_piece(const struct gu_piece *g);
    faces a row: geom.h) goes in as the runs of its face row, one after the other (gu_split). */
 void hw_piece(const struct gu_piece *g)
 {
-    /* (gu_oversize() inline: a call to a function of its own, 40 bytes at some place of the code, threw two of the piece loop's lines out of the
-       I-cache on every piece, and its own back in) */
-    if (!(*(const int32_t *)(g->blk + 0x10) > GU_MAX_VERT || *(const int32_t *)(g->blk + 0x14) > GU_MAX_FACES)) {
+    if (!gu_oversize(g)) {
         push_piece(g);
         return;
     }
@@ -267,7 +265,7 @@ static void push_piece(const struct gu_piece *g)
 }
 
 /* the palette entry nearest to an RGB colour, for text on the track's palette */
-uint8_t nearest(const volatile uint32_t *pal, int r, int g, int b)
+uint8_t pal_nearest(const volatile uint32_t *pal, int r, int g, int b)
 {
     uint32_t best = ~0u;
     uint8_t n = 0;
@@ -1363,10 +1361,10 @@ static int race(int n, int car)
     int placements = track_ready(n);
     if (!placements) return 0;
     const volatile uint32_t *pal = (const volatile uint32_t *)track_palette();
-    col_bg = nearest(pal, 0, 0, 0);
-    col_text = nearest(pal, 255, 255, 255);
-    col_dim = nearest(pal, 120, 200, 120);
-    col_alert = nearest(pal, 230, 25, 178);
+    col_bg = pal_nearest(pal, 0, 0, 0);
+    col_text = pal_nearest(pal, 255, 255, 255);
+    col_dim = pal_nearest(pal, 120, 200, 120);
+    col_alert = pal_nearest(pal, 230, 25, 178);
     dlog_str("track ");
     dlog_dec(n);
     dlog_str(": ");

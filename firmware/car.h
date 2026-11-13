@@ -70,6 +70,20 @@ int car_model_index(const struct car_spec *sp);
 void car_models_reset(void);
 int car_draw(int model, const struct car_look *lk, const struct track_cam *cam, struct track_block *out,
              struct track_object *obj);
+/* The same for a car that more than one pass draws in a frame (the picture's and the mirror's): what does not depend on the camera -- the trigonometry of the look, the
+   blocks' middles and places in the world -- is worked out by the first pass and kept in *pose. The caller owns the pose and clears `made` whenever the look changes. */
+struct car_trig { float sc[4], car[6], body[4]; int lean; float x, y, z, drop; };      /* a car as it is drawn (car.c): the cosines and sines of the wheels' turn and the front
+                                                                                           ones' angle, of the object's pitch, roll and heading, of the body's own pitch and roll,
+                                                                                           whether the body leans, the place, how far the body is dropped */
+struct car_pose {
+    int made;                           /* ps and mid are worked out */
+    uint32_t placed;                    /* bit b: b[b]'s place is */
+    struct car_trig ps;
+    float mid[CAR_BLOCKS][3];           /* the blocks' middles in the world */
+    struct track_block b[CAR_BLOCKS];
+};
+int car_draw_pose(int model, const struct car_look *lk, const struct track_cam *cam, struct car_pose *pose,
+                  struct track_block *out, struct track_object *obj);
 /* The same for a car's mesh that is not the track's (the car screen's AAUTOnn.3DX, menu.h): its
    blocks into out (CAR_BLOCKS) in the game's order for the camera; how many */
 int car_mesh_draw(const uint8_t *mesh, const struct car_look *lk, const struct track_cam *cam,

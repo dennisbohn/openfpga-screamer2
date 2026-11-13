@@ -175,6 +175,7 @@ int road_drive_scene(const struct s2car_state *s, struct track_cam *cam, struct 
    and a car whose blocks were made after its step was one step ahead of one made before it, which it was on some frames and not on
    others (by when the geometry unit's buffer happened to fill): the nearest computer's car stood still for a frame and then jumped two steps. */
 static struct car_look race_looks[ROAD_CARS];
+static struct car_pose race_pose[ROAD_CARS];        /* each car's blocks in the world for that look: the picture's pass and the mirror's share them (car.h) */
 static struct track_refl race_refl[ROAD_CARS];      /* each car object's reflection state (the original's record +0x24 ..) */
 static uint32_t race_phase[ROAD_CARS];              /* and its reflection picture (the record's +0x3c) */
 
@@ -188,7 +189,7 @@ static int race_make(int id, const struct track_cam *cam, struct track_object *o
     static struct track_block rblocks[ROAD_CARS][CAR_BLOCKS];
     int nm;
     track_models(&nm);
-    return car_draw(nm ? id % nm : 0, &race_looks[id], cam, rblocks[id], ob);
+    return car_draw_pose(nm ? id % nm : 0, &race_looks[id], cam, &race_pose[id], rblocks[id], ob);
 }
 
 int road_race_scene(struct s2car_state *const *cars, int n, struct track_cam *cam, struct track_object *objs)
@@ -198,6 +199,7 @@ int road_race_scene(struct s2car_state *const *cars, int n, struct track_cam *ca
     for(int k = 0; k < n && k < ROAD_CARS; k++) {
         const struct s2car_state *s = cars[k];
         s2car_look(s, &race_looks[k]);
+        race_pose[k].made = 0;
         race_phase[k] = s2car_reflection(s, k ? 0 : &rate);     /* the picture of every car's windows; the rate is the player's alone to set */
         objs[k] = (struct track_object){ s->pos[0], s->pos[1], s->pos[2], 1200.0f, 0, 0, race_make, k, 0, &race_refl[k], race_phase[k] };
     }

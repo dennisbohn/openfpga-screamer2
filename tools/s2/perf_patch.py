@@ -12,10 +12,16 @@ import sys
 
 
 def edit(path, pairs):
+    """Each entry is a pair (old, new); a list of such pairs, of which exactly one must fit (the same script also counts a reference commit's tree: tools/s2/check_cull_s2.sh);
+    or a triple (old, new, True), applied only where its text is."""
     t = open(path, newline="").read()
-    for old, new in pairs:
-        assert t.count(old) == 1, f"{path}: {old!r} found {t.count(old)} times"
-        t = t.replace(old, new)
+    for entry in pairs:
+        alts = entry if isinstance(entry, list) else [entry]
+        fit = [a for a in alts if t.count(a[0]) == 1]
+        if not fit and all(len(a) > 2 and a[2] for a in alts):
+            continue
+        assert len(fit) == 1, f"{path}: {[a[0] for a in alts]!r} found {[t.count(a[0]) for a in alts]} times"
+        t = t.replace(fit[0][0], fit[0][1])
     open(path, "w", newline="").write(t)
 
 
@@ -26,20 +32,30 @@ def main():
         ("        const int g = list ? list[q] : q;\n", "        const int g = list ? list[q] : q;\n        perf_c.groups++;\n"),
         ("            if(gx * gx + gy * gy >= REACH2) continue;\n",
          "            if(gx * gx + gy * gy >= REACH2) { perf_c.grp_skipped++; continue; }\n"),
+        # tested = the placements tested one by one (a cell that is wholly in view has its placements taken without: they count as visible only)
         ("            const struct cpiece *pc = &cpieces[i];\n            int32_t no_mesh;",
          "            const struct cpiece *pc = &cpieces[i];\n            perf_c.tested++;\n            int32_t no_mesh;"),
-        ("            if(no_mesh < 0) continue;\n", "            if(no_mesh < 0) continue;\n            perf_c.tested_mesh++;\n"),
-        ("            if(o1 | o2 | o3 | o4 | o5 | o6) continue;\n        }\n",
-         "            if(o1 | o2 | o3 | o4 | o5 | o6) { perf_c.cell_out++; continue; }\n        }\n"),
+        ("\n            if(no_mesh < 0) continue;\n", "\n            if(no_mesh < 0) continue;\n            perf_c.tested_mesh++;\n"),
+        # (a reference tree from before the cells' own test, 2026-11-04, has neither text: the counter stays 0 there)
+        [("            if(o1 | o2 | o3 | o4 | o5 | o6) continue;\n            const float room",
+          "            if(o1 | o2 | o3 | o4 | o5 | o6) { perf_c.cell_out++; continue; }\n            const float room", True),
+         ("            if(o1 | o2 | o3 | o4 | o5 | o6) continue;\n        }\n",
+          "            if(o1 | o2 | o3 | o4 | o5 | o6) { perf_c.cell_out++; continue; }\n        }\n", True)],
         ("    uint32_t t_pieces = now();\n",
          "    for(int k = 0; k < nv; k++) perf_c.vis_hash = (perf_c.vis_hash ^ (uint32_t)vis[k]) * 16777619u;\n    uint32_t t_pieces = now();\n"),
-        ("            vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;\n",
-         "            vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;\n            perf_c.visible++;\n"),
+        ("\n            vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;\n",
+         "\n            vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;\n            perf_c.visible++;\n"),
+        ("\n                vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;\n",
+         "\n                vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;\n                perf_c.visible++;\n", True),
         ("        st->objects++;\n", "        st->objects++;\n        perf_c.obj_visible++;\n"),
-        ("            if(ob->make) ob->make(ob->id, cam, ob);\n",
-         "            if(ob->make) ob->make(ob->id, cam, ob);\n            perf_c.obj_blocks += (uint32_t)ob->n;\n"),
-        ("            int nb = multi_pieces(c, f, r, u, pc, gs);\n",
-         "            int nb = multi_pieces(c, f, r, u, pc, gs);\n            perf_c.multi_blocks += (uint32_t)nb;\n"),
+        [("        if(ob->make) ob->make(ob->id, cam, ob);\n        uint32_t refl",
+          "        if(ob->make) ob->make(ob->id, cam, ob);\n        perf_c.obj_blocks += (uint32_t)ob->n;\n        uint32_t refl"),
+         ("            if(ob->make) ob->make(ob->id, cam, ob);\n",
+          "            if(ob->make) ob->make(ob->id, cam, ob);\n            perf_c.obj_blocks += (uint32_t)ob->n;\n")],
+        [("            int nb = multi_pieces(e->c, e->f, e->r, e->u, pc, gs);\n",
+          "            int nb = multi_pieces(e->c, e->f, e->r, e->u, pc, gs);\n            perf_c.multi_blocks += (uint32_t)nb;\n"),
+         ("            int nb = multi_pieces(c, f, r, u, pc, gs);\n",
+          "            int nb = multi_pieces(c, f, r, u, pc, gs);\n            perf_c.multi_blocks += (uint32_t)nb;\n")],
     ]
     edit(f"{d}/track.c", track)
     with open(f"{d}/track.c", "a", newline="") as fh:       # the view distances, set by framestats (FAR, REACH)

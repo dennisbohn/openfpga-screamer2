@@ -6,6 +6,7 @@
  */
 #include "car.h"
 #include <math.h>
+#include "trigmemo.h"                   /* sinf and cosf remembered: the cars' headings are the physics' (s2car.c), and the mirror's pass asks again */
 #include "dat.h"
 #include "hw.h"
 #include "efx.h"
@@ -991,15 +992,10 @@ int car_model_index(const struct car_spec *sp)
     return (sp->name[4] - '0') * 10 + (sp->name[5] - '0');           /* "AUTO03" -> 3 */
 }
 
-/* a car as it is drawn: the cos and sin of the wheels' turn and the front ones' angle, of the
-   object's pitch, roll and heading, of the body's own pitch and roll, and its place; how far
-   the body is dropped */
-struct pose { float sc[4], car[6], body[4]; int lean; float x, y, z, drop; };
-
 /* A block's point p (as stored) in the world (block_to_view, tilt, place): a wheel turned
    about its axle and steered, moved to its place on the car, a body block leant on its own,
    the object's pitch and roll, its heading, its place */
-static void block_point(const struct cblock *q, const struct pose *ps, const float p[3], float w[3])
+static void block_point(const struct cblock *q, const struct car_trig *ps, const float p[3], float w[3])
 {
     const float *sc = ps->sc, *car = ps->car;
     float x = p[0], y = p[1], z = p[2];
@@ -1029,7 +1025,7 @@ static void block_point(const struct cblock *q, const struct pose *ps, const flo
 }
 
 /* the block's place in the world: its origin and the images of its three axes */
-static void place_block(const struct cblock *q, const struct pose *ps, struct track_block *t)
+static void place_block(const struct cblock *q, const struct car_trig *ps, struct track_block *t)
 {
     static const float zero[3] = { 0.0f, 0.0f, 0.0f }, ex[3] = { 1.0f, 0.0f, 0.0f };
     static const float ey[3] = { 0.0f, 1.0f, 0.0f }, ez[3] = { 0.0f, 0.0f, 1.0f };
@@ -1049,53 +1045,70 @@ static void place_block(const struct cblock *q, const struct pose *ps, struct tr
 /* m's blocks placed as lk, the body dropped by drop, into out in the game's order for the
    camera, each at its level of detail (STARTL.EXE 0x7f010, track_lod_level(): the table entry b + 13 L of
    the mesh, by the distance of the block's middle; a block without one at that level is not drawn, so
-   a car at level 2 is its body alone): how many */
+   a car at level 2 is its body alone): how many. What does not depend on the camera is worked out once for
+   a look and kept in pose (car.h): the trigonometry (14 calls of the library), each block's middle and, the
+   first time a pass draws the block, its place. The picture's pass and the mirror's then differ only in the
+   order and the levels. */
 static int draw_model(const struct cmodel *m, const struct car_look *lk, float drop, const struct track_cam *cam,
-                      struct track_block *out)
+                      struct car_pose *pose, struct track_block *out)
 {
-    static struct track_block tb[MAX_BLOCKS];
-    struct pose ps = { { cosf(lk->spin), sinf(lk->spin), cosf(lk->steer), sinf(lk->steer) },
-                       { cosf(lk->pitch), sinf(lk->pitch), cosf(lk->roll), sinf(lk->roll), cosf(lk->yaw), sinf(lk->yaw) },
-                       { cosf(lk->body_pitch), sinf(lk->body_pitch), cosf(lk->body_roll), sinf(lk->body_roll) },
-                       lk->body_pitch != 0.0f || lk->body_roll != 0.0f || drop != 0.0f, lk->x, lk->y, lk->z, drop };
+    struct car_trig *ps = &pose->ps;
+    if(!pose->made) {
+        *ps = (struct car_trig){ { cosf(lk->spin), sinf(lk->spin), cosf(lk->steer), sinf(lk->steer) },
+                                 { cosf(lk->pitch), sinf(lk->pitch), cosf(lk->roll), sinf(lk->roll), cosf(lk->yaw), sinf(lk->yaw) },
+                                 { cosf(lk->body_pitch), sinf(lk->body_pitch), cosf(lk->body_roll), sinf(lk->body_roll) },
+                                 lk->body_pitch != 0.0f || lk->body_roll != 0.0f || drop != 0.0f, lk->x, lk->y, lk->z, drop };
+        for(int b = 0; b < m->ncb; b++) {
+            const struct cblock *q = &m->cb[b];
+            float mid[3];
+            for(int j = 0; j < 3; j++) mid[j] = q->mid[j] - q->t[j];
+            block_point(q, ps, mid, pose->mid[b]);
+        }
+        pose->placed = 0;
+        pose->made = 1;
+    }
     int ord[MAX_BLOCKS], nl = 0;
     float key[MAX_BLOCKS];
+    const uint8_t *blk[MAX_BLOCKS];
     for(int b = 0; b < m->ncb; b++) {
         const struct cblock *q = &m->cb[b];
-        struct track_block *t = &tb[b];
-        float mid[3], mw[3];
-        t->file = m->mesh;
-        t->blk = q->blk;
-        t->phase = lk->phase;
         /* the drawing order (0x8ac58, 0x8af24): the furthest middle first, the tyres and
            hubs counted further off; on a tie the lower block first */
-        for(int j = 0; j < 3; j++) mid[j] = q->mid[j] - q->t[j];
-        block_point(q, &ps, mid, mw);
+        const float *mw = pose->mid[b];
         float dx = mw[0] - cam->x, dy = mw[1] - cam->y, dh = mw[2] - cam->h;
         float dist = rintf(sqrtf(dx * dx + dy * dy + dh * dh));
         key[b] = -dist - (float)q->back;
+        blk[b] = q->blk;
         int lvl = track_lod_level(dist, 1);
         if(lvl) {
             int32_t off = *(const int32_t *)(m->mesh + 0x18 + 4 * (b + 13 * lvl));
             if(!off) continue;
-            t->blk = m->mesh + off;
+            blk[b] = m->mesh + off;
         }
-        place_block(q, &ps, t);                 /* (only for a block that is drawn: a car far off is its body alone) */
+        if(!(pose->placed >> b & 1)) {          /* (only a block that is drawn is placed: a car far off is its body alone) */
+            place_block(q, ps, &pose->b[b]);
+            pose->b[b].file = m->mesh;
+            pose->placed |= 1u << b;
+        }
         int i = nl;
         while(i > 0 && key[ord[i - 1]] > key[b]) { ord[i] = ord[i - 1]; i--; }
         ord[i] = b;
         nl++;
     }
-    for(int b = 0; b < nl; b++) out[b] = tb[ord[b]];
+    for(int b = 0; b < nl; b++) {
+        out[b] = pose->b[ord[b]];
+        out[b].blk = blk[ord[b]];
+        out[b].phase = lk->phase;
+    }
     return nl;
 }
 
 static int draw_car(int model, const struct car_look *lk, float drop, const struct track_cam *cam,
-                    struct track_block *out, struct track_object *obj)
+                    struct car_pose *pose, struct track_block *out, struct track_object *obj)
 {
     const struct cmodel *m = cmodel(model);
     if(!m->ncb) return 0;
-    int nl = draw_model(m, lk, drop, cam, out);
+    int nl = draw_model(m, lk, drop, cam, pose, out);
     obj->x = lk->x;
     obj->y = lk->y;
     obj->h = lk->z;
@@ -1105,10 +1118,19 @@ static int draw_car(int model, const struct car_look *lk, float drop, const stru
     return 1;
 }
 
+static struct car_pose once;            /* the pose of a car that is drawn by one pass alone (not on the stack: 1.3 KB) */
+
 int car_draw(int model, const struct car_look *lk, const struct track_cam *cam, struct track_block *out,
              struct track_object *obj)
 {
-    return draw_car(model, lk, 0.0f, cam, out, obj);
+    once.made = 0;
+    return draw_car(model, lk, 0.0f, cam, &once, out, obj);
+}
+
+int car_draw_pose(int model, const struct car_look *lk, const struct track_cam *cam, struct car_pose *pose,
+                  struct track_block *out, struct track_object *obj)
+{
+    return draw_car(model, lk, 0.0f, cam, pose, out, obj);
 }
 
 int car_mesh_draw(const uint8_t *mesh, const struct car_look *lk, const struct track_cam *cam,
@@ -1116,7 +1138,8 @@ int car_mesh_draw(const uint8_t *mesh, const struct car_look *lk, const struct t
 {
     static struct cmodel m;
     cmodel_build(&m, mesh);
-    return draw_model(&m, lk, 0.0f, cam, out);
+    once.made = 0;
+    return draw_model(&m, lk, 0.0f, cam, &once, out);
 }
 
 /* the player's car's blocks, when it comes up in the drawing */
@@ -1126,7 +1149,8 @@ static int car_make(int id, const struct track_cam *cam, struct track_object *ob
     struct car_look lk;
     (void)id;
     car_player_look(&lk);
-    return draw_car(pmodel, &lk, (float)body.drop, cam, blocks, obj);
+    once.made = 0;
+    return draw_car(pmodel, &lk, (float)body.drop, cam, &once, blocks, obj);
 }
 
 /* the object's angles (player_sync): the car's, negated, and a crash's tumbling on top; the four
@@ -1174,7 +1198,7 @@ void car_flat_block(const uint8_t *file, float x, float y, float z, float yaw, f
                     struct track_block *out)
 {
     const struct cblock q = { 0 };
-    struct pose ps = { { 1.0f, 0.0f, 1.0f, 0.0f }, { 0 }, { 1.0f, 0.0f, 1.0f, 0.0f }, 0, x, y, z, 0.0f };
+    struct car_trig ps = { { 1.0f, 0.0f, 1.0f, 0.0f }, { 0 }, { 1.0f, 0.0f, 1.0f, 0.0f }, 0, x, y, z, 0.0f };
     sin_cos(pitch, &ps.car[1], &ps.car[0]);
     sin_cos(roll, &ps.car[3], &ps.car[2]);
     ps.car[4] = cosf(yaw);
@@ -1188,7 +1212,7 @@ void car_flat_block(const uint8_t *file, float x, float y, float z, float yaw, f
 int car_mesh_blocks(const uint8_t *file, float x, float y, float z, float yaw, float pitch, float roll,
                     struct track_block *out, int max)
 {
-    struct pose ps = { { 1.0f, 0.0f, 1.0f, 0.0f }, { 0 }, { 1.0f, 0.0f, 1.0f, 0.0f }, 0, x, y, z, 0.0f };
+    struct car_trig ps = { { 1.0f, 0.0f, 1.0f, 0.0f }, { 0 }, { 1.0f, 0.0f, 1.0f, 0.0f }, 0, x, y, z, 0.0f };
     sin_cos(pitch, &ps.car[1], &ps.car[0]);
     sin_cos(roll, &ps.car[3], &ps.car[2]);
     ps.car[4] = cosf(yaw);

@@ -649,8 +649,8 @@ static int other_track(int n, uint32_t press)
 static int visit(int n, int *cars, int *overlay, int *drive)
 {
     const uint32_t *pal = track_palette();
-    const uint8_t col_text = nearest((const volatile uint32_t *)pal, 255, 255, 255);
-    const uint8_t col_bg = nearest((const volatile uint32_t *)pal, 0, 0, 0);
+    const uint8_t col_text = pal_nearest((const volatile uint32_t *)pal, 255, 255, 255);
+    const uint8_t col_bg = pal_nearest((const volatile uint32_t *)pal, 0, 0, 0);
     track_mode = TRACK_HW;
     track_hw_piece = hw_piece;
     GU_MLB = (uint32_t)((uintptr_t)track_mlb() - SDRAM_BASE);

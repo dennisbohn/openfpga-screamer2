@@ -3,6 +3,11 @@
  * empty and the firmware is the one without them): where the CPU's cycles of a frame go. Each slot sums
  * the cycles of one stretch of code and counts its runs; the viewer writes the totals per frame into
  * the log at the end of a simulated race (prof_log, prof.c). docs/screamer2/performance.md, section 7.
+ *
+ * The counters are code in the functions they time, and the I-cache is 8 KB and direct mapped: a counter added to the piece
+ * loop moved its lines and made the profile build's loop twice as slow as the firmware's (2026-11-13). Its numbers are
+ * proportions of that build, not the firmware's cycles; where the firmware waits is read without touching it from the SDRAM
+ * controller's counters and the trace of the CPU's line reads (tools/s2/hwvariant.py stat, trace; tools/s2/imisses.py).
  */
 #pragma once
 #include <stdint.h>

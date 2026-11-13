@@ -200,7 +200,7 @@ static inline uint32_t now(void) { return 0; }
 static int32_t rd32(const uint8_t *p) { return *(const int32_t *)p; }
 static int16_t rd16(const uint8_t *p) { return *(const int16_t *)p; }
 
-static float sin2048(uint32_t a)
+static inline __attribute__((always_inline)) float sin2048(uint32_t a)
 {
     a &= 2047;
     float s = sin_q[a & 512 ? 512 - (a & 511) : a & 511];
@@ -307,6 +307,56 @@ static void gpiece_make(int at, struct gpiece *g)
     g->obj = pc->obj;
     g->h = pc->h;
 }
+
+/* The rear-view mirror's pass (track_draw_mirror): the picture is the glass's, turned over (the camera's right-hand side reversed: the geometry unit's test of a face is the eye's side
+   of its plane, which no reflection changes, and the rasterizer takes either way round on screen), the backdrop turned too, and the level of detail is at least 1 (STARTL.EXE 0x756b0
+   sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
+static int mirror_pass;
+
+/* A mesh as the hand-over reads it, one line of the D-cache: the object, its block of each level of detail (0: none at that level, nothing is drawn), the middle of level 0's
+   block (the level goes by its distance), and whether the mesh has several blocks or moving parts (multi_pieces). Made at the track's set-up from the object's and the block's
+   headers, which lie scattered over the image: the hand-over read three or four lines for them, a piece. */
+static struct mesh_line { const uint8_t *obj, *blk[3]; float mid[3]; uint32_t multi; } mesh_line[MAX_OBJ] __attribute__((aligned(32)));
+
+/* A placed mesh's level of detail by the square of the distance, without the root: lod_sq[l] is the smallest square whose distance is level l + 1's as track_lod_level()
+   rounds it (the distances 6000 and 9000 before LOD_SCALE). lod_square() finds it by trying squares with track_lod_level()'s own expression, so the level is the same for
+   every distance there is. */
+static float lod_sq[2];
+
+static float lod_square(int32_t first)
+{
+    const float top = 1.0e12f;                      /* (a distance of a million units: far past any track) */
+    uint32_t lo = 0, hi;
+    memcpy(&hi, &top, sizeof hi);                   /* floats from 0 up are in the order of their bits */
+    while(lo < hi) {
+        const uint32_t mid = lo + (hi - lo) / 2;
+        float x;
+        memcpy(&x, &mid, sizeof x);
+        if((int32_t)lrintf(sqrtf(x) * (1.0f / LOD_SCALE)) >= first) hi = mid; else lo = mid + 1;
+    }
+    float x;
+    memcpy(&x, &lo, sizeof x);
+    return x;
+}
+
+static inline __attribute__((always_inline)) int lod_placed(float d2)
+{
+#ifdef TRACK_NO_LOD
+    (void)d2;
+    return 0;
+#else
+    const int level = d2 < lod_sq[0] ? 0 : d2 < lod_sq[1] ? 1 : 2;
+    return level < mirror_pass ? mirror_pass : level;
+#endif
+}
+
+/* cull()'s count of the placements it took with their cell and of those it tested one by one, for a PC tool that wants it (-DTRACK_CULL_STAT) */
+#ifdef TRACK_CULL_STAT
+unsigned track_cull_stat[2];
+#define CULL_COUNT(whole, n) (track_cull_stat[whole] += (unsigned)(n))
+#else
+#define CULL_COUNT(whole, n) ((void)0)
+#endif
 
 int track_open(const volatile uint8_t *file)
 {
@@ -443,7 +493,12 @@ int track_init(void)
             if(rb > radius[k]) radius[k] = rb;
         }
         class_key[k] = (int16_t)track_class_key(obj);
+        const uint8_t *b0 = obj + rd32(obj + 0x18);
+        const int32_t l1 = rd32(obj + 0x18 + 4 * 13), l2 = rd32(obj + 0x18 + 4 * 26);     /* the table's entry 13 L: the block of level L */
+        mesh_line[k] = (struct mesh_line){ obj, { b0, l1 ? obj + l1 : 0, l2 ? obj + l2 : 0 }, { (float)rd16(b0 + 4), (float)rd16(b0 + 6), (float)rd16(b0 + 8) }, multi[k] };
     }
+    lod_sq[0] = lod_square(6000);
+    lod_sq[1] = lod_square(9000);
     for(int i = 0; i < npieces; i++) {
         int k = pieces[i].obj, ok = k >= 0 && k < unr_count;
         cpieces[i] = (struct cpiece){ (float)pieces[i].x, (float)pieces[i].y, (float)pieces[i].h, ok ? radius[k] : -1.0f };
@@ -500,11 +555,6 @@ int track_class_key(const uint8_t *obj)
     /* the object header's table entry 43 (+0xC4), read at 0x7e9a5 and taken off the 16-bit key */
     return obj ? -(int)(int16_t)rd32(obj + 0xC4) : 0;
 }
-
-/* The rear-view mirror's pass (track_draw_mirror): the picture is the glass's, turned over (the camera's right-hand side reversed: the geometry unit's test of a face is the eye's side
-   of its plane, which no reflection changes, and the rasterizer takes either way round on screen), the backdrop turned too, and the level of detail is at least 1 (STARTL.EXE 0x756b0
-   sets [0xae6b4], which 0x7f0fc and 0x7f214 read) */
-static int mirror_pass;
 
 /* How far the mirror's pass sees, in percent of the track's far plane: the glass is 160 x 35 pixels, and the pass hands over pieces as the main pass does. The whole far plane, as the
    original has it: measured in the simulation of track 4 (docs/screamer2/hud.md section 5), the pass took 7.8 ms with it (2026-11-06), 4.3 ms at 50 %
@@ -1199,41 +1249,40 @@ uint32_t track_object_reflection(const struct track_cam *cam, float x, float y, 
     return refl_offsets(&ob, f, r, u);
 }
 
-/* The view from the point c along forward f, with right r and up u (unit vectors) */
-static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam, const float c[3],
-                 const float f[3], const float r[3], const float u[3], struct track_object *objs, int nobj,
-                 struct track_stats *st)
-{
-    uint32_t t_start = now();
-    PF_VAR(pf);
-    st->pieces = st->faces = st->triangles = st->see_through = st->vertices = st->objects = 0;
-    const float cx = c[0], cy = c[1], ch = c[2];
-    const float fx = f[0], fy = f[1], fh = f[2], rx = r[0], ry = r[1], rh = r[2];
-    const float ux = u[0], uy = u[1], uh = u[2];
-    st->cam[0] = (int32_t)cx;
-    st->cam[1] = (int32_t)cy;
-    st->cam[2] = (int32_t)ch;
+/* ------------------------------------------------------------------------------------------------ a frame's drawing
+   In three stages (docs/screamer2/performance.md, "Where the CPU waits"): cull() finds what is in reach and in view and sorts it far to near, objects_make() makes the
+   blocks of the objects among it, hand_over() gives every piece to the geometry unit. hand_over and what it calls for every piece run a few hundred times a frame: they are
+   the hot block of link_prog.ld (its I-cache sets cannot collide), and nothing a piece needs may be called from outside it (firmware/link_check.py looks at the calls). */
 
-    /* the pieces in reach and in view, far to near: vf the depth from the eye */
+/* a pass's camera: its place and its forward, right and up (unit vectors) */
+struct eye { float c[3], f[3], r[3], u[3]; };
+
+/* The placements in reach and in view and the objects in view into vis[], far to near (vf the depth from the eye): how many */
+static int cull(const struct rs_clip *clip, const struct eye *e, const struct track_object *objs, int nobj, struct track_stats *st)
+{
+    PF_VAR(pf);
+    const float cx = e->c[0], cy = e->c[1], ch = e->c[2];
+    const float fx = e->f[0], fy = e->f[1], fh = e->f[2], rx = e->r[0], ry = e->r[1], rh = e->r[2];
+    const float ux = e->u[0], uy = e->u[1], uh = e->u[2];
     const float far_eye = far_z + EYE_BACK;
     const float half_w = (float)(clip->x1 - clip->x0) / 2.0f / FOCAL;
     const int eye = EYE_LINE(clip->y1 - clip->y0);
     const float up = (float)eye / FOCAL;                                       /* above the eye line */
     const float down = (float)(clip->y1 - clip->y0 - eye) / FOCAL;
+    const float reach = __builtin_sqrtf(REACH2);
     int nv = 0;
     /* The cells to look at, in the order of the file (so the pieces come in the order of their numbers): the
        original's walk over the map (STARTL.EXE 0x76d80, docs/screamer2/draw_distance.md) takes only the cells
        that the list of the cell the camera is in names, if that cell has a list (most of the road's cells
        do), else every cell in reach. Without a list the cells whose rows lie in reach are found by their keys
        (a binary search each way), the others by their column; of those a cell is looked at only if it can be
-       in reach (the box of its places) and in view (cell_out: its sphere against the planes) */
+       in reach (the box of its places) and in view (its sphere against the planes) */
     const uint16_t *list = 0;
     int ncl = ncells, cc = camera_cell(cx, cy), q0 = 0, c0 = 0, c1 = 255;
     if(cc >= 0 && vcells[cc].nlist) {
         list = vlist + vcells[cc].list;
         ncl = vcells[cc].nlist;
     } else if(cells_keyed) {
-        const float reach = __builtin_sqrtf(REACH2);
         int r0 = (((int32_t)(cy - reach) + 0x100000) >> 13) - 1, r1 = (((int32_t)(cy + reach) + 0x100000) >> 13) + 1;
         c0 = (((int32_t)(cx - reach) + 0x100000) >> 13) - 1;
         c1 = (((int32_t)(cx + reach) + 0x100000) >> 13) + 1;
@@ -1257,10 +1306,12 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             float gy = sy ? cells[g].y0 - cy : ny ? cy - cells[g].y1 : 0.0f;
             if(gx * gx + gy * gy >= REACH2) continue;
         }
-        {   /* the whole cell out of view: every placement p of it lies within r0 of the middle m, its reach rad is
-               at most rmax, and the placement is out if (n . (p - cam)) > rad (1 + k) for a plane's normal n of
-               length s (the tests below, rewritten): so the cell is out if n . (m - cam) > rmax (1 + k) + r0 s
-               (and a margin for the rounding). Near: vf + rad < NEAR, far: vf - rad > far_eye (s = 1, k = 0) */
+        int all_in;
+        {   /* The whole cell out of view, or the whole cell in. Every placement p of it lies within r0 of the middle m, its reach rad is between 0 and rmax, and a placement is
+               out if (n . (p - cam)) > rad (1 + k) for a plane's normal n of length s (the tests below, rewritten). So the cell is out if n . (m - cam) > rmax (1 + k) + r0 s,
+               and none of its placements can be out by that plane if n . (m - cam) + r0 s <= 0; the 8 units added to r0 are more than the rounding of either side.
+               Near: vf + rad < NEAR, far: vf - rad > far_eye (s = 1, k = 0); in reach: the middle nearer than the reach less r0. A cell that is in by every test has its
+               placements taken without theirs: the same list, some 40 % of a placement's work less. */
             float dx = 0.5f * (cells[g].x0 + cells[g].x1) - cx, dy = 0.5f * (cells[g].y0 + cells[g].y1) - cy, dh = cells[g].ch - ch;
             float vf = dx * fx + dy * fy + dh * fh + EYE_BACK, vr = dx * rx + dy * ry + dh * rh;
             float vu = dx * ux + dy * uy + dh * uh, r0 = cells[g].r0 + 8.0f, rm = cells[g].rmax;
@@ -1269,7 +1320,27 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             int o5 = vu - up * vf > rm * (1.0f + up) + r0 * top, o6 = -vu - down * vf > rm * (1.0f + down) + r0 * bottom;
             INT_NOW6(o1, o2, o3, o4, o5, o6);
             if(o1 | o2 | o3 | o4 | o5 | o6) continue;
+            const float room = reach - r0;
+            int i0 = room > 0.0f && dx * dx + dy * dy + dh * dh <= room * room, i1 = vf - r0 >= NEAR, i2 = vf + r0 <= far_eye;
+            int i3 = vr - half_w * vf + r0 * side <= 0.0f, i4 = -vr - half_w * vf + r0 * side <= 0.0f;
+            int i5 = vu - up * vf + r0 * top <= 0.0f, i6 = -vu - down * vf + r0 * bottom <= 0.0f;
+            INT_NOW7(i0, i1, i2, i3, i4, i5, i6);
+            all_in = i0 & i1 & i2 & i3 & i4 & i5 & i6;
         }
+        if(all_in) {
+            for(int i = cells[g].first, end = i + cells[g].count; i < end; i++) {
+                const struct cpiece *pc = &cpieces[i];
+                int32_t no_mesh;                            /* (its reach -1, as a whole number) */
+                memcpy(&no_mesh, &pc->rad, sizeof no_mesh);
+                if(no_mesh < 0) continue;
+                float dx = pc->x - cx, dy = pc->y - cy, dh = pc->h - ch;
+                float d2 = dx * dx + dy * dy + dh * dh;
+                vis[nv++] = (depth_key(d2) + cpiece_key[i]) * 65536 + i;
+            }
+            CULL_COUNT(1, cells[g].count);
+            continue;
+        }
+        CULL_COUNT(0, cells[g].count);
         for(int i = cells[g].first, end = i + cells[g].count; i < end; i++) {
             const struct cpiece *pc = &cpieces[i];
             int32_t no_mesh;                                /* (its reach -1, as a whole number) */
@@ -1279,8 +1350,7 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             float d2 = dx * dx + dy * dy + dh * dh;
             float vf = dx * fx + dy * fy + dh * fh + EYE_BACK, vr = dx * rx + dy * ry + dh * rh;
             float vu = dx * ux + dy * uy + dh * uh;
-            /* the nearest so far, and out of reach or out of view: all the comparisons asked for at
-               once, then one wait for their answers */
+            /* out of reach or out of view: all the comparisons asked for at once, then one wait for their answers */
             int o0 = d2 >= REACH2, o1 = vf + rad < NEAR, o2 = vf - rad > far_eye;
             int o3 = vr - rad > half_w * (vf + rad), o4 = vr + rad < -half_w * (vf + rad);
             int o5 = vu - rad > up * (vf + rad), o6 = vu + rad < -down * (vf + rad);
@@ -1304,7 +1374,6 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         vis[nv++] = (depth_key(d2) + 300 + ob->key) * 65536 + npieces + k;
         st->objects++;
     }
-    st->nearest = 0xFFFFFFFFu;                  /* (not measured any more: it cost a compare for every placement) */
     /* by key, far first. The list is in the order of i, the keys' low half, and the keys differ:
        sorted by their high half, keeping that order (two passes of 8 bits, radix), it is in the
        order of the whole key, as any sort by it has it */
@@ -1330,26 +1399,16 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         for(int n = 0; n < nv; n++) to[at[((uint32_t)from[n] ^ 0x80000000u) >> sh & 255]++] = from[n];
     }
     PF_ADD(PF_CULL_SORT, pf);
-    uint32_t t_pieces = now();
-    st->cyc_cull = t_pieces - t_start;
-#ifdef TRACK_DUMP                               /* the PC renderer (tools/render.sh): the list drawn */
-    for(int k = 0; k < nv; k++)
-        if((vis[k] & 0xFFFF) < npieces)
-            printf("drawn piece obj %d at %d %d %d\n", (int)pieces[vis[k] & 0xFFFF].obj, (int)pieces[vis[k] & 0xFFFF].x,
-                   (int)pieces[vis[k] & 0xFFFF].h, (int)pieces[vis[k] & 0xFFFF].y);
-        else
-            printf("drawn object at %.0f %.0f %.0f\n", objs[(vis[k] & 0xFFFF) - npieces].x,
-                   objs[(vis[k] & 0xFFFF) - npieces].h, objs[(vis[k] & 0xFFFF) - npieces].y);
-#endif
+    return nv;
+}
 
-    struct su_view view;
-    struct gu_stats gst = { 0, 0, 0, 0 };
-    if(mirror_pass) track_view_mirror(clip, &view);
-    else track_view(clip, &view);
-    uint32_t t_out = 0;
-    /* The objects' blocks are made in a row here, before the first piece, not each when the pieces come to it: a car's make (its blocks' places, the trigonometry: some
-       3 KB of code that runs once a frame) between two pieces threw the lines of the piece loop out of the 8 KB I-cache (direct mapped) and brought them back one miss at a time. */
-    static uint32_t obj_refl[MAX_OBJS];
+/* The blocks of the objects in the list, and the reflection offsets of each (obj_refl), in a row before the first piece, not each when the pieces come to it: a car's make
+   (its blocks' places, the trigonometry: some 3 KB of code that runs once a frame) between two pieces threw the lines of the piece loop out of the 8 KB I-cache (direct mapped)
+   and brought them back one miss at a time. */
+static uint32_t obj_refl[MAX_OBJS];
+
+static void objects_make(const struct track_cam *cam, const struct eye *e, struct track_object *objs, int nv)
+{
     for(int n = 0; n < nv; n++) {
         const int vi = vis[n] & 0xFFFF;
         if(vi < npieces) continue;
@@ -1358,20 +1417,34 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         uint32_t refl = ob->refl_phase & 0xFFFF;
         for(int b = 0; b < ob->n && ob->refl; b++)
             if(rd32(ob->b[b].blk + 0x18) & 0x2000) {
-                refl |= refl_offsets(ob, f, r, u);
+                refl |= refl_offsets(ob, e->f, e->r, e->u);
                 break;
             }
         obj_refl[vi - npieces] = refl;
     }
+}
+
+/* The list's pieces to the geometry unit (or, on the PC, to its model), far to near: a placement's block at its level of detail turned and placed in view space, an object's
+   blocks as they were made, a mesh with several blocks or moving parts block by block (multi_pieces) */
+static void hand_over(volatile uint8_t *fb, const struct rs_clip *clip, const struct eye *e, const struct track_object *objs, int nv, struct track_stats *st)
+{
+    const float cx = e->c[0], cy = e->c[1], ch = e->c[2];
+    const float fx = e->f[0], fy = e->f[1], fh = e->f[2], rx = e->r[0], ry = e->r[1], rh = e->r[2];
+    const float ux = e->u[0], uy = e->u[1], uh = e->u[2];
+    struct su_view view;
+    struct gu_stats gst = { 0, 0, 0, 0 };
+    if(mirror_pass) track_view_mirror(clip, &view);
+    else track_view(clip, &view);
+    uint32_t t_out = 0;
     for(int n = 0; n < nv; n++) {
         const int vi = vis[n] & 0xFFFF;
         PF_VAR(pb);
         if(vi >= npieces) {                         /* an object: its blocks as they come */
-            struct track_object *ob = &objs[vi - npieces];
+            const struct track_object *ob = &objs[vi - npieces];
             const uint32_t refl = obj_refl[vi - npieces];
             for(int b = 0; b < ob->n; b++) {
                 struct gu_piece g;
-                block_piece(c, f, r, u, ob->b[b].m, ob->b[b].o, ob->b[b].blk, &g);
+                block_piece(e->c, e->f, e->r, e->u, ob->b[b].m, ob->b[b].o, ob->b[b].blk, &g);
                 g.obj = ob->b[b].file;
                 g.phase = ob->b[b].phase;
                 g.refl = refl;
@@ -1386,9 +1459,10 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
             continue;
         }
         const struct piece *pc = &pieces[vi];
-        if(multi[pc->obj]) {
+        const struct mesh_line *ml = &mesh_line[pc->obj];
+        if(ml->multi) {
             struct gu_piece gs[MAX_BLOCKS];
-            int nb = multi_pieces(c, f, r, u, pc, gs);
+            int nb = multi_pieces(e->c, e->f, e->r, e->u, pc, gs);
             for(int b = 0; b < nb; b++) {
                 st->pieces++;
                 uint32_t t0 = now();
@@ -1405,21 +1479,16 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
         g.phase = piece_phase;
         g.mirror = 0;
         g.refl = 0;
-        g.blk = block_of(pc->obj, &g.obj);
+        g.obj = ml->obj;
         float ca = sin2048((uint32_t)pc->t + 512), sa = sin2048((uint32_t)pc->t);
         float dx = pc->x - cx, dy = pc->y - cy, dh = pc->h - ch;
 
-        /* level of detail: the block's table entry 13 L on (level 0's middle gives the distance;
-           0 = no block at that level = nothing drawn) */
+        /* level of detail: by the distance of level 0's middle (0 = no block at that level = nothing drawn) */
         {
-            float lx = rd16(g.blk + 4), ly = rd16(g.blk + 6), lz = rd16(g.blk + 8);
+            float lx = ml->mid[0], ly = ml->mid[1], lz = ml->mid[2];
             float wx = dx + lx * ca - lz * sa, wy = dy + lx * sa + lz * ca, wh = dh + ly;
-            int lvl = track_lod_level(sqrtf(wx * wx + wy * wy + wh * wh), 0);
-            if(lvl) {
-                int32_t off = rd32(g.obj + 0x18 + 4 * 13 * lvl);
-                if(!off) { PF_ADD(PF_PC_STATIC, pb); continue; }
-                g.blk = g.obj + off;
-            }
+            g.blk = ml->blk[lod_placed(wx * wx + wy * wy + wh * wh)];
+            if(!g.blk) { PF_ADD(PF_PC_STATIC, pb); continue; }
         }
         PF_ADD(PF_PC_LOD, ps); PF_SET(ps);
 
@@ -1454,30 +1523,62 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
     prof_t[PF_PUSH] += t_out;
     prof_n[PF_PUSH] += st->pieces;
 #endif
-    st->cyc_piece = now() - t_pieces - t_out;
+}
+
+/* The view of the camera e (cam: the same camera for the objects' makes, 0 if there are none) */
+static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam, const struct eye *e, struct track_object *objs, int nobj,
+                 struct track_stats *st)
+{
+    uint32_t t_start = now();
+    st->pieces = st->faces = st->triangles = st->see_through = st->vertices = st->objects = 0;
+    st->cam[0] = (int32_t)e->c[0];
+    st->cam[1] = (int32_t)e->c[1];
+    st->cam[2] = (int32_t)e->c[2];
+    st->nearest = 0xFFFFFFFFu;                  /* (not measured any more: it cost a compare for every placement) */
+    const int nv = cull(clip, e, objs, nobj, st);
+    uint32_t t_pieces = now();
+    st->cyc_cull = t_pieces - t_start;
+#ifdef TRACK_DUMP                               /* the PC renderer (tools/render.sh): the list drawn */
+    for(int k = 0; k < nv; k++)
+        if((vis[k] & 0xFFFF) < npieces)
+            printf("drawn piece obj %d at %d %d %d\n", (int)pieces[vis[k] & 0xFFFF].obj, (int)pieces[vis[k] & 0xFFFF].x,
+                   (int)pieces[vis[k] & 0xFFFF].h, (int)pieces[vis[k] & 0xFFFF].y);
+        else
+            printf("drawn object at %.0f %.0f %.0f\n", objs[(vis[k] & 0xFFFF) - npieces].x,
+                   objs[(vis[k] & 0xFFFF) - npieces].h, objs[(vis[k] & 0xFFFF) - npieces].y);
+#endif
+    objects_make(cam, e, objs, nv);
+    hand_over(fb, clip, e, objs, nv, st);
+    st->cyc_piece = now() - t_pieces - st->cyc_out;
+}
+
+static void eye_of(const struct track_cam *cam, struct eye *e)
+{
+    e->c[0] = cam->x;
+    e->c[1] = cam->y;
+    e->c[2] = cam->h;
+    cam_frame(cam, e->f, e->r, e->u);
 }
 
 void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
                     struct track_object *objs, int nobj, struct track_stats *st)
 {
-    const float c[3] = { cam->x, cam->y, cam->h };
-    float f[3], r[3], u[3];
-    cam_frame(cam, f, r, u);
-    draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
+    struct eye e;
+    eye_of(cam, &e);
+    draw(fb, clip, cam, &e, objs, nobj, st);
 }
 
 void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
                        struct track_object *objs, int nobj, struct track_stats *st)
 {
-    const float c[3] = { cam->x, cam->y, cam->h };
-    float f[3], r[3], u[3];
-    cam_frame(cam, f, r, u);
-    for(int k = 0; k < 3; k++) r[k] = -r[k];
+    struct eye e;
+    eye_of(cam, &e);
+    for(int k = 0; k < 3; k++) e.r[k] = -e.r[k];
     mirror_pass = 1;
     const float far_keep = far_z, reach_keep = reach2;
     far_z = far_base * ((float)MIRROR_FAR_PCT / 100.0f);       /* (the original's far plane, whatever FAR_SCALE is) */
     reach2 = (far_z + REACH_PLUS) * (far_z + REACH_PLUS);
-    draw(fb, clip, cam, c, f, r, u, objs, nobj, st);
+    draw(fb, clip, cam, &e, objs, nobj, st);
     far_z = far_keep;
     reach2 = reach_keep;
     mirror_pass = 0;
@@ -1499,9 +1600,8 @@ void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, 
     float rx = fy, ry = -fx;                    /* right = forward x up, level */
     l = __builtin_sqrtf(rx * rx + ry * ry);
     rx /= l; ry /= l;
-    const float c[3] = { cx, cy, ch }, f[3] = { fx, fy, fh }, r[3] = { rx, ry, 0.0f };
-    const float u[3] = { ry * fh, -rx * fh, rx * fy - ry * fx };     /* up = right x forward */
-    draw(fb, clip, 0, c, f, r, u, 0, 0, st);
+    const struct eye e = { { cx, cy, ch }, { fx, fy, fh }, { rx, ry, 0.0f }, { ry * fh, -rx * fh, rx * fy - ry * fx } };     /* up = right x forward */
+    draw(fb, clip, 0, &e, 0, 0, st);
 }
 
 /* the animation clock set to a (0 .. 1 of its turn) by something that runs it at its own pace: the options room's textures play at 0.2 a turn a second (STARTL.EXE 0x39000), the

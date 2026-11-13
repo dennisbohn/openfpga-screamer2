@@ -76,7 +76,7 @@ $(OUT)/firmware.elf: $(BOOT_OBJS) link.ld
 	@echo "  LD    $(notdir $@)"
 	@$(CC) $(LDFLAGS) -T link.ld -Wl,-Map=$(OUT)/firmware.map $(BOOT_OBJS) -o $@
 
-$(OUT)/program.elf: $(PROG_OBJS) link_prog.ld
+$(OUT)/program.elf: $(PROG_OBJS) link_prog.ld link_boot.ld
 	@echo "  LD    $(notdir $@)"
 	@$(CC) $(LDFLAGS) $(PADFLAG) -T link_prog.ld -Wl,-Map=$(OUT)/program.map $(PROG_OBJS) -o $@
 
@@ -87,7 +87,9 @@ $(OUT)/firmware.bin: $(OUT)/firmware.elf
 	@end=$$($(NM) $< | awk '$$3 == "__image_end" { print $$1 }'); size=$$(wc -c < $@); \
 	 [ $$((0x$$end)) -eq $$size ] || { echo "__image_end 0x$$end is not the size of $@ ($$size)"; rm $@; exit 1; }
 
-$(OUT)/program.bin: $(OUT)/program.elf prog_crc.py
+# link_check.py: the sections the linker script's two lists name (the boot RAM's code, the hot block) are where the lists put them.
+$(OUT)/program.bin: $(OUT)/program.elf $(OUT)/program.lst prog_crc.py link_check.py
+	@python3 link_check.py $(OUT)/program.map $(OUT)/program.lst link_boot.ld link_prog.ld
 	@$(OBJCOPY) -O binary $< $@
 	@python3 prog_crc.py $@ || { rm $@; exit 1; }
 

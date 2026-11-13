@@ -70,7 +70,12 @@ struct gu_piece {
 struct gu_stats { uint32_t faces, triangles, see_through, vertices; };
 
 extern uint32_t gu_cut_failures;        /* blocks over the limits that could not be cut (once for each (block, row)) */
-int gu_oversize(const struct gu_piece *g);      /* 1 if the piece's block is over the unit's limits */
+/* 1 if the piece's block is over the unit's limits. Inline: hw_piece() asks for every piece, and a call to a function somewhere else in the code threw two lines of the piece loop out of
+   the I-cache each time (docs/screamer2/performance.md, "Where the CPU waits") */
+static inline int gu_oversize(const struct gu_piece *g)
+{
+    return *(const int32_t *)(g->blk + 0x10) > GU_MAX_VERT || *(const int32_t *)(g->blk + 0x14) > GU_MAX_FACES;
+}
 /* The runs a piece is drawn as: copies of *g whose obj and blk are the runs' (self-contained) blocks, in drawing order; returns how many (0 if the row has no faces or the block
    could not be cut). Only for a piece gu_oversize() says is over the limits. */
 int gu_split(const struct gu_piece *g, struct gu_piece out[GU_CUT_RUNS]);

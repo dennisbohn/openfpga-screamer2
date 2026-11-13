@@ -6,6 +6,8 @@ Usage: python -I tools/s2/hwvariant.py <name>=<spec> ...
   spec: comma list of  i<KB>[w<ways>]  (the I-cache, e.g. i16w2: 16 KB, 2 ways; i8w2: two ways of 4 KB, no more block RAM)
                        d<KB>[w<ways>]  (the D-cache)
                        p1              (the arbiter takes the iBus before the geometry unit's and rasterizer's lines; core/src/fpga/core/sdram_port.v: dBus > rasterizer > iBus)
+                       pdyn, ptgt      (the CPU's branch prediction DYNAMIC or DYNAMIC_TARGET instead of STATIC)
+                       early           (branches resolved in the execute stage: BranchPlugin earlyBranch = true)
                        stat            (a line every 2^20 clocks: the controller's busy clocks, the jobs of each port, the clocks an I-cache miss waits)
                        trace[=<from>]  (the addresses of the CPU's line reads from clock <from> on into build/sim/trace_ib.txt and trace_db.txt)
   e.g.   python -I tools/s2/hwvariant.py i8w2p1=i8w2,p1 i16w2=i16w2
@@ -18,6 +20,8 @@ scala = os.path.join(root, "tools", "vexriscv", "PocketVex.scala")
 core_cpu = os.path.join(root, "core", "src", "fpga", "core", "cpu", "VexPocketIMFC.v")
 I_OLD = "        cacheSize          = 8192,\n        bytePerLine        = 32,\n        wayCount           = 1,"
 D_OLD = "        cacheSize        = 8192,\n        bytePerLine      = 32,\n        wayCount         = 1,"
+P_OLD = "      prediction           = STATIC,"
+E_OLD = "new BranchPlugin(earlyBranch = false,"
 STAT = """
 // ---- simulation only (tools/s2/hwvariant.py): where the controller's time goes, a line every 2^20 clocks
 reg [31:0] x_cyc = 0, x_busy = 0, x_br = 0, x_dbr = 0, x_dbw = 0, x_rs = 0, x_ib = 0, x_ibout = 0, x_dbout = 0, x_rsw = 0, x_ibw = 0, x_dbwt = 0;
@@ -49,14 +53,17 @@ end
 """
 
 
-def cpu_variant(tag, isz, iw, dsz, dw):
+def cpu_variant(tag, isz, iw, dsz, dw, pred, early):
     out = os.path.join(root, "build", "vexvar", tag, "cpu")
     if os.path.exists(os.path.join(out, "VexPocketIMFC.v")):
         return out
     orig = open(scala, encoding="utf-8").read()
-    assert I_OLD in orig and D_OLD in orig
+    assert I_OLD in orig and D_OLD in orig and P_OLD in orig and E_OLD in orig
     s = orig.replace(I_OLD, "        cacheSize          = %d,\n        bytePerLine        = 32,\n        wayCount           = %d," % (isz * 1024, iw))
     s = s.replace(D_OLD, "        cacheSize        = %d,\n        bytePerLine      = 32,\n        wayCount         = %d," % (dsz * 1024, dw))
+    s = s.replace(P_OLD, "      prediction           = %s," % pred)
+    if early:
+        s = s.replace(E_OLD, "new BranchPlugin(earlyBranch = true,")
     try:
         open(scala, "w", encoding="utf-8", newline="\n").write(s)
         r = subprocess.run(["sh", os.path.join(root, "tools", "vexriscv", "gen.sh")], cwd=root, capture_output=True, text=True)
@@ -73,13 +80,16 @@ def cpu_variant(tag, isz, iw, dsz, dw):
 def main():
     for arg in sys.argv[1:]:
         name, spec = arg.split("=", 1)
-        isz, iw, dsz, dw, p1, stat, trace = 8, 1, 8, 1, False, False, None
+        isz, iw, dsz, dw, p1, stat, trace, pred, early = 8, 1, 8, 1, False, False, None, "STATIC", False
         for part in spec.split(","):
             m = re.fullmatch(r"([id])(\d+)(?:w(\d))?", part)
             if m:
                 if m[1] == "i": isz, iw = int(m[2]), int(m[3] or 1)
                 else: dsz, dw = int(m[2]), int(m[3] or 1)
             elif part == "p1": p1 = True
+            elif part == "pdyn": pred = "DYNAMIC"
+            elif part == "ptgt": pred = "DYNAMIC_TARGET"
+            elif part == "early": early = True
             elif part == "stat": stat = True
             elif part.startswith("trace"):
                 trace = int(part.split("=")[1]) if "=" in part else 0
@@ -89,8 +99,8 @@ def main():
         d = os.path.join(root, "sim", "soc_" + name)
         os.makedirs(d, exist_ok=True)
         lint = ["sim/lint.vlt"]
-        if (isz, iw, dsz, dw) != (8, 1, 8, 1):
-            cpu = cpu_variant("i%dw%d_d%dw%d" % (isz, iw, dsz, dw), isz, iw, dsz, dw)
+        if (isz, iw, dsz, dw, pred, early) != (8, 1, 8, 1, "STATIC", False):
+            cpu = cpu_variant("i%dw%d_d%dw%d%s%s" % (isz, iw, dsz, dw, "" if pred == "STATIC" else "_" + pred.lower(), "_early" if early else ""), isz, iw, dsz, dw, pred, early)
             files = files.replace("core/src/fpga/core/cpu/VexPocketIMFC.v", os.path.relpath(os.path.join(cpu, "VexPocketIMFC.v"), root).replace("\\", "/"))
             open(os.path.join(d, "lint.vlt"), "w", newline="\n").write('`verilator_config\nlint_off -file "build/vexvar/*"\n')
             files = files.replace("sim/lint.vlt", "sim/lint.vlt\nsim/soc_%s/lint.vlt" % name, 1)

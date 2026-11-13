@@ -19,19 +19,8 @@ old=build/ref_tree
 rm -rf "$old"
 mkdir -p "$old/build/stats/out" "$old/build/s2" build/stats/out
 git archive "$ref" | tar -x -C "$old"
-# the reference tree is counted with this tree's tools (its own perf_patch.py is the one of its time)
+# the reference tree is counted with this tree's tools (its own perf_patch.py is the one of its time; this tree's knows the older texts of track.c too)
 cp tools/s2/perf.h tools/s2/perf.c tools/s2/perf_patch.py tools/s2/framestats.sh tools/s2/racestats.c tools/s2/framestats.c "$old/tools/s2/"
-python -I - "$old/tools/s2/perf_patch.py" <<'PY'
-import sys
-p = sys.argv[1]
-t = open(p, newline="").read()
-# the cull's own counters need the new cull's text: the reference tree has the old one
-i = t.find('        ("            if(o1 | o2 | o3 | o4 | o5 | o6) continue;')
-j = t.find('        ("    uint32_t t_pieces = now();')
-if i >= 0 and j > i:
-    t = t[:i] + t[j:]
-open(p, "w", newline="").write(t)
-PY
 sh "$old/tools/s2/framestats.sh" build > /dev/null
 sh tools/s2/framestats.sh build > /dev/null
 bad=0

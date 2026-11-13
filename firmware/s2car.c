@@ -1584,9 +1584,11 @@ void s2car_look(const struct s2car_state *s, struct car_look *lk)
        game's is nose up: negated), roll as the game's (S1's car_player_look negates S1's own roll, whose sign is the
        other way), the body's lean (the game's values are the angles the four body blocks are turned by, 0x16878) in the
        same senses as the car's angles, the wheels' turn as the game's, the steering + right (the game's: + left).
-       The tilt's signs were not seen drawn on a slope. */
+       The tilt's signs were not seen drawn on a slope. The wheels' turn is the game's sum, which grows without end (2 rad a step at speed); for the drawing it is taken
+       into one turn, as Screamer 1's car.c does with its own: above 201 rad the library's sine and cosine go the long way for large arguments (__kernel_rem_pio2f),
+       eight times a frame after the first seconds of a race. */
     *lk = (struct car_look){ s->pos[0], s->pos[1], s->pos[2], s->yaw, -s->pitch, s->roll, -s->body_pitch,
-                             s->body_roll, s->wheel_spin[0], -s->wheel_steer, s->look >> 2 };
+                             s->body_roll, fmodf(s->wheel_spin[0], 6.2831853f), -s->wheel_steer, s->look >> 2 };
 }
 
 void s2car_fx(const struct s2car_state *s, struct s2car_fx *out)

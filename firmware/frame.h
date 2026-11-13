@@ -42,7 +42,7 @@ void tl_mark(uint32_t tag);
 void tl_log(void);
 
 /* The palette entry nearest to an RGB colour; pal at f of 0x8000 into the back buffer's palette */
-uint8_t nearest(const volatile uint32_t *pal, int r, int g, int b);
+uint8_t pal_nearest(const volatile uint32_t *pal, int r, int g, int b);
 void pal_faded(const uint32_t *pal, int32_t f);
 
 /* The stack the program used so far (bytes); the frame count the trap handler reports */

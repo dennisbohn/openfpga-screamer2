@@ -21,11 +21,6 @@ static void wr16(uint8_t *p, uint32_t v) { *(uint16_t *)p = (uint16_t)v; }
 
 uint32_t gu_cut_failures;
 
-int gu_oversize(const struct gu_piece *g)
-{
-    return rd32(g->blk + 0x10) > GU_MAX_VERT || rd32(g->blk + 0x14) > GU_MAX_FACES;
-}
-
 int gu_cut(const uint8_t *mesh, const uint8_t *blk, int row, int max_vert, int max_faces, uint8_t *dst, uint32_t room, const uint8_t *out[], int cap)
 {
     const int nv = rd32(blk + 0x10);
