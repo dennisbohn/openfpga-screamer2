@@ -1,5 +1,9 @@
 # The polygon fillers of the original (STARTL.EXE)
 
+(Written for the sister core: the program read here is **Screamer 1's** `STARTL.EXE`, and the addresses are that
+program's. The hardware units were built from it. What Screamer 2 does differently is in
+`docs/screamer2/comparison.md`, `docs/screamer2/performance.md` and `docs/development.md`.)
+
 Reference for how the original renderer fills polygons. Read from the code (`tools/dis.sh -f`;
 flat addresses as in openscreamer `docs/NOTES.md`: code from 0x10000, data from 0x100000) and,
 where the code modifies itself or tables are built at run time, from the memory of the running

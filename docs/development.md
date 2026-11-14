@@ -75,8 +75,8 @@ the line of `MAPnOPP.SPL`, which the firmware reads from `DATA/MAPn.DAT` itself,
 as the reference for `tools/s2/check_track_build_s2.sh [game folder]`, which compiles the firmware's
 builder natively (address and undefined-behaviour sanitizers) and compares the result byte for byte, for
 the seven tracks. The game folder is the unzipped original (its `GFX` and `DATA` folders): the ZIP only
-holds the same files. (`tools/make_track.py` and `tools/check_track_build.sh` are Screamer 1's builder
-and its reference, no longer reached by the Screamer 2 program.)
+holds the same files. (`tools/make_track.py` is Screamer 1's image maker: `make_track_s2.py` runs its
+functions through an adapter. The firmware's own builder of Screamer 1's images is gone.)
 
 `L` and `H` in `MAPnL01.DAT` / `MAPnH01.DAT` are the game's DETAIL sets, not resolutions: the game
 loads the `L` set only for LOW and the `H` set from MID on (more scenery, same textures). The core uses
@@ -804,9 +804,7 @@ poses hold together (a block that is not a wheel must not turn with the wheels: 
 wheels' blur, damage marks as drawn, `docs/screamer2/driving.md`; `LOOK_DUMP=/b/s2host/look_` keeps its pictures), `r<i>` and `c<x>,<y>,<h>,<yaw>,<pitch>` are other
 cameras; `tools/rgb2png.py` makes PNGs. `tools/s2/framestats.sh build` and `sweep s2 <image> <label> <out.csv>
 <step> <cars,...>` count what a frame asks of the units along the road (`ROAD_S=185,371` the viewer's own
-places), see `docs/screamer2/performance.md`. For Screamer 1: `tools/render.sh` runs the firmware's C code
-natively (`tools/host/render.c`); it needs the game files in `build/gamedata/` and its images are version 6,
-which the renderer no longer reads. The header of the script lists its switches.
+places), see `docs/screamer2/performance.md`.
 
 ## Simulation
 
@@ -814,8 +812,9 @@ Verilator runs in Docker (`verilator/verilator:v5.050`). Each testbench lives in
 `sim/<name>/`: `files.f` names the top module and the sources, `tb.cpp` drives them.
 
 ```sh
-# Two framebuffers: load two pictures from the game data over the bridge, swap them by key,
-# capture 13 frames and check 12 of them pixel by pixel (one is interrupted by a reset).
+# Two framebuffers: load two pictures over the bridge, swap them by key, capture 13 frames and
+# check 12 of them pixel by pixel (one is interrupted by a reset). The testbench only needs two
+# pictures; tools/make_screen.py makes them from PCX files of Screamer 1's GRAF.DAT.
 python tools/make_screen.py "C:/GOG Games/Screamer/GFX/GRAF.DAT" LOAD2L.PCX \
     build/sim/screen.bin build/preview/LOAD2L.png
 python tools/make_screen.py "C:/GOG Games/Screamer/GFX/GRAF.DAT" LOAD1L.PCX \

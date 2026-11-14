@@ -6,7 +6,7 @@ toolkit with the LOADING screen and the pause menu, the save, the arcade pages, 
 OpenScreamer's `docs/NOTES2.md` (S2-5zg, S2-5zk to S2-5zq, S2-5r, S2-5s: the menu read from the decompiled program and
 compared with DOSBox), `docs/screamer2/comparison.md` (the menu rows), the game's files (sizes below measured with `tools/dat_sizes.py -v`,
 formats checked on the real files), the program `STARTL.EXE` (`tools/dis.sh -f`, `GAME_DIR` = the Screamer 2 folder), and Screamer 1's
-firmware menus in this tree (`menu.c`, `champ.c`, `intro.c`, `hud.c`, `save.c`; still compiled, not reached by the Screamer 2 viewer).
+firmware menus (`menu.c`, `champ.c`, `intro.c`, `hud.c`, `save.c` of the sister core; they were in this tree until 2026-11-14).
 "Checked" below means read from the files or the program in this study; everything else is NOTES2's reading.
 
 ## 1. In short

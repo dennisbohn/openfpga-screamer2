@@ -67,24 +67,19 @@ SDRAM layout (set by the firmware and the data slot addresses in `core/data.json
 program uses, for the files screen, the ZIP's directory scratch at `0x12D6_0000` and 8 MB at `0x1100_0000`
 for the read test, and, for the viewer (`firmware/viewer.c`), the track image at `0x1210_0000` (7 MB window,
 3.7 to 5.5 MB used) with the four containers of the track read whole from the ZIP above it (rows below) and the
-build's scratch; the rows that name Screamer 1's slots (3 to 20, 25) describe the Screamer 1
-game code still in the tree, which is replaced step by step and not reached now. Data slot 3 is
+build's scratch. Data slot 3 is
 `SCREAMER2.zip` (all the game's `DATA`, `GFX` and `ANIMS` files, read with `firmware/zip.c`), 21 and 22
 the cue sheet and image of the music (`GAME.DAT`, `GAME.GOG`).
 
 | Address | Content |
 |---|---|
-| `0x1011_0000` | still picture of the pause and of "PLAY AGAIN?" |
-| `0x1012_0000` | front of the CD player |
-| `0x1020_0000` | parts of `MENU.DAT` (slot 19) |
-| `0x1060_0000` | parts of `GRAF.DAT` (slot 20); each at its place as in the file |
 | `0x10A0_0000` | Screamer 2's 2D toolkit (`firmware/s2gfx.c`, 1.2 MB, 1.13 MB used): two pictures of 64,000 bytes (+0x0, +0x10000), a stage 160 KB (+0x20000) and an unpack buffer 72 KB (+0x48000) for entries read by range from `GRAF1.DAT`, then `MENUL.SPR` as the file is and the fonts' glyphs (+0x60000, 0.57 MB), and `GAMEL.SPR` unpacked at +0x100000 (0.2 MB: the end screen's track banners, from `GFX/GAME1.DAT`). Screamer 1: images, sprites and fonts of the menu pages and of the track and car selection, the unpacked loading screen |
 | `0x10C0_0000` | Screamer 2's race screen (`firmware/s2gfx.c` `s2gfx_game_init`, 0.5 MB, 0.25 MB used): `GAMEL.SPR` as the file is (197,668 bytes, room for 0x40000), then the glyphs of `GAMEL.FNT` one byte a pixel (room for 0x40000); drawn by `firmware/s2hud.c` |
 | `0x1100_0000` | read test of the files screen (`files_load_check`, up to 8 MB); afterwards, for a deflated ZIP only, `GFX/GRAF1.DAT` inflated whole (4.2 MB, `s2gfx.c`) and, at `0x1150_0000`, `GFX/GAME1.DAT` (0.45 MB) while the race screen's set is read |
 | `0x1180_0000` | Screamer 2's 3D menu pages (`firmware/s2scene.h`, 4 MB below the sound effects): a stage of 256 KB for an entry's stored bytes, 1 MB for a deflated ZIP's container inflated whole, from `+0x14_0000` the page's models: TEAM SELECTION / ENTER YOUR NAME 0.65 MB (`GFX/LOGO1.DAT`'s `LOGO.MLB` and four badges and the letter tyre), the CAR page's five cars 1.1 MB (`GFX/CARS<t>01.DAT`'s `AUTOn.MLB` and `.3DX`, 0x38000 each); only while a menu page is up |
-| `0x11C0_0000` | sound effects `DATA/SOUND.DAT` (Screamer 2: read whole from the ZIP once, 1.4 MB, by `firmware/s2sound.c`; the mixer plays the samples from there. Screamer 1's code in the tree reads it from slot 8, up to 2 MB, the nine menu samples at their places) |
+| `0x11C0_0000` | sound effects `DATA/SOUND.DAT` (read whole from the ZIP once, 1.4 MB, by `firmware/s2sound.c`; the mixer plays the samples from there) |
 | `0x11E0_0000` | music ring (256 KB, from the CD image, slot 22) |
-| `0x11F4_0000` | `MUSIC.DAT` (slot 25, up to 256 KB; 200 KB: the FM music's songs and instrument banks, read when the FM music is first needed) |
+| `0x11F4_0000` | kept for Screamer 1's `MUSIC.DAT` (the FM music's songs and instrument banks, up to 256 KB); Screamer 2 has no such file and this core no slot for it: nothing is read |
 | `0x1210_0000` | track image (built by the firmware, `track_build_s2()`: car materials, MLB with the cars' libraries, meshes, ...; up to 7 MB, 28 blocks of 256 KB) |
 | `0x1280_0000` | the viewer's containers, read whole from the ZIP: `GFX/MAPnH01.DAT` `0x1280_0000` (up to 4 MB, 2.2 to 2.6 MB used), the cars' place `0x12C0_0000` (1 MB: the pieces of the team containers `GFX/CARS<t>01.DAT` that `firmware/s2teams.c` reads, one car at a time, 53 to 76 KB each from a stored ZIP, a whole container up to 0.84 MB from a deflated one), `DATA/MAPn.DAT` `0x12D0_0000` (up to 256 KB, 5 to 20 KB), `GFX/ENVPn01.DAT` `0x12D4_0000` (up to 128 KB, 6 to 20 KB: the windows' reflection picture; Screamer 1's `main.c` slot table, not reached, put `GEN.DAT` and `LOCAL.DAT` there) |
 | `0x12D6_0000` | the four cars of the grid, unpacked (`.MLB` and `.3DX` each, 4 x 224 KB = 0xE0000; kept for all tracks); the directory scratch of `zip_open` (72 KB, before the viewer) |
@@ -121,7 +116,7 @@ All registers are 32 bits wide, accessed as words.
 | `0xF000_002C` | `DS_LENGTH` | W | bytes, a multiple of 4, or `0xFFFF_FFFF` for the rest of the file (the Pocket sizes it; this is how the firmware reads the last 1 to 3 bytes) |
 | `0xF000_0030` | `DS_CTRL` | R/W | Write: bit 0 = start the request. Read: bit 0 still running, bit 1 `DS_SIZE` still being looked up, bits 6..4 the Pocket's result (0 = good, 2 e.g. no file in the slot) |
 | `0xF000_0034` | `DS_SIZE` | R/W | Read: file size of slot `DS_ID` from the Pocket's slot table, 0 if missing; looked up again after every write of `DS_ID`. Write: the value becomes the size of slot `DS_ID` in the table (the saves, see below; bit 1 of `DS_CTRL` until it is entered) |
-| `0xF000_0040` | `OPT_MUSIC` | R | The Pocket menu's Music Source (`core/interact.json`): the word the Pocket wrote to bridge address `0x2000_0000`, 0 Auto, 1 FM Synth (the firmware takes any non-zero word for 1; the byte order of the Pocket's 32-bit write is not documented). A register of its own in `soc.v`, not in the SDRAM and not cleared by a reset of the CPU: the Pocket writes the saved value just before Reset Exit, when the SDRAM may not be ready yet and a bridge word into it is dropped (`MEM_STATUS` bit 3). The bridge reads it back at the same address. 0 after power-up |
+| `0xF000_0040` | `OPT_MUSIC` | R | Screamer 1's Music Source of the Pocket menu (this core's `core/interact.json` has no such entry, so the register reads 0): the word the Pocket wrote to bridge address `0x2000_0000`, 0 Auto, 1 FM Synth (the firmware takes any non-zero word for 1; the byte order of the Pocket's 32-bit write is not documented). A register of its own in `soc.v`, not in the SDRAM and not cleared by a reset of the CPU: the Pocket writes the saved value just before Reset Exit, when the SDRAM may not be ready yet and a bridge word into it is dropped (`MEM_STATUS` bit 3). The bridge reads it back at the same address. 0 after power-up |
 | `0xF000_1000` | `VID_STATUS` | R | Bit 0: front buffer (0/1). Bit 1: swap requested, not yet done. Bits 31..16: frame counter, counts every video frame (50 Hz) |
 | `0xF000_1004` | `VID_SWAP` | W | any value: request a swap. It happens in the next blanking interval; while one is pending (bit 1), further requests are ignored |
 | `0xF000_1400` + 4*i | `VID_PAL[i]` | W | palette of the **back** buffer, entry i (0..255): `0x00RRGGBB`. Only while no swap is pending (`VID_STATUS` bit 1 = 0); otherwise it hits the buffer being displayed |
@@ -196,8 +191,9 @@ mixer is. This costs the CPU about 500 clocks per frame (`docs/frame_timeline.sv
 the bridge writes 176 KB/s into the SDRAM. In the simulation the output is the CD track value
 for value for 4.9 s (`tools/musiccheck.py`).
 
-**FM music** (`opl.v`, `core/src/fpga/core/jtopl/`): the OPL2 of the AdLib, for the songs of
-`DATA/MUSIC.DAT` when there is no CD image (or the Pocket menu says FM Synth); the firmware
+**FM music** (`opl.v`, `core/src/fpga/core/jtopl/`), the sister core's: Screamer 2 has no MIDI songs, so the
+chip is never started here; the unit and its firmware are still in the core. It is the OPL2 of the AdLib, for
+the songs of Screamer 1's `DATA/MUSIC.DAT` when there is no CD image (or the Pocket menu says FM Synth); the firmware
 (`firmware/fm.c`, `fm.h`) is HMI's player and driver. The chip is JTOPL, an open core by Jose
 Tejada (GPL-3.0; the licence and the origin are in `jtopl/README.md`), at its clock of 3.579545 MHz:
 a clock enable from `clk_74a` by a fractional accumulator (715,909 / 14,850,000 a clock, the exact
@@ -225,46 +221,10 @@ releases writes at their times and 129 chip clocks apart, the chip plays a note 
 is 875.43 Hz for a chip pitch of 875.43 Hz (within 0.05 %), the gain doubles the output, run 0
 silences it. Cost: 646 ALMs, 10 M10K (queue 1, JTOPL's shift registers 6, tables 3) and 3 DSP.
 
-The firmware (`firmware/sound.c`) plays the effects from `SFXSBASE.DTR` (GEN.DAT): the samples
-are unpacked in `SOUND.DAT`, the mixer reads them directly from the loaded container. Volume:
-the list row times the master volume for effects, `0x4000` of `0x7fff`, two thirds of the
-game's value (`0x6000`, `0x1bc2f`): the player's engine and the three opponent engines then stay
-below 16 bits even with every sample at full scale (at most 32,000). A full sample moves the
-output by 128 per 8-bit step.
-
-Sounds with a location (OpenScreamer's notes, sections 15 and 17) are heard at the camera,
-with the distance d in x and y; `car_step` sets it every step (`snd_ear`). Opponent engines
-(`oppmotor`, `0x1dffc`, `opp.c`): only cars within 35000 units and only the three nearest,
-volume ((35000 - d) / 35000)^2 * 23552, pitch speed * 2.4 + 13568; until green the speed is
-sin(car number * 0.5 * clock) * 15000, so the opponents rev up (`0x20e63`; below the lowest
-pitch the voice stays silent). The moving parts of the track (`0x21b80`, `scenery.c`): the
-fourth column of `ANIMATIONS` names a row of the track's own `SOUND_FX` list in `MAPnDAT.DTR`
-(track 1: `truck`, `airplane`), loaded after the effects and the commentator; within 40000
-units, volume ((40000 - d) / 40000)^2, pitch 65536. Both get Doppler, + 9 per unit that the
-source came closer in one game frame (1/30 s), here per step * 50 / 30; it is omitted when the
-camera jumps over 1000 units in one step (a cut). Only these sounds are placed in the stereo
-image: the line to the source in the camera frame, pan = 0x8000 +- 32767 *
-sqrt(|lateral| / d), the far side linearly quieter; the player's own sounds stay centred.
-
-The commentator (`firmware/speech.c`, OpenScreamer's notes section 17, "commentary"; EXE
-`0x2479c`, `0x24820`, `0x24a24`, `0x2425c`): its recordings are the rows of `SPFXBASE.DTR` and
-`SPFXFULL.DTR` (GEN.DAT, 11 + 47), loaded after the effects; the game's table (`0x1fb0`)
-gives each of the 27 events up to three of them. An event enters a queue with mode (recording
-0-2 or round robin) and delay, each at most once. While the voice is silent a clock runs; the
-event with the shortest delay is served once the clock reaches it, and after the sentence the
-clock restarts, so two sentences never overlap. Triggers: the countdown with the start lights
-(`0x20d45`: 0, 2, 4, 6 s), checkpoint (recording after the remaining time), finish line (lap;
-"new lap record" below the record, without `CHOICE.DAT` the game's 180 s), crash, the end
-(won, lost, time up) and per step the guards of `0x2425c` with their times: wrong direction
-(against the road at the last wall, `+0x13c`), standstill, hurry, lead and losing it, corner
-(marker flag 4), sliding, last place, a lap ahead, contact with an opponent. The voice is
-centred, with its own master volume `0x3000` (in the game effects, commentator and music all
-start at `0x6000`; the recordings are normalised to full scale). With `0x4000` like the
-effects the countdown clipped over the revving engines at the start and the music in the
-simulation (7 values); with `0x3000` (the voice 2.5 dB below the game's ratio) the peak stays
-at 28,631 of 32,767. Each sentence goes into the debug log when it ends: `say <from>-<to>
-<event> <recording>` (race clock), as long as the 4 KB have room; after the report of the
-start frame and the line every 250 frames it is full.
+What plays on the voices is the game's side: the samples of `DATA/SOUND.DAT` (the mixer reads them from the
+loaded container), the engines' rates, the volumes with the effects' master and the pan are in
+`firmware/s2snd.c` and `firmware/s2sound.c`, described in `docs/development.md`, "Sound (the race)". A full
+sample moves the output by 128 per 8-bit step.
 
 ## Framebuffer
 
@@ -297,9 +257,9 @@ the previous run's log is still there.
 **Saved games** take the same path but live in the SDRAM: the nonvolatile data slots
 `CHOICE.DAT` (id 23, `0x13F0_0000`, 19,348 bytes in Screamer 2's own layout, `firmware/s2save.c`,
 docs/screamer2/menus.md section 7.1: settings, volumes, unlocks, set-ups and the best times; `size_maximum` in
-`core/data.json` is 36,864) and `ATTACK.DAT` (id 24, `0x13F1_0000`, 6 x 60,016 bytes:
-per track the kept time-trial run, `struct ghost_file` in `ghost.h`, which `ghost.c` reads
-and writes directly there). Both are `deferload`: the firmware reads them right after start
+`core/data.json` is 36,864) and `ATTACK.DAT` (id 24, `0x13F1_0000`, 360,096 bytes: a block of
+51,440 bytes for each of the seven tracks, the kept time-attack run, `firmware/s2ghost.h`, which
+`s2ghost.c` reads and writes directly there). Both are `deferload`: the firmware reads them right after start
 (`save_load` in `save.c`, `s2save_load()` for `CHOICE.DAT`); without a file, with a short, foreign or damaged one
 it takes the defaults (the old 1,120-byte layout of Screamer 1's block is migrated once) and then enters the full
 size into the slot table with `DS_SIZE` (a dual-port memory of the core, `datatable` in `core_bridge_cmd.v`: the entry the
@@ -332,8 +292,8 @@ measurements; the trap handler adds cause and address of a crash (`mcause`, `mep
 - The FPU's answer to a comparison (`flt.s`, `fle.s`, `feq.s`) or a conversion to integer
   (`fcvt.w.s`) returns late; an instruction that needs it right after waits. Several questions
   asked in a row return side by side and the CPU waits once: `firmware/track.c` (`INT_NOW...`)
-  and `firmware/opp.c` (`ASKED...`) keep GCC from consuming each one separately with an empty
-  `asm` that takes the answers as operands.
+  keeps GCC from consuming each one separately with an empty `asm` that takes the answers as
+  operands.
 - GCC compiles `fminf`/`fmaxf` here with a call to `__issignalingf` before the `fmin.s`; in a
   loop this is slower than compare and branch.
 - picolibc's `memset` and `memcpy` work byte by byte; `= { 0 }` of a large local array also

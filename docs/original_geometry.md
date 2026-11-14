@@ -1,5 +1,9 @@
 # The geometry of the original (STARTL.EXE): from track piece to screen polygon
 
+(Written for the sister core: the program read here is **Screamer 1's** `STARTL.EXE`, and the addresses are that
+program's. The hardware units were built from it. What Screamer 2 does differently is in
+`docs/screamer2/comparison.md`, `docs/screamer2/performance.md` and `docs/development.md`.)
+
 Reference for the geometry stage of the original renderer. Read from `STARTL.EXE` (disassembly
 with `tools/dis.sh -f`) and checked against the running original (DOSBox, track 1 start grid,
 near chase camera, `tools/dosram.py`). It describes what the program does, shortcuts included,
