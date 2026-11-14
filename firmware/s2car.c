@@ -959,7 +959,10 @@ static void steering(car_t *c, const struct s2car_input *in, int stick)
     float axis;                                         /* the game's word: - left .. + right, in 1024ths */
     if(stick) {
         float s = in->steer;
-        int32_t b0 = s <= -1.0f ? 1023 : s >= 1.0f ? -1023 : (int32_t)(-s * 1023.0f);       /* the joystick word, + to the left */
+        int32_t b0 = s <= -1.0f ? -1023 : s >= 1.0f ? 1023 : (int32_t)(s * 1023.0f);        /* the joystick's word, + to the right: an axis' wheels' angle is -word x lock (0x19445, 0x1950b),
+                                                                                               + to the left as the left key's (0x195bc turns the keys' sum round first). Until
+                                                                                               2026-11-14 the word was taken + to the left and a stick steered the wrong way;
+                                                                                               nothing drove with one before */
         axis = (float)(-b0) * 0.0009765625f;
     } else {
         int32_t b0 = in->steer < -0.3f ? 1023 : 0, b4 = in->steer > 0.3f ? 1023 : 0;
@@ -1454,7 +1457,7 @@ static void make_car(car_t *c, int track)
     RF(0x5c) = RF(0x5c) * 1.12f;
     RF(0x5c) = (float)(set[1] - 2 - tyre_factor[tyre_set]) + RF(0x5c);
     RF(0x6c) = ((float)(set[0] - 2) * 0.15f + 0.7f) * RF(0x6c);
-    if(c->ai) RF(0x6c) = RF(0x6c) * 1.3f;               /* a car with no controls (or a stick) steers 1.3 times as far */
+    if(c->ai || c->stick) RF(0x6c) = RF(0x6c) * 1.3f;   /* a car with no controls, or one steered by an axis (0x15245: no controls record, or its steering's type 0), steers 1.3 times as far */
     RF(0x9c) = (float)set[5] * 0.25f;
     RI(8) = 0;
     for(int i = 0; i < 4; i++) { RI(0xc + 4 * i) = 0; RI(0x1c + 4 * i) = 0; }

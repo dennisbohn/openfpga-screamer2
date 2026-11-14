@@ -27,7 +27,9 @@ and shares its hardware.
   scores and the name entry, saved between sessions; the intro and the attract sequence
 - Music from the game's CD image, the sound effects of the race and of the menus
 - Up to 50 frames per second at the Pocket's native 320 x 200 picture, perspective-correct textures
-- Pocket integration: Core Controls remapping, a docked controller's stick works as the d-pad
+- Analog controls in the Dock, as the original has them for a joystick: the stick steers, the triggers
+  are the gas and the brake (for both players in Combat Mode)
+- Pocket integration: Core Controls remapping
 
 As in the original, three tracks, the first league and four cars of each team are open at the
 start. Winning leagues of the championship opens the other tracks and leagues and the teams'
@@ -55,7 +57,7 @@ the game's install folder, without compression ("Store"), and is about 190 MB la
 
 **The command line (recommended).** One command makes the archive exactly as the core wants it.
 
-- **Windows 10 and 11:** open the game's install folder in File Explorer (GOG's default is
+- **Windows 10 (version 1803 or later) and 11:** open the game's install folder in File Explorer (GOG's default is
   `C:\GOG Games\Screamer 2`), click into the address bar, type `cmd` and press Enter. In the
   window that opens, run:
 
@@ -107,9 +109,9 @@ The defaults can be changed in the Pocket menu under *Core Controls*.
 
 | Action | Button |
 |---|---|
-| Steer, move in the menus | D-pad |
-| Accelerate / OK | B |
-| Brake | Y |
+| Steer, move in the menus | D-pad, or the left stick of a docked controller |
+| Accelerate / OK | B, or the right trigger (as far as it is pressed) |
+| Brake | Y, or the left trigger |
 | Handbrake / Back | A |
 | Next view from the car | X |
 | Gear up / down (manual gearbox) | R / L |

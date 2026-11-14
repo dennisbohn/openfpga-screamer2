@@ -159,6 +159,81 @@ static void unit(void)
     CHECK(s2gh_rec_steps() == S2GH_MAX && s2gh_keep(100.0f, 30.0f, 3) == 0, "one step too many: not kept (the quicker time does not matter)");
     CHECK(s2gh_stored(5) == h && h->time == 900.0f, "the kept run is untouched");
 
+    /* a run driven with a stick (version 3): two bytes a step, the controls in the steps the bytes hold */
+    {
+        int bad = 0, far = 0;
+        for (int m = -S2GH_STICK_STEER; m <= S2GH_STICK_STEER; m++)
+            for (int g = 0; g <= S2GH_STICK_PEDAL; g++) {
+                const struct s2car_input a = { .steer = (float)m / (float)S2GH_STICK_STEER, .throttle = (float)g / (float)S2GH_STICK_PEDAL,
+                                               .brake = (float)(S2GH_STICK_PEDAL - g) / (float)S2GH_STICK_PEDAL, .handbrake = m & 1, .gear_up = g == 3, .gear_down = g == 5 };
+                const struct s2car_input b = s2gh_round(&a);
+                bad += a.steer != b.steer || a.throttle != b.throttle || a.brake != b.brake || a.handbrake != b.handbrake || a.gear_up != b.gear_up || a.gear_down != b.gear_down;
+            }
+        CHECK(bad == 0, "every step of the stick, the gas and the brake comes back as it went in (%d do not)", bad);
+        uint32_t s = 12345;
+        for (int i = 0; i < 20000; i++) {
+            s = s * 1664525u + 1013904223u;
+            const struct s2car_input a = { .steer = (float)(int)(s >> 8 & 0xFFFF) / 32768.0f - 1.0f, .throttle = (float)(s >> 4 & 0xFF) / 255.0f, .brake = (float)(s >> 20 & 0xFF) / 255.0f };
+            const struct s2car_input b = s2gh_round(&a), c = s2gh_round(&b);
+            bad += b.steer != c.steer || b.throttle != c.throttle || b.brake != c.brake;
+            far += fabsf(a.steer - b.steer) > 0.5001f / (float)S2GH_STICK_STEER || fabsf(a.throttle - b.throttle) > 0.5001f / (float)S2GH_STICK_PEDAL ||
+                   fabsf(a.brake - b.brake) > 0.5001f / (float)S2GH_STICK_PEDAL;
+        }
+        CHECK(bad == 0 && far == 0, "any controls are held to the nearest step, and held controls stay (%d moved again, %d too far)", bad, far);
+        const struct s2car_input over = { .steer = -3.0f, .throttle = 2.0f, .brake = -1.0f }, o = s2gh_round(&over);
+        CHECK(o.steer == -1.0f && o.throttle == 1.0f && o.brake == 0.0f, "controls beyond the whole way are the whole way");
+
+        static struct s2car_input given[1000];
+        s2gh_erase(6);
+        s2gh_rec_begin(6, 2, 3, 1, 2, 0, 0);
+        s2gh_rec_mode(1);
+        for (int i = 0; i < 1000; i++) {
+            s = s * 1664525u + 1013904223u;
+            const struct s2car_input a = { .steer = (float)(int)(s >> 8 & 0xFFFF) / 32768.0f - 1.0f, .throttle = (float)(s >> 4 & 0xFF) / 255.0f, .brake = (float)(s >> 20 & 0xFF) / 255.0f,
+                                           .handbrake = (int)(s >> 28 & 1), .gear_up = i % 97 == 0, .gear_down = i % 131 == 0 };
+            given[i] = s2gh_round(&a);
+            s2gh_rec_step(&given[i], 1);
+        }
+        CHECK(s2gh_rec_stick() && s2gh_rec_steps() == 1000, "a stick's recording");
+        int manual = 0, differ = 0;
+        for (uint32_t i = 0; i < 1000; i++) {
+            const struct s2car_input b = s2gh_rec_input(i, &manual);
+            differ += memcmp(&b, &given[i], sizeof b) != 0 || manual != 1;
+        }
+        CHECK(differ == 0, "the recording gives its controls back (%d steps differ)", differ);
+        CHECK(s2gh_keep(70.0f, 23.0f, 3) == 1, "the stick's run is kept");
+        const struct s2gh_head *h3 = s2gh_stored(6);
+        CHECK(h3 && h3->version == 3 && s2gh_stick(h3) && h3->steps == 1000 && h3->team == 2 && h3->car == 3 && h3->slot == 1 && h3->damages == 2 && s2gh_ghost(6, 2) == h3,
+              "its block is of version 3");
+        differ = 0;
+        manual = 0;
+        for (uint32_t i = 0; h3 && i < 1000; i++) {
+            const struct s2car_input b = s2gh_input(h3, i, &manual);
+            differ += memcmp(&b, &given[i], sizeof b) != 0 || manual != 1;
+        }
+        CHECK(differ == 0, "the block gives the controls and the gearbox back (%d steps differ)", differ);
+        uint8_t *b6 = (uint8_t *)(uintptr_t)(SAVE_ATTACK_ADDR + 5 * S2GH_BLOCK);
+        int missed = 0;
+        for (unsigned i = 8; i < S2GH_HEAD + 2000; i++) {
+            b6[i] ^= 0x04;
+            missed += s2gh_stored(6) != 0;
+            b6[i] ^= 0x04;
+        }
+        CHECK(missed == 0 && s2gh_stored(6) != 0, "damage of any byte of a stick's block is detected (%d not), both of a step's bytes", missed);
+        s2gh_rec_begin(6, 2, 3, 1, 2, 0, 0);
+        s2gh_rec_mode(1);
+        for (uint32_t i = 0; i < S2GH_MAX / 2 + 1; i++) s2gh_rec_step(&given[i % 1000], 0);
+        CHECK(!s2gh_rec_full() && s2gh_keep(60.0f, 20.0f, 3) == 0 && s2gh_stored(6) == h3, "a stick's run of one step more than the block holds is not kept (it can still be a replay)");
+        s2gh_rec_begin(6, 2, 3, 1, 2, 0, 0);
+        s2gh_rec_mode(1);
+        for (uint32_t i = 0; i < S2GH_MAX / 2; i++) s2gh_rec_step(&given[i % 1000], 0);
+        CHECK(s2gh_keep(60.0f, 20.0f, 3) == 1 && s2gh_stored(6) && s2gh_stored(6)->steps == S2GH_MAX / 2, "the longest stick's run is kept");
+        s2gh_rec_begin(6, 2, 3, 1, 2, 0, 0);
+        for (int i = 0; i < 500; i++) s2gh_rec_step(&in, 0);
+        CHECK(!s2gh_rec_stick() && s2gh_keep(59.0f, 20.0f, 3) == 1 && s2gh_stored(6) && s2gh_stored(6)->version == 2, "a recording begins as the keys' again, and a quicker keys' run replaces the stick's");
+        s2gh_erase(6);
+    }
+
     /* seven blocks fit and do not touch */
     for (int t = 1; t <= 7; t++) {
         s2gh_rec_begin(t, 1 + t % 4, 1 + t % 5, t & 1, 0, 0, 0);

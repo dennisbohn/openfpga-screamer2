@@ -17,6 +17,10 @@
  *   32  the car's set-up (a run is a function of the controls AND the set-up the car was made of, docs/screamer2/driving.md "The set-up"): 0 the standard one, 1 the six numbers that
  *       follow (s2car.h: handling, pressure, tyres, front, rear, brakes); 33 .. 38 the six, 39 0
  *
+ * A run driven with a stick (s2car_state.stick: the game's analog controls, docs/screamer2/driving.md "The controls") is a block of version 3: the same head, its last
+ * byte the gearbox (1 manual), and two bytes for each step (S2GH_STICK below: the stick in 63 steps to either side, the gas and the brake in 7), so 25,700 steps = 8.5 minutes
+ * fit the block. The car steps by exactly what the two bytes hold (s2gh_round(), race.c), so nothing is lost between a run and its ghost or replay.
+ *
  * A block of version 1 (32 bytes of head, no set-up: the standard one, steps from byte 32) is made over into version 2 when it is first looked at (s2gh_stored): the
  * controls move 8 bytes, the CRC-32 is made again; a run too long to move is no run (it was 51,401 steps or more: 17 minutes).
 
@@ -50,29 +54,43 @@ struct s2gh_head {
     uint8_t reserved;
 };
 
-/* The controls of one step as a byte: bit 0 gas, 1 brake, 2 steering left, 3 steering right, 4 handbrake, 5 gear up, 6 gear down, 7 the gearbox is manual.
-   The Pocket's controls are digital (the viewer's car_input()), so nothing is lost; steer, throttle and brake are -1 / 0 / 1 and 0 / 1. */
+/* The controls of one step of a car driven by the keys as a byte: bit 0 gas, 1 brake, 2 steering left, 3 steering right, 4 handbrake, 5 gear up, 6 gear down, 7 the gearbox
+   is manual. The keys are on or off (the viewer's car_input()), so nothing is lost; steer, throttle and brake are -1 / 0 / 1 and 0 / 1. */
 uint8_t s2gh_pack(const struct s2car_input *in, int manual);
 struct s2car_input s2gh_unpack(uint8_t b, int *manual);
+
+/* ... and of a car driven with a stick as 16 bits (low byte first): bits 0 .. 5 how far the stick is over, 0 .. 63, bit 6 set to the right; 7 .. 9 the gas, 0 .. 7;
+   10 .. 12 the brake, 0 .. 7; 13 handbrake, 14 gear up, 15 gear down. s2gh_round(): the controls as these bits hold them, which is what such a car is stepped with. */
+#define S2GH_STICK_STEER    63
+#define S2GH_STICK_PEDAL    7
+uint16_t s2gh_pack_stick(const struct s2car_input *in);
+struct s2car_input s2gh_unpack_stick(uint16_t w);
+struct s2car_input s2gh_round(const struct s2car_input *in);
 
 /* Track n's kept block (1 .. 7, in ATTACK.DAT's window) if it is a whole one, else 0. */
 const struct s2gh_head *s2gh_stored(int track);
 /* ... and a ghost to race: whole, made with this physics, the same DAMAGES key (0 .. S2GH_DAMAGES: the setting and the level, race_damage_key()) */
 const struct s2gh_head *s2gh_ghost(int track, int damages);
-/* The controls of a block, one byte a step */
+/* The controls of a block, one byte a step (version 2) or two (version 3) */
 const uint8_t *s2gh_data(const struct s2gh_head *h);
+int s2gh_stick(const struct s2gh_head *h);  /* 1: the run was driven with a stick (version 3) */
+struct s2car_input s2gh_input(const struct s2gh_head *h, uint32_t step, int *manual);   /* the controls of a step of the run (step < h->steps) and its gearbox */
 
 /* The recording of a race: begun when the race is (race_init), a byte for each of the player's steps; a race longer than S2GH_MAX steps is not kept. It is time
    attack's ghost when the run is kept (s2gh_keep) and the arcade's and the championship's replay for as long as no other race has begun. */
 void s2gh_rec_begin(int track, int team, int car, int slot, int damages, int custom, const struct s2car_setup *setup);
+void s2gh_rec_mode(int stick);              /* right after s2gh_rec_begin(): the car is driven with a stick (two bytes a step, which must be s2gh_round()'s controls) */
 void s2gh_rec_step(const struct s2car_input *in, int manual);
 uint32_t s2gh_rec_steps(void);
 /* ... and read back: the arcade's and the championship's replay (race.c, menus row 10) runs the race again from the recording of the race just run. */
 const uint8_t *s2gh_rec_data(void);
+int s2gh_rec_stick(void);
+struct s2car_input s2gh_rec_input(uint32_t step, int *manual);     /* (step < s2gh_rec_steps()) */
 int s2gh_rec_full(void);                    /* the race ran over S2GH_MAX steps: only the first are there, the recording is not a race */
 
 /* The player's car has done its laps in `time` seconds (best_lap the quickest of them, laps the race's): the recording is the track's kept run if the track
-   has none that is whole or the time is quicker than the kept one's (an equal time is not). 1 if it was kept (written into ATTACK.DAT's window), else 0. */
+   has none that is whole or the time is quicker than the kept one's (an equal time is not). 1 if it was kept (written into ATTACK.DAT's window), else 0
+   (also a stick's run of more than S2GH_MAX / 2 steps: it does not fit the block). */
 int s2gh_keep(float time, float best_lap, int laps);
 
 /* A block empty (the tests) */

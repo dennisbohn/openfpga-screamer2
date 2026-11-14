@@ -317,7 +317,8 @@ comes over the race ("End of the race and the two pages" below).
 
 | Button (drive) | |
 |---|---|
-| d-pad left / right | steering (-1 / 0 / +1: there is no analog value; a docked controller's stick works as the d-pad) |
+| d-pad left / right | steering, the whole lock to the side held (the original's keys) |
+| a docked controller's stick and triggers | the steering axis, the gas (right trigger) and the brake (left trigger) as the original takes a joystick: the car is made for a stick when the controller has one (docs/screamer2/driving.md, "The controls"); in the menus the stick is the d-pad |
 | B / Y | gas / brake (1 or 0) |
 | A | handbrake (held) |
 | L / R | gear down / up on a manual gearbox (on the step the button goes down; the gearbox is chosen on the TRANSMISSION page or in GAME SETTINGS, there is no button for it in the race: d-pad up used to toggle it and was hit by mistake while steering, with the stick of a docked controller too) |

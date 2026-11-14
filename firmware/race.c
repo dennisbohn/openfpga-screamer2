@@ -920,9 +920,10 @@ static void put_on_line(int i)
     struct s2car_state *c = &R.car[i];
     uint32_t keep[sizeof kept / sizeof kept[0]];
     for(unsigned k = 0; k < sizeof kept / sizeof kept[0]; k++) keep[k] = (uint32_t)I(c, kept[k]);
-    const int manual = c->manual, hold = c->hold, flags = I(c, 0x4c) & 3;
+    const int manual = c->manual, stick = c->stick, hold = c->hold, flags = I(c, 0x4c) & 3;
     if(!s2car_init_at(c, R.team[i], R.model[i], R.track, R.near[i][0], R.near[i][1], c->ai)) return;
     c->manual = manual;
+    c->stick = stick;
     c->hold = hold;
     I(c, 0x4c) |= flags;
     I(c, 0) = i;
@@ -973,6 +974,11 @@ int race_init(int track, float floor_z)
         c->tuned = R.kind == RACE_NORMAL && (i > 0 || R.attract) && race_tuned;    /* (the attract race has no player: car 0 is a computer's too) */
         R.team[i] = race_grid[i].team - 1;              /* the player's team and car, then the computers' (the physics counts from 0) */
         R.model[i] = race_grid[i].car - 1;
+        /* the controls a car is made for (s2car.h `stick`): the player's as the viewer set them before this (a replay: the recorded race's), the second player's in combat mode
+           likewise, the ghost's the kept run's, every other car's the keys' (a computer's car has none) */
+        if(i == 0 && R.replay) c->stick = s2gh_rec_stick();
+        else if(i == 1 && R.kind == RACE_ATTACK && R.ghost) c->stick = s2gh_stick(R.ghost);
+        else if(R.attract || i >= (R.combat ? 2 : 1)) c->stick = 0;
         if(R.kind != RACE_NORMAL || i >= R.first || R.attract) R.car[i].manual = 0;     /* (the first gear of a car depends on it: the ghost must start as the car it was recorded from, and a
                                                                        computer's car has the automatic gearbox, not what the ghost of an earlier race left in the record;
                                                                        the player's in the arcade is the viewer's, set before this) */
@@ -1005,7 +1011,10 @@ int race_init(int track, float floor_z)
         FR.list_left = 0.0f;
         FR.msg_left = 0.0f;
     }
-    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay && !R.attract && !R.combat)) s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, race_damage_key(), custom, &setup);
+    if(R.kind == RACE_ATTACK || (R.kind == RACE_NORMAL && !R.replay && !R.attract && !R.combat)) {
+        s2gh_rec_begin(track, race_grid[0].team, race_grid[0].car, R.slot, race_damage_key(), custom, &setup);
+        s2gh_rec_mode(R.car[0].stick);
+    }
     return 1;
 }
 
@@ -1040,8 +1049,11 @@ void race_step_player(const struct s2car_input *in)
     struct s2car_input replayed;
     if(R.replay) {                                      /* the recorded race's controls, by the step: what the player does now is not asked */
         int manual = R.car[0].manual;
-        replayed = R.steps < s2gh_rec_steps() ? s2gh_unpack(s2gh_rec_data()[R.steps], &manual) : (struct s2car_input){ 0 };
+        replayed = R.steps < s2gh_rec_steps() ? s2gh_rec_input(R.steps, &manual) : (struct s2car_input){ 0 };
         R.car[0].manual = manual;
+        in = &replayed;
+    } else if(R.car[0].stick && !R.attract) {          /* a stick's controls in the steps the recording keeps (s2ghost.h): the race is the same race when it is run again */
+        replayed = s2gh_round(in);
         in = &replayed;
     }
     R.clock += DT;
@@ -1061,7 +1073,9 @@ void race_step_player(const struct s2car_input *in)
 /* combat mode: the second player's car, after the first's (race_step_player) and before the cars touching (race_others_slice) */
 void race_step_player2(const struct s2car_input *in)
 {
-    if(R.combat && !R.stopped) human_step(1, in, R.running);
+    if(!R.combat || R.stopped) return;
+    const struct s2car_input q = R.car[1].stick ? s2gh_round(in) : *in;     /* (the same steps as the first player's stick) */
+    human_step(1, &q, R.running);
 }
 
 /* the ghost's step: the kept run's byte for it, its own clock and hold */
@@ -1075,7 +1089,7 @@ static void ghost_step(void)
     }
     struct s2car_input in = { 0 };
     int manual = c->manual;
-    if(R.gsteps < R.ghost->steps) in = s2gh_unpack(s2gh_data(R.ghost)[R.gsteps], &manual);
+    if(R.gsteps < R.ghost->steps) in = s2gh_input(R.ghost, R.gsteps, &manual);
     R.gsteps++;
     c->manual = manual;
     human_step(1, &in, R.grunning);

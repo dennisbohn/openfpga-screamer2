@@ -66,7 +66,8 @@ struct s2car_state {
     int manual;                         /* 1: gears by gear_up / gear_down (the game's MANUAL option); default 0 */
     int stick;                          /* 1: input.steer is an analog axis (the game's control type 0: its curve, and a
                                            car that steers 1.3 times as far); 0, the default: the d-pad's keys, the whole
-                                           lock to the side held (type 1). Either may change from step to step. */
+                                           lock to the side held (type 1). Set before the car is set up (s2car_init*): the
+                                           car is made with it (0x15245), as the original's is with its configured controls. */
     int ai;                             /* 1: a computer's car (the game's car without a controls record, +0xb4 = 0): its own
                                            grip, wall rule, set-up and pace handicap; set it with s2car_init_grid() */
     int cam_on;                         /* 1: a computer's car (ai) keeps its chase camera worked out in cam[] as the player's does: the replay's cameras follow it */

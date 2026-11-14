@@ -937,8 +937,8 @@ predates routine 160; with it the track 1 start frame is 1,338,092 clocks = 18.0
 
 ## Resource usage
 
-Measured (Quartus build of 2026-11-13, with the second controller's register; timing holds at 74.25 MHz: setup +0.96 ns, hold
-+0.10 ns): 11,432 of 18,480 ALMs (62 %), 292 of
+Measured (Quartus build of 2026-11-14, with the second controller's buttons, stick and triggers; timing holds at 74.25 MHz: setup +0.95 ns, hold
++0.07 ns; fitter seed 7, seed 6 missed hold): 11,470 of 18,480 ALMs (62 %), 292 of
 308 M10K (95 %, of which 16 the table of routine 224), 34 of 66 DSP (52 %). The FM music costs 646
 ALMs, 10 M10K (the write queue 1, JTOPL's shift registers 6, its sine and exponential tables 2 and a
 register 1; they could go into MLABs for logic if block RAM runs out) and 3 DSP. From build to build the

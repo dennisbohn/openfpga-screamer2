@@ -153,7 +153,7 @@ Not feasible here: MULTIPLAYER over a network or a serial link, CD check, the 64
   fields of). `firmware/s2save.c` keeps a Screamer 2 layout of our own in the same slot, 19,348 bytes, with `core/data.json`'s `size_maximum` raised to 36,864
   (the Pocket writes back what the firmware keeps).
   The ghost (the original records 0x20 bytes a frame, 7,000 frames, per track) is re-simulated from the controls, which the physics' fixed 20 ms step allows: **one byte a step** (the Pocket's buttons are on or off: gas, brake,
-  left, right, handbrake, gear up, gear down, the gearbox), three laps 8,000 to 11,000 steps, 7 tracks of 51,440 bytes each in `ATTACK.DAT`'s 360,096 bytes (built, row 7: **the slot was not changed**, see section 6).
+  left, right, handbrake, gear up, gear down, the gearbox; since 2026-11-14 two bytes a step for a run driven with a stick, docs/screamer2/driving.md "The controls"), three laps 8,000 to 11,000 steps, 7 tracks of 51,440 bytes each in `ATTACK.DAT`'s 360,096 bytes (built, row 7: **the slot was not changed**, see section 6).
 
 ## 6. What exists
 

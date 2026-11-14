@@ -35,6 +35,8 @@
 #define IN_JOY          REG32(0xF0002004u)
 #define IN_TRIG         REG32(0xF0002008u)
 #define IN_KEY2         REG32(0xF0002010u)      /* the second controller's buttons (cont2_key: one at the Dock), IN_KEY's bits; 0 without one */
+#define IN_JOY2         REG32(0xF0002014u)      /* ... its left stick, as IN_JOY's [15:0] (cont2_joy; the right stick is not kept) */
+#define IN_TRIG2        REG32(0xF0002018u)      /* ... and its triggers, as IN_TRIG (cont2_trig) */
 #define KEY_UP          (1u << 0)
 #define KEY_DOWN        (1u << 1)
 #define KEY_LEFT        (1u << 2)
@@ -66,11 +68,17 @@ static inline uint32_t in_keys_first(void)
     return keys;
 }
 
-/* The second controller (one more at the Dock): its buttons, 0 while there is none; the core has no register for its sticks, the d-pad steers */
+/* The second controller (one more at the Dock): its buttons, 0 while there is none, and its left stick as the d-pad like the first's */
 #define IN_PAD2_THERE()     ((IN_KEY2 >> 28) != 0)
 static inline uint32_t in_keys_second(void)
 {
-    return IN_KEY2;
+    uint32_t keys = IN_KEY2, joy = IN_JOY2;
+    if(IN_ANALOG(keys, joy)) {
+        uint32_t x = joy & 0xFF, y = (joy >> 8) & 0xFF;
+        keys |= (x < 0x40 ? KEY_LEFT : 0) | (x >= 0xC0 ? KEY_RIGHT : 0)
+              | (y < 0x40 ? KEY_UP : 0) | (y >= 0xC0 ? KEY_DOWN : 0);
+    }
+    return keys;
 }
 
 /* The buttons everything reads: the first controller's (in_pad 0, as ever), the second's (1), or either's (2: the bits of both, the first's type). Combat mode sets in_pad for the

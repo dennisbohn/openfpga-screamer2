@@ -19,6 +19,9 @@
  *   set-ups     every one of the above again with a CUSTOMIZE set-up for the player's car and the championship's tuned computers (race_custom, race_setup, race_tuned): the replay
  *               takes the recorded race's set-up, not the viewer's globals of the moment (they are changed before it begins); a negative control: the same race with the
  *               standard set-up is another race
+ *   stick       the first of the above again with the player's car driven with a stick (s2car_state.stick: the stick, the gas and the brake part of the way, by fractions the
+ *               recording's steps do not hold): the recording is two bytes a step, the replay's car is made for a stick whatever the viewer's controller is by then, and
+ *               the replay equals the race; a negative control: the same controls into a car made for the keys are another race
  *   cameras     the trackside cameras of every track (CAMERASn.MCM, 23 to 34 cameras of all five kinds), a car driven along the polyline of the cameras' places at a speed
  *               and in a loop: the camera of every frame (its place, angles and the camera in use) against a model of STARTL.EXE's routines written again in double precision
  *               (the firmware's are single precision: places within 2 units, angles within 6 milliradians), the choice of the camera cutting along the track as the model
@@ -61,6 +64,8 @@ static int image(const char *dir, int track)
 
 #define NSTEPS 14000
 static uint8_t ctl[NSTEPS];                             /* the controls of the recorded race as the recorder's bytes */
+static uint16_t ctl16[NSTEPS];                          /* ... of a race driven with a stick (t_stick): its two bytes a step */
+static int t_stick, t_keys_car;                         /* the player's car is driven with a stick; (the negative control: the stick's controls into a car made for the keys) */
 static struct world rec_world[NSTEPS], other[NSTEPS];
 static uint32_t finish_k;                               /* the step in which the player's car had done its laps (a count of steps, 1 up), 0: not in this run */
 static const int ONE[1] = { 1 }, LATE[8] = { 1, 1, 2, 1, 3, 1, 4, 1 }, MANY[3] = { 2, 3, 4 };
@@ -91,6 +96,7 @@ static uint32_t record_race(int track, int laps, int manual0, uint32_t nsteps, u
     setup(laps);
     race_replay = 0;
     race_car(0)->manual = manual0;
+    race_car(0)->stick = t_stick;
     CHECK(race_init(track, road_floor() - 3000.0f), "track %d: race_init", track);
     rng_state = 4242 + (uint32_t)track;
     finish_k = 0;
@@ -101,12 +107,18 @@ static uint32_t record_race(int track, int laps, int manual0, uint32_t nsteps, u
         for (int b = 0; b < n; b++) {
             struct s2car_input in = pilot_input(&pl, race_car(0), 0);
             const uint32_t r = rnd();
-            if (r % 400 == 0) race_car(0)->manual = !race_car(0)->manual;
+            if (r % 400 == 0 && !t_stick) race_car(0)->manual = !race_car(0)->manual;      /* (a stick's recording keeps one gearbox for the race: nothing in a race changes it) */
             if ((r >> 10) % 300 == 0) in.handbrake = 1;
             if ((r >> 14) % 500 == 0) in.brake = 1;
             if ((k + (uint32_t)b) % 700 > 600) in.steer = (float)(int)((r >> 16) % 3) - 1.0f;       /* (a swerve: the cars about him are touched now and then) */
             if (race_car(0)->manual) in.gear_up = (r >> 4) % 90 == 0, in.gear_down = (r >> 7) % 120 == 0;
+            if (t_stick) {                                  /* the stick, the gas and the brake part of the way, by fractions the recording's steps do not hold */
+                in.steer *= 0.55f + (float)(r >> 20 & 0xFF) / 566.7f;
+                in.throttle *= 0.6f + (float)(r >> 12 & 0xFF) / 637.5f;
+                if (in.brake > 0.0f) in.brake = 0.3f + (float)(r >> 3 & 0x7F) / 181.4f;
+            }
             ctl[k + (uint32_t)b] = s2gh_pack(&in, race_car(0)->manual);
+            ctl16[k + (uint32_t)b] = s2gh_pack_stick(&in);
             race_step_player(&in);
             race_step_others(1);
             world_take(&w[k + (uint32_t)b]);
@@ -124,14 +136,15 @@ static void race_by_hand(int track, int laps, int manual0, uint32_t nsteps, cons
     setup(laps);
     race_replay = 0;
     race_car(0)->manual = manual0;
+    race_car(0)->stick = t_stick && !t_keys_car;
     CHECK(race_init(track, road_floor() - 3000.0f), "track %d: race_init", track);
     uint32_t k = 0;
     for (int f = 0; k < nsteps; f++) {
         int n = plan[f % nplan];
         if ((uint32_t)n > nsteps - k) n = (int)(nsteps - k);
         for (int b = 0; b < n; b++) {
-            int manual;
-            struct s2car_input in = s2gh_unpack(ctl[k + (uint32_t)b], &manual);
+            int manual = manual0;
+            struct s2car_input in = t_stick ? s2gh_unpack_stick(ctl16[k + (uint32_t)b]) : s2gh_unpack(ctl[k + (uint32_t)b], &manual);
             race_car(0)->manual = manual;
             race_step_player(&in);
             if (new_order) {
@@ -154,7 +167,9 @@ static uint32_t replay_race(int track, int laps, uint32_t nsteps, const int *pla
     race_replay = 1;
     race_custom = !t_custom;                                /* what the viewer's globals may be by the time of the replay: another set-up; the replay is of the recorded race's */
     race_setup = (struct s2car_setup){ 1, 3, 2, 0, 4, 1 };
+    race_car(0)->stick = !t_stick;                          /* (and another controller: the replay's car is the recorded race's) */
     CHECK(race_init(track, road_floor() - 3000.0f), "track %d: race_init for the replay", track);
+    CHECK(race_car(0)->stick == t_stick, "track %d: the replay's car is made for the controls of the recorded race", track);
     CHECK(race_replaying() && race_replay == 0, "track %d: the race is a replay and the request is used up", track);
     uint32_t k = 0;
     for (int f = 0; k < nsteps; f++) {
@@ -214,13 +229,14 @@ static void check_track(const char *dir, int track)
 
     /* what the recorder holds */
     CHECK(steps_rec == finish_k, "track %d: %u steps recorded, the car had done its laps in step %u", track, steps_rec, finish_k);
-    CHECK(!memcmp(s2gh_rec_data(), ctl, steps_rec), "track %d: the recorded bytes are the controls the race was driven with", track);
+    const uint32_t bytes_rec = t_stick ? 2 * steps_rec : steps_rec;
+    CHECK(s2gh_rec_stick() == t_stick && !memcmp(s2gh_rec_data(), t_stick ? (const void *)ctl16 : (const void *)ctl, bytes_rec), "track %d: the recorded bytes are the controls the race was driven with", track);
     CHECK(!s2gh_rec_full(), "track %d: the recording is whole", track);
     CHECK(race_replay_ok(), "track %d: the race just run can be run again", track);
     struct race_hud h0;
     race_get_hud(&h0);
-    uint8_t copy[NSTEPS];
-    memcpy(copy, s2gh_rec_data(), steps_rec);
+    static uint8_t copy[2 * NSTEPS];
+    memcpy(copy, s2gh_rec_data(), bytes_rec);
 
     /* the replay: in a step at a time, in late frames, in frames of 2 .. 4 */
     const int *plans[3] = { ONE, LATE, MANY };
@@ -229,7 +245,7 @@ static void check_track(const char *dir, int track)
         replay_race(track, laps, n, plans[p], nplans[p], 0, other);
         first = first_difference(rec_world, other, n, &bad);
         CHECK(bad == 0, "track %d: the replay (plan %d) equals the race: %u of %u steps differ (the first %u)", track, p, bad, n, first);
-        CHECK(s2gh_rec_steps() == steps_rec && !memcmp(s2gh_rec_data(), copy, steps_rec), "track %d: the replay leaves the recording as it was", track);
+        CHECK(s2gh_rec_steps() == steps_rec && !memcmp(s2gh_rec_data(), copy, bytes_rec), "track %d: the replay leaves the recording as it was", track);
         CHECK(race_replay_ok(), "track %d: the replay can be run again", track);
     }
     struct race_hud h1;
@@ -276,6 +292,18 @@ static void check_track(const char *dir, int track)
     printf("  track %d%s: %u steps in frames of 1 .. 4 are the one-step race, the player done in step %u; the replay (3 frame plans, after another race, after ESC) equals it in all four cars\n"
            "    at every step; the old order (a frame's player steps, then its computers') differs at %u of %u frame ends (the first at step %u)\n",
            track, t_custom ? " with a set-up and tuned computers" : "", n, finish_k, differ, ends, first_old);
+
+    /* a negative control: the stick's controls into a car made for the keys are another race (the controls a car is made for are part of the race) */
+    if (t_stick) {
+        static struct world keys_car[NSTEPS];
+        t_keys_car = 1;
+        race_by_hand(track, laps, manual0, n, ONE, 1, 1, keys_car);
+        t_keys_car = 0;
+        uint32_t d = 0;
+        for (uint32_t k = 0; k < n; k++) d += memcmp(&rec_world[k], &keys_car[k], sizeof rec_world[0]) != 0;
+        CHECK(d > n / 2, "track %d: the stick's controls into a car made for the keys are another race (%u of %u steps differ)", track, d, n);
+        printf("    driven with a stick; negative control: a car made for the keys gives another race in %u of %u steps\n", d, n);
+    }
 
     /* a negative control: the same controls with the other set-up are another race (the set-up is part of the race) */
     if (t_custom) {
@@ -500,6 +528,9 @@ int main(int argc, char **argv)
         check_track(argv[1], track);
     }
     t_custom = t_tuned = 0;
+    t_stick = 1;                                            /* and driven with a stick: the controls part of the way, a car made for an axis, two bytes a step */
+    for (int track = 1; track <= 7; track++) check_track(argv[1], track);
+    t_stick = 0;
     CHECK(image(argv[1], 1), "image of track 1");
     limits();
     printf("cameras\n");

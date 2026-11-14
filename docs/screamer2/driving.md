@@ -163,9 +163,58 @@ level-ground top speed 104 against 125, which is the cut-off again).
   state is an extra for other users and is not what the viewer draws; check the signs of the tilt in the first picture of
   a bank, they are the one thing of the pose that was not seen drawn.
 - Keys (the d-pad): the whole lock to the side held, as the game's keyboard control (type 1). With `stick = 1` the
-  steering input is an analog axis through the game's curve and the car steers 1.3 times as far (type 0).
+  steering input is an analog axis through the game's curve and the car steers 1.3 times as far (type 0): "The
+  controls" below.
 - The gearbox of the player's car is automatic (the arcade default); `manual = 1` and `gear_up` / `gear_down` give the
   game's manual gearbox (0.5 s between changes).
+
+## The controls: keys, or a stick and triggers
+
+**The original** (read in `STARTL.EXE`, 2026-11-14). A car a human drives has a controls record (`car + 0xb4`): six
+descriptors of 0x1c bytes (the gas, the brake, steering left, steering right, gear up, gear down) and from `+0xa8` the six
+words they give each frame. `0x31883` makes the words. A descriptor is a key (the word is 0 or 1023), a joystick's button
+(the same) or a joystick's axis: the axis' reading less its calibrated middle, times the calibrated scale of that side,
+rounded, held to +-1023, and 0 while it is under 0x66 (a tenth of the way: the dead zone); a steering axis is then
+multiplied by a setting in tenths (`+0x18`). So the gas, the brake and the steering can each be an axis.
+
+- The gas (`0x174ca`) and the brake (`0x1756f`) are the word / 1023, whatever made it.
+- The steering (`0x19409`) goes by the type of its descriptor (`+0x40`). Type 1, the keys: the whole lock to the side
+  held. Type 0, an axis: `r` = the word / 1024 (held to +-1); under 0.6 of the way the wheels' angle is
+  `lock x r x 0.5`, beyond it `lock x ((|r| - 0.6) x 1.7 + 0.3)`: fine about the middle, the last 0.4 of the way
+  the other 0.7 of the lock. Type 2 (`0x195f7`): an axis as a switch, nothing under half the way and the whole lock beyond it. The constants are the program's (0.6, 0.5, 1.7, 0.3 at `0x110518` .. `0x110538`, 1.3 at `0x110310`).
+- A car steered by an axis is made with 1.3 times the lock (`0x15245`, in the car's set-up `0x14e20`: no controls
+  record, a computer's car, or the steering's type 0). The type is the configuration's: it does not change in a race.
+
+**The core.** `s2car.c` had both steering types from the port; the pedals took fractions already. Since 2026-11-14
+they are fed:
+
+- `race_start()` (`viewer.c`) looks at the player's controller when a race is set up: one with a stick (a docked
+  controller of type 3 that has reported, `IN_ANALOG`) makes the car a stick's (`s2car_state.stick`, set before
+  `race_init()`: `make_car()` gives it the 1.3). The Pocket's own buttons and a controller without a stick make it
+  a keys' car, as before. Combat mode does the same for each player with his own controller (`IN_JOY2`, `IN_TRIG2`).
+- `car_input_pad()`: the stick's x is the steering axis, the right trigger the gas, the left trigger the brake, each
+  made into the game's word (`axis_word()`: 1023ths, the dead zone 0x66; the controller's own middle 0x80 and whole
+  way stand for the calibration, the setting in tenths is 10). B and Y are still the whole gas and brake, and the
+  d-pad is the stick all the way over, so a stick's car can be driven without the stick (it then steers by the curve's
+  end, 1.3 times a keys' car's lock).
+- **The steps.** A race is re-run from its controls (the replay, time attack's ghost), so a stick's controls are
+  held to what the recording keeps before the car is stepped (`s2gh_round()` in `race_step_player()` and
+  `race_step_player2()`): the stick in 63 steps to either side, the gas and the brake in 7 each. That is two bytes a
+  step (`s2ghost.h`, a block of version 3): three laps of up to 8.5 minutes fit a track's block of `ATTACK.DAT`,
+  whose size and layout stay as they are (the full 8 bits of each would be four bytes a step: 4.3 minutes). A keys'
+  run is one byte a step as before, and kept ghosts stay good.
+- A replay's car is made for the controls of the recorded race, a ghost's for those of its run (the block's version),
+  whatever controller is there now.
+
+**Not built:** the steering's type 2, a setting for the stick's sensitivity (the original's tenths), a choice of keys
+for a controller that has a stick.
+
+**Checks** (PC, 2026-11-14): `check_ghost_s2.sh` (the two bytes: every step comes back, any controls go to the nearest
+step and stay, a block of version 3 kept, read back and refused when a byte is damaged, the longest run) and
+`check_replay_s2.sh` (on all seven tracks a race driven with fractions of the stick, the gas and the brake: the replay
+equals it in every car at every step in every frame plan; the same controls into a car made for the keys are another
+race). The stick's curve and the 1.3 are read from the program, **not compared with the running original** (it would
+need a joystick in DOSBox), and nothing of it has run on the Pocket.
 
 ## Checks
 

@@ -18,7 +18,7 @@ How to make SCREAMER2.zip
 
   The command line (recommended): one command makes the archive exactly as the core wants it.
 
-    Windows 10 and 11: open the game's install folder in File Explorer, click into the address
+    Windows 10 (version 1803 or later) and 11: open the game's install folder in File Explorer, click into the address
     bar, type cmd and press Enter. In the window that opens, run
       tar --format zip --options zip:compression=store -cf SCREAMER2.zip DATA GFX ANIMS
 

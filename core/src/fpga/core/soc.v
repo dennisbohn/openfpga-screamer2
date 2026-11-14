@@ -39,11 +39,14 @@ module soc (
     output  reg     [31:0]  bridge_log_rd_data,     // read data for bridge addresses 0x0010_xxxx
                                                     // (the debug log) and the SDRAM's
 
-    // controller 1, synchronous to clk; of controller 2 (a second one at the Dock) the buttons
+    // controller 1, synchronous to clk; of controller 2 (a second one at the Dock) the buttons,
+    // the left stick and the triggers
     input   wire    [31:0]  cont1_key,
     input   wire    [31:0]  cont2_key,
     input   wire    [31:0]  cont1_joy,
     input   wire    [15:0]  cont1_trig,
+    input   wire    [15:0]  cont2_joy,
+    input   wire    [15:0]  cont2_trig,
 
     // framebuffer drawing port (framebuffer.v), read data one clock after the address
     output  wire            fb_wr_en,
@@ -796,7 +799,7 @@ end
     reg  [2:0]  frame_s = 0;
     reg  [15:0] frame_count = 0;
     reg  [31:0] key_r, joy_r, key2_r;
-    reg  [15:0] trig_r;
+    reg  [15:0] trig_r, joy2_r, trig2_r;
     wire        swap_pending = swap_req_toggle != ack_s[1];
     reg         ds_started = 0;                 // the data slot read's command has begun
     reg  [2:0]  ds_result = 0;                  // the last one's result, 0 = ok
@@ -823,6 +826,8 @@ always @(posedge clk) begin
     key2_r <= cont2_key;
     joy_r <= cont1_joy;
     trig_r <= cont1_trig;
+    joy2_r <= cont2_joy;
+    trig2_r <= cont2_trig;
 
     case(d_addr[15:0])
         16'h0000: reg_q <= SYS_ID;
@@ -839,6 +844,8 @@ always @(posedge clk) begin
         16'h2004: reg_q <= joy_r;
         16'h2008: reg_q <= {16'd0, trig_r};
         16'h2010: reg_q <= key2_r;
+        16'h2014: reg_q <= {16'd0, joy2_r};
+        16'h2018: reg_q <= {16'd0, trig2_r};
         16'h3014: reg_q <= {31'd0, rs_busy || su_busy || gu_busy || bl_busy};
         16'h3018: reg_q <= rs_pixels;
         16'h3050: reg_q <= rs_misses;

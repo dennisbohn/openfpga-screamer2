@@ -90,6 +90,8 @@ soc soc (
     .cont2_key          ( cont2_key ),
     .cont1_joy          ( 32'd0 ),
     .cont1_trig         ( 16'd0 ),
+    .cont2_joy          ( 16'd0 ),
+    .cont2_trig         ( 16'd0 ),
     .fb_wr_en           ( fb_wr_en ),
     .fb_buf             ( fb_buf ),
     .fb_addr            ( fb_addr ),

@@ -382,12 +382,21 @@ static void set_view(int view)
     if (!race_replaying() && !attract_mode) s2save_set(S2S_VIEW, s2cam_get_view());
 }
 
+/* controller k (0 the first, 1 the second at the Dock) has a stick, and it has reported */
+static int pad_analog(int k)
+{
+    return k ? IN_ANALOG(IN_KEY2, IN_JOY2) : IN_ANALOG(IN_KEY, IN_JOY);
+}
+
 /* a new race on track n: the four cars on the grid, the countdown from 3 s; 0 if the line or a car could not be set up */
 static int race_start(int n, float floor_z)
 {
     uint32_t t0 = rdcycle();
     race_car(0)->manual = manual;                       /* (before the cars are set up: the first gear depends on it; the other kinds of race clear it and it is set again) */
     if (combat_mode) race_car(1)->manual = manual2;     /* (combat mode: the second player's too) */
+    race_car(0)->stick = !sim && pad_analog(0);         /* a controller with a stick: the car is made for an axis, as the original's with a joystick configured (s2car.h; a replay
+                                                           and the attract race set their own, race_init()) */
+    if (combat_mode) race_car(1)->stick = !sim && pad_analog(1);
     int ok = race_init(n, floor_z);
     road_race_reset();
     if (!attract_mode) race_car(0)->manual = manual;    /* (the attract race has no player: every car's gearbox is the driver's) */
@@ -468,6 +477,34 @@ static struct s2car_input car_input(uint32_t keys)
     return (struct s2car_input){ .throttle = (keys & KEY_B) ? 1.0f : 0.0f, .brake = (keys & KEY_Y) ? 1.0f : 0.0f,
                                  .steer = ((keys & KEY_RIGHT) ? 1.0f : 0.0f) - ((keys & KEY_LEFT) ? 1.0f : 0.0f),
                                  .handbrake = (keys & KEY_A) != 0 };
+}
+
+/* A docked controller's stick and triggers, as the original reads a joystick (docs/screamer2/driving.md "The controls"). Its control words (STARTL.EXE 0x31883) are an
+   axis' travel in 1023ths, held to +-1023, and nothing under 0x66 (a tenth of the way: the dead zone); here as a fraction of the whole way. */
+static float axis_word(int v, int full)
+{
+    int w = v * 0x3ff / full;
+    if (w > 0x3ff) w = 0x3ff;
+    if (w < -0x3ff) w = -0x3ff;
+    return w < 0x66 && w > -0x66 ? 0.0f : (float)w / 1023.0f;
+}
+
+/* The controls of player k's car from his controller. A car made for a stick (s2car_state.stick, set in race_start() when the controller has one) takes the stick's x as
+   the steering axis, the right trigger as the gas and the left as the brake, each as far as it is pressed; B and Y are still the whole gas and brake, and the d-pad
+   is the stick all the way over (`keys` has the stick's half way as the d-pad for the menus: the steering reads the controller itself). */
+static struct s2car_input car_input_pad(int k, uint32_t keys)
+{
+    struct s2car_input in = car_input(keys);
+    if (!race_car(k)->stick) return in;
+    const uint32_t raw = k ? IN_KEY2 : IN_KEY, joy = k ? IN_JOY2 : IN_JOY, trig = k ? IN_TRIG2 : IN_TRIG;
+    in.steer = ((raw & KEY_RIGHT) ? 1.0f : 0.0f) - ((raw & KEY_LEFT) ? 1.0f : 0.0f);
+    if (IN_ANALOG(raw, joy)) {
+        if (in.steer == 0.0f) in.steer = axis_word((int)(joy & 0xFF) - 0x80, 0x7F);
+        const float gas = axis_word((int)(trig >> 8 & 0xFF), 0xFF), brake = axis_word((int)(trig & 0xFF), 0xFF);
+        if (gas > in.throttle) in.throttle = gas;
+        if (brake > in.brake) in.brake = brake;
+    }
+    return in;
 }
 
 /* In the simulation the race runs on scripted buttons, one physics step (20 ms) per frame: the gas all the time (the
@@ -925,7 +962,7 @@ static void frame_scene(struct visit *v, struct frame *f)
            frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
         uint32_t steps = sim || !v->drawn ? 1 : f->dvf > DRIVE_MAX_STEPS ? DRIVE_MAX_STEPS : f->dvf;
         const uint32_t pv = ((f->keys >> 2) & 3) | (((f->keys >> 4) & 3) << 2) | (((f->keys >> 7) & 1) << 4);     /* left, right, A, B, Y (the frame's steps all take these) */
-        if (DEBUG && !sim && !attract_mode && !combat_mode && pv != v->in_prev && v->in_bytes < INPUT_LOG_BYTES) {     /* (a debug build's: a release keeps no record of the buttons) */
+        if (DEBUG && !sim && !attract_mode && !combat_mode && !race_car(0)->stick && pv != v->in_prev && v->in_bytes < INPUT_LOG_BYTES) {     /* (a debug build's: a release keeps no record of the buttons) */
             char l[12], *q = fmt_udec(l, race_steps() - v->in_step);
             *q++ = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"[pv];
             *q++ = '\n';
@@ -937,12 +974,12 @@ static void frame_scene(struct visit *v, struct frame *f)
         }
         for (uint32_t k = 0; k < steps; k++) {
             const uint32_t press = combat_mode ? f->pad_press[0] : f->press;
-            struct s2car_input in = car_input(sim ? sim_keys(race_steps()) : combat_mode ? f->pad[0] : f->keys);
+            struct s2car_input in = sim ? car_input(sim_keys(race_steps())) : car_input_pad(0, combat_mode ? f->pad[0] : f->keys);
             in.gear_up = k == 0 && (press & KEY_R);            /* a gear on the one step the button went down */
             in.gear_down = k == 0 && (press & KEY_L);
             race_step_player(&in);
             if (combat_mode) {                              /* the second player's car, from his controller (in the simulation: its buttons and the gas) */
-                struct s2car_input in2 = car_input(sim ? f->pad[1] | KEY_B : f->pad[1]);
+                struct s2car_input in2 = sim ? car_input(f->pad[1] | KEY_B) : car_input_pad(1, f->pad[1]);
                 in2.gear_up = k == 0 && (f->pad_press[1] & KEY_R);
                 in2.gear_down = k == 0 && (f->pad_press[1] & KEY_L);
                 race_step_player2(&in2);

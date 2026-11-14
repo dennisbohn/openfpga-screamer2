@@ -26,15 +26,59 @@ struct s2car_input s2gh_unpack(uint8_t b, int *manual)
                                  .handbrake = (b & 16) != 0 };
 }
 
+uint16_t s2gh_pack_stick(const struct s2car_input *in)
+{
+    const float a = in->steer < 0.0f ? -in->steer : in->steer;
+    const float t = in->throttle < 0.0f ? 0.0f : in->throttle > 1.0f ? 1.0f : in->throttle, b = in->brake < 0.0f ? 0.0f : in->brake > 1.0f ? 1.0f : in->brake;
+    const uint32_t mag = a >= 1.0f ? S2GH_STICK_STEER : (uint32_t)(a * (float)S2GH_STICK_STEER + 0.5f);
+    return (uint16_t)(mag | (mag && in->steer > 0.0f ? 0x40u : 0) | (uint32_t)(t * (float)S2GH_STICK_PEDAL + 0.5f) << 7 | (uint32_t)(b * (float)S2GH_STICK_PEDAL + 0.5f) << 10 |
+                      (in->handbrake ? 0x2000u : 0) | (in->gear_up ? 0x4000u : 0) | (in->gear_down ? 0x8000u : 0));
+}
+
+struct s2car_input s2gh_unpack_stick(uint16_t w)
+{
+    const float mag = (float)(w & 0x3F) / (float)S2GH_STICK_STEER;
+    return (struct s2car_input){ .throttle = (float)(w >> 7 & 7) / (float)S2GH_STICK_PEDAL, .brake = (float)(w >> 10 & 7) / (float)S2GH_STICK_PEDAL,
+                                 .steer = (w & 0x40) ? mag : 0.0f - mag, .gear_up = (w & 0x4000) != 0, .gear_down = (w & 0x8000) != 0, .handbrake = (w & 0x2000) != 0 };
+}
+
+struct s2car_input s2gh_round(const struct s2car_input *in)
+{
+    return s2gh_unpack_stick(s2gh_pack_stick(in));
+}
+
 const uint8_t *s2gh_data(const struct s2gh_head *h)
 {
     return (const uint8_t *)h + S2GH_HEAD;
 }
 
-/* the CRC-32 over bytes 8 .. 40 + steps */
+int s2gh_stick(const struct s2gh_head *h)
+{
+    return h->version == 3;
+}
+
+static struct s2car_input input_at(const uint8_t *d, int stick, uint32_t step, int *manual)
+{
+    if (!stick) return s2gh_unpack(d[step], manual);
+    return s2gh_unpack_stick((uint16_t)(d[2 * step] | d[2 * step + 1] << 8));
+}
+
+struct s2car_input s2gh_input(const struct s2gh_head *h, uint32_t step, int *manual)
+{
+    if (manual && s2gh_stick(h)) *manual = h->reserved & 1;
+    return input_at(s2gh_data(h), s2gh_stick(h), step, manual);
+}
+
+/* the bytes of a block's controls */
+static uint32_t bytes_of(const struct s2gh_head *h)
+{
+    return h->version == 3 ? h->steps * 2 : h->steps;
+}
+
+/* the CRC-32 over bytes 8 .. 40 + the controls */
 static uint32_t crc_of(const struct s2gh_head *h)
 {
-    return crc32((const uint8_t *)h + 8, (const uint8_t *)h + S2GH_HEAD + h->steps);
+    return crc32((const uint8_t *)h + 8, (const uint8_t *)h + S2GH_HEAD + bytes_of(h));
 }
 
 static int setup_ok(const struct s2car_setup *s)
@@ -65,7 +109,7 @@ const struct s2gh_head *s2gh_stored(int track)
     if (track < 1 || track > S2GH_TRACKS) return 0;
     migrate(track);
     const struct s2gh_head *h = BLOCK(track);
-    if (memcmp(h->magic, "S2AT", 4) || h->version != 2 || h->track != track || h->steps == 0 || h->steps > S2GH_MAX) return 0;
+    if (memcmp(h->magic, "S2AT", 4) || (h->version != 2 && h->version != 3) || h->track != track || h->steps == 0 || h->steps > S2GH_MAX || bytes_of(h) > S2GH_MAX) return 0;
     if (h->team < 1 || h->team > 4 || h->car < 1 || h->car > 5 || h->slot > 1 || h->damages > S2GH_DAMAGES) return 0;
     if (h->custom > 1 || !setup_ok(&h->setup) || (!h->custom && (h->setup.handling | h->setup.pressure | h->setup.tyres | h->setup.front | h->setup.rear | h->setup.brakes))) return 0;
     if (!(h->time > 0.0f && h->time < 3600.0f)) return 0;
@@ -84,8 +128,8 @@ static struct {
     int track, team, car, slot, damages, custom;
     struct s2car_setup setup;
     uint32_t steps;
-    int full;
-    uint8_t data[S2GH_MAX];
+    int full, stick, manual;
+    uint8_t data[2 * S2GH_MAX];                             /* (S2GH_MAX steps of either kind: the replay's 17 minutes) */
 } rec;
 
 void s2gh_rec_begin(int track, int team, int car, int slot, int damages, int custom, const struct s2car_setup *setup)
@@ -99,6 +143,13 @@ void s2gh_rec_begin(int track, int team, int car, int slot, int damages, int cus
     rec.damages = damages < 0 ? 0 : damages > S2GH_DAMAGES ? S2GH_DAMAGES : damages;
     rec.steps = 0;
     rec.full = 0;
+    rec.stick = 0;
+    rec.manual = 0;
+}
+
+void s2gh_rec_mode(int stick)
+{
+    rec.stick = stick != 0;
 }
 
 void s2gh_rec_step(const struct s2car_input *in, int manual)
@@ -107,7 +158,15 @@ void s2gh_rec_step(const struct s2car_input *in, int manual)
         rec.full = 1;
         return;
     }
-    rec.data[rec.steps++] = s2gh_pack(in, manual);
+    rec.manual = manual != 0;
+    if (rec.stick) {
+        const uint16_t w = s2gh_pack_stick(in);
+        rec.data[2 * rec.steps] = (uint8_t)w;
+        rec.data[2 * rec.steps + 1] = (uint8_t)(w >> 8);
+        rec.steps++;
+    } else {
+        rec.data[rec.steps++] = s2gh_pack(in, manual);
+    }
 }
 
 uint32_t s2gh_rec_steps(void)
@@ -125,17 +184,31 @@ int s2gh_rec_full(void)
     return rec.full;
 }
 
+int s2gh_rec_stick(void)
+{
+    return rec.stick;
+}
+
+struct s2car_input s2gh_rec_input(uint32_t step, int *manual)
+{
+    if (manual && rec.stick) *manual = rec.manual;
+    return input_at(rec.data, rec.stick, step, manual);
+}
+
 int s2gh_keep(float time, float best_lap, int laps)
 {
     if (rec.full || rec.steps == 0 || rec.track < 1 || rec.track > S2GH_TRACKS || !(time > 0.0f && time < 3600.0f)) return 0;
+    const uint32_t bytes = rec.stick ? rec.steps * 2 : rec.steps;
+    if (bytes > S2GH_MAX) return 0;                         /* (a stick's run of more than 8.5 minutes) */
     const struct s2gh_head *old = s2gh_stored(rec.track);
     if (old && !(time < old->time)) return 0;
     struct s2gh_head *h = BLOCK(rec.track);
     uint8_t *dst = (uint8_t *)h;
     memset(dst, 0, S2GH_HEAD);                              /* (a block half written is not whole: the head last) */
-    memcpy(dst + S2GH_HEAD, rec.data, rec.steps);
+    memcpy(dst + S2GH_HEAD, rec.data, bytes);
     memcpy(h->magic, "S2AT", 4);
-    h->version = 2;
+    h->version = rec.stick ? 3 : 2;
+    h->reserved = rec.stick ? (uint8_t)rec.manual : 0;
     h->track = (uint8_t)rec.track;
     h->team = (uint8_t)rec.team;
     h->car = (uint8_t)rec.car;
