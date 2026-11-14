@@ -16,17 +16,25 @@ used. Other methods (BZip2, LZMA, ...) are not supported: "unsupported compressi
 
 How to make SCREAMER2.zip
 
-  Windows 11 24H2 or later (File Explorer)
-    1. Open the game's install folder and select the three folders DATA, GFX and ANIMS together.
-    2. Right-click, "Compress to", "Additional options".
-    3. In the "Create Archive" window: Archive format ZIP, Compression method Store, Archive
-       name SCREAMER2.zip. Click Create.
+  The command line (recommended): one command makes the archive exactly as the core wants it.
 
-  Other Windows versions: open a command prompt in the game's install folder and run
-    tar --format zip --options zip:compression=store -cf SCREAMER2.zip DATA GFX ANIMS
+    Windows 10 and 11: open the game's install folder in File Explorer, click into the address
+    bar, type cmd and press Enter. In the window that opens, run
+      tar --format zip --options zip:compression=store -cf SCREAMER2.zip DATA GFX ANIMS
 
-  7-Zip: select the three folders, right-click, 7-Zip, "Add to archive...". Archive format zip,
-    Compression level Store, archive name SCREAMER2.zip.
+    macOS and Linux: open a terminal in the game's install folder and run
+      zip -0 -r SCREAMER2.zip DATA GFX ANIMS
+
+  Without the command line:
+
+    File Explorer (Windows 11 24H2 or later)
+      1. Open the game's install folder and select the three folders DATA, GFX and ANIMS together.
+      2. Right-click, "Compress to", "Additional options".
+      3. In the "Create Archive" window: Archive format ZIP, Compression method Store, Archive
+         name SCREAMER2.zip. Click Create.
+
+    7-Zip: select the three folders, right-click, 7-Zip, "Add to archive...". Archive format zip,
+      Compression level Store, archive name SCREAMER2.zip.
 
 Put only DATA, GFX and ANIMS into the ZIP; the other files of the install folder are not needed.
 DATA and GFX are needed. ANIMS holds the scenes shown after a won league of the championship: without

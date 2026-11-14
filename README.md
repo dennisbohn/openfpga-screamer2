@@ -13,6 +13,8 @@ data is part of this repository or of its releases.
 It is the sister project of [Screamer for the Analogue Pocket](https://github.com/dennisbohn/openfpga-screamer)
 and shares its hardware.
 
+<img src="docs/images/race-4x3.png" alt="A race on the Pocket: the start of a race in England, the lap and position display, the dial" width="640" height="480">
+
 ## Features
 
 - All seven tracks and the four teams with their cars, three computer opponents, the obstacles on
@@ -38,37 +40,59 @@ picture at the highest detail), the link port.
 ## Installation
 
 1. Unzip the release archive into the root of the SD card.
-2. Copy your own game files to `Assets/screamer2/common/` on the SD card. For the GOG version, see
-   below.
-3. Start *Screamer 2* from the Pocket's core list. You find it in the group *Computer*.
+2. Make `SCREAMER2.zip` from your own game files (see below).
+3. Copy `SCREAMER2.zip`, `GAME.GOG` and `GAME.DAT` to `Assets/screamer2/common/` on the SD card.
+4. Start *Screamer 2* from the Pocket's core list. You find it in the group *Computer*.
 
 The core has been tested only with the GOG release of the game. Other releases might work if their
 files are the same.
 
-### GOG version
+### Making SCREAMER2.zip
 
 The game has about 140 files, more than a core can name one by one, so the core reads them from a
-single ZIP archive that you make yourself. Three files go to `Assets/screamer2/common/`:
+single ZIP archive that you make yourself. It holds the three folders `DATA`, `GFX` and `ANIMS` of
+the game's install folder, without compression ("Store"), and is about 190 MB large.
+
+**The command line (recommended).** One command makes the archive exactly as the core wants it.
+
+- **Windows 10 and 11:** open the game's install folder in File Explorer (GOG's default is
+  `C:\GOG Games\Screamer 2`), click into the address bar, type `cmd` and press Enter. In the
+  window that opens, run:
+
+  ```
+  tar --format zip --options zip:compression=store -cf SCREAMER2.zip DATA GFX ANIMS
+  ```
+
+- **macOS and Linux:** open a terminal in the game's install folder and run:
+
+  ```
+  zip -0 -r SCREAMER2.zip DATA GFX ANIMS
+  ```
+
+`SCREAMER2.zip` is then in the install folder, next to `GAME.GOG` and `GAME.DAT`.
+
+**Without the command line:**
+
+- **File Explorer (Windows 11 24H2 or later):** select the three folders `DATA`, `GFX` and `ANIMS`
+  together, right-click, *Compress to*, *Additional options*; archive format ZIP, compression
+  method Store, archive name `SCREAMER2.zip`.
+- **7-Zip:** select the three folders, *Add to archive...*; archive format zip, compression level
+  Store, archive name `SCREAMER2.zip`.
+
+An archive with the usual ZIP compression (Deflate) works too, but loading is slow, and the core
+says so. Other compression methods are not supported.
+
+### The files on the SD card
+
+These three files go to `Assets/screamer2/common/`:
 
 | File | What it is |
 |---|---|
-| `SCREAMER2.zip` | One ZIP of the folders `DATA`, `GFX` and `ANIMS` of the game's install folder. |
+| `SCREAMER2.zip` | The archive you made: the game's folders `DATA`, `GFX` and `ANIMS`. |
 | `GAME.GOG` | The CD image with the game's music, from the install folder, as it is. |
 | `GAME.DAT` | The cue sheet of the CD image, from the install folder, as it is. |
 
 `GAME.GOG` and `GAME.DAT` are optional: without them there is no music.
-
-Make the ZIP with the compression method **Store** (no compression), which the core reads fast.
-Deflate, the usual ZIP compression, works too, but loading is slow, and the core says so. Other
-methods are not supported.
-
-- **Windows 11 24H2 or later:** select the three folders `DATA`, `GFX` and `ANIMS` together,
-  right-click, *Compress to*, *Additional options*; archive format ZIP, compression method Store,
-  archive name `SCREAMER2.zip`.
-- **Other Windows versions:** open a command prompt in the install folder and run
-  `tar --format zip --options zip:compression=store -cf SCREAMER2.zip DATA GFX ANIMS`
-- **7-Zip:** select the three folders, *Add to archive...*; archive format zip, compression level
-  Store, archive name `SCREAMER2.zip`.
 
 When it starts, the core checks the files. If something is missing or wrong with the ZIP, it shows
 the list of the files and says what to do. The same instructions are in
