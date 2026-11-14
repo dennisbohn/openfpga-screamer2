@@ -14,6 +14,10 @@ It is the sister project of [Screamer for the Analogue Pocket](https://github.co
 
 <img src="docs/images/race-4x3.png" alt="A race on the Pocket: the start of a race in England, the lap and position display, the dial" width="640" height="480">
 
+You can find a video of the core running on YouTube:
+
+https://youtu.be/-rqBaXkycxU
+
 ## Features
 
 - All seven tracks and the four teams with their cars, three computer opponents, the obstacles on
