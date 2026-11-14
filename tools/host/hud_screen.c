@@ -77,7 +77,7 @@ uint32_t draw_buf;
 static struct blit_list captured;
 void hw_blit(const struct blit_list *l) { captured = *l; }
 
-/* the race: four cars' records, the clock; race_get_hud() as race.c has it */
+/* the race: four cars' records, the clock; race_get_hud() and race_get_hud_car() as race.c has them */
 struct s2_pick race_grid[RACE_CARS] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } };
 int race_laps = 3;
 static struct s2car_state cars[RACE_CARS];
@@ -95,9 +95,9 @@ union word { int32_t i; uint32_t u; float f; };
 #define F(c, o) (((union word *)(c)->rec)[(o) >> 2].f)
 #define I(c, o) (((union word *)(c)->rec)[(o) >> 2].i)
 
-void race_get_hud(struct race_hud *h)
+void race_get_hud_car(int i, struct race_hud *h)
 {
-    const struct s2car_state *c = &cars[0];
+    const struct s2car_state *c = &cars[i];
     int lap = I(c, 0x4ac) + 1;
     h->count = race_clock < 4.0f ? 3 - (int)race_clock : -1;
     h->laps = race_laps;
@@ -108,6 +108,11 @@ void race_get_hud(struct race_hud *h)
     h->time = F(c, 0xc38);
     h->lap_time = F(c, 0xc3c);
     h->best_lap = F(c, 0xc40) < 3599.0f ? F(c, 0xc40) : -1.0f;
+}
+
+void race_get_hud(struct race_hud *h)
+{
+    race_get_hud_car(0, h);
 }
 
 /* what the views from the car (s2cockpit.c, s2dash.c) ask of the race and the track: no dashboards' table here (s2dash_begin finds no DATA/GAME.DAT), no meshes */
