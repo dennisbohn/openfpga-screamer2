@@ -10,8 +10,8 @@ work is done by dedicated hardware units: geometry, triangle setup, rasterizer, 
 audio mixer. The core reads the **unchanged original game files** from the SD card. No game
 data is part of this repository or of its releases.
 
-It is the sister project of [Screamer for the Analogue Pocket](https://github.com/dennisbohn/openfpga-screamer)
-and shares its hardware.
+It is the sister project of [Screamer for the Analogue Pocket](https://github.com/dennisbohn/openfpga-screamer).
+Its hardware began as that core's; the two are developed separately.
 
 <img src="docs/images/race-4x3.png" alt="A race on the Pocket: the start of a race in England, the lap and position display, the dial" width="640" height="480">
 

@@ -6,8 +6,9 @@ memory system in `docs/memory.md`, the fill rule in `docs/original_filler.md`, a
 formats in `docs/original_geometry.md`. The game's side of Screamer 2 (the files, the menus, the
 race, the sound's rules, the tools) is in `docs/development.md` and `docs/screamer2/`.
 
-The hardware is shared with the sister core, [Screamer for the Analogue Pocket](https://github.com/dennisbohn/openfpga-screamer),
-and this document grew with it: where a passage does not name Screamer 2, its code addresses
+The hardware began as that of the sister core, [Screamer for the Analogue Pocket](https://github.com/dennisbohn/openfpga-screamer),
+and is developed separately since (this core reads a second controller and has no FM chip). This document grew
+with the sister core's: where a passage does not name Screamer 2, its code addresses
 (in backticks, `0x83a68`, ...) and measurements may be those of Screamer 1's `STARTL.EXE` and
 tracks. How Screamer 1's game runs on the units (its car, opponents, menus, championship,
 commentary) is in that project's `docs/architecture.md`. "OpenScreamer `docs/NOTES.md`" is the
