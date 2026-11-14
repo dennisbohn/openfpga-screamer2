@@ -1177,7 +1177,7 @@ int ui_tests(struct zip *z, struct zip *deflated, const char *ref, const char *p
     dlog_init();
     mhw_reset();
     mhw_trace = getenv("MHW_TRACE") ? atoi(getenv("MHW_TRACE")) : 0;
-    CHECK(music_init(0, 0) == 1, "music_init on the model's cue sheet");          /* (the pages' reads meet the real guard from here on) */
+    CHECK(music_init() == 1, "music_init on the model's cue sheet");          /* (the pages' reads meet the real guard from here on) */
     if (getenv("MHW_NOGUARD")) slot_hook = 0;                                       /* (the negative control: tools/menu_screens.sh with MHW_NOGUARD=1 must fail) */
     CHECK(s2gfx_init(z), "s2gfx_init on the stored ZIP");
     check_pictures(ref, "stored ZIP");

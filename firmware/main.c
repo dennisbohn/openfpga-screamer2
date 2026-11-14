@@ -220,12 +220,11 @@ void pal_faded(const uint32_t *pal, int32_t f)
     }
 }
 
-/* The master volumes of the save (s2save.h; the game's 0x2774d: digital, CD, MIDI) to the music: the CD's and the FM music's
-   (the effects take theirs when they play, s2sound.c) */
+/* The CD's master volume of the save (s2save.h; the game's 0x2774d: digital, CD, MIDI) to the music (the effects take theirs
+   when they play, s2sound.c; there are no MIDI songs, the save keeps the third volume as the game does) */
 static void volumes(void)
 {
     music_master(s2save_get(S2S_VOL_CD));
-    music_master_mu(s2save_get(S2S_VOL_FM));
 }
 
 /* The list of the game's files (files.c): the swaps go on, and the simulation gets its result after three

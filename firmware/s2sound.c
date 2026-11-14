@@ -106,7 +106,7 @@ void s2snd_init(struct zip *z)
         dlog_dec((int32_t)((rdcycle() - t0) / (CPU_HZ / 1000)));
         dlog_str(" ms\n");
     }
-    music_init(0, 0);                           /* the cue sheet (GAME.DAT); no MIDI songs in Screamer 2 */
+    music_init();                               /* the cue sheet (GAME.DAT) */
 }
 
 int s2snd_music_later;

@@ -58,7 +58,7 @@ extern int s2save_unlock_all;
 enum {
     S2S_TRANS, S2S_DETAIL, S2S_LAPS, S2S_SKILL, S2S_MP_ENEMIES, S2S_GHOST, S2S_DAMAGE, S2S_MUSIC,
     S2S_VIEW,                               /* the camera a race starts in (the game's view number 1 .. 7; 2 is the first from the car) */
-    S2S_VOL_FX, S2S_VOL_CD, S2S_VOL_FM,     /* 0 .. 0x7FFF; 0x6000 is the nominal level of snd_master() / music_master() / fm_master() */
+    S2S_VOL_FX, S2S_VOL_CD, S2S_VOL_FM,     /* 0 .. 0x7FFF; 0x6000 is the nominal level (the effects', music_master()'s; the third is the game's MIDI volume, kept and not used) */
     S2S_TRACK, S2S_TEAM, S2S_CAR,           /* the start menu's last choices: track 1 .. 7, team 1 .. 4, car 1 .. 5 as the files number them */
     S2S_LEAGUE_OPEN,                        /* 0 .. 3: the highest league open (league 1 is open at the start) */
     S2S_TRACKS_OPEN,                        /* 0 .. 4: tracks opened beyond the first three (the seventh needs 4) */

@@ -91,7 +91,7 @@ static void fresh(void)
 {
     music_stop();
     mhw_reset();
-    music_init(0, 0);
+    music_init();
     worst_frame_cycles = 0;
 }
 
@@ -462,7 +462,7 @@ int main(void)
     }
     dlog_init();
     mhw_reset();
-    CHECK(music_init(0, 0) == 1, "music_init: no audio tracks in the cue sheet");
+    CHECK(music_init() == 1, "music_init: no audio tracks in the cue sheet");
     mhw_trace = getenv("MHW_TRACE") != 0;
     test_start();
     test_short();

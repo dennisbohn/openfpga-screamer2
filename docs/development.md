@@ -646,7 +646,7 @@ What is built, with the reasons:
   The mixer is off until then, so nothing of the ring's old content is ever played (the risk the first reading of this saw), and no frame waits; the song is audible 9 frames (0.18 s) after it is begun at the model's 1 MB/s. This is for every song: the menu's, the race's (`s2snd_music()`), the attract sequence's cue, a held song's resume.
 - **Where the menu's song begins** (`s2menumusic.c`): `s2mm_page()` from the page runner when a page begins outside a race (`s2snd_racing()`: the pause menu and the end screen are pages of a race) and no song plays or waits, MUSIC ON: a page follows every start of the original's table, and the song then begins where the page is up instead of in front of a load. `load_track()` stops it
   (the race begins); the race's end stops the race's song (`s2snd_stop`), the pages that follow begin the menu's. `s2mm_song()` restarts it: the desk scene after its scene is loaded (`s2desk.c`, `0x3bd29`) and GAME SETTINGS' MUSIC row when the value changed (`s2pages.c`, `0x42462` / `0x42451`: ON from the beginning, OFF silence).
-  A page change does not touch it. FM songs (`MUSIC.DAT`, not in Screamer 2) are not held: they use no data slot.
+  A page change does not touch it.
 
 **What a long CPU stretch without a slot call does:** nothing can hold the song then; the ring lasts 1.2 s at the least (the model's negative control shows the repeat at 2.5 s and none at 1 s). The guard assumes that after a read it let pass the CPU is back at a `music_frame()` or another slot call within 0.3 s (six frames) plus the work on the bytes it counted,
 and that no CPU-only block of a second or more follows a short read. Known CPU-only blocks: the builds of the room, the desk scene and the tracks come after container reads of 0.8 MB and more (held); the darkening table (70 ms) and a page's first frame are far below. The Pocket's log says if this is wrong: `music: CD track N ran short of data in M frames` (existing since the first race).
@@ -839,11 +839,6 @@ tools/sim.sh sdram_model
 # The mixer (audio.v) against its C model firmware/mixer.c: random voices, loops, steps and
 # volumes; every output value as it leaves over I2S is compared. Values, seed.
 tools/sim.sh audio 20000 1
-# The FM music (opl.v with the real JTOPL chip): the write queue's timing, the chip's pitch
-# against the register values, the gain, run = 0.
-tools/sim.sh opl
-# A song on the real chip into a WAV file (events from tools/host/fmdump.c, "events"), to
-# listen to and to measure the level: tools/sim.sh opl play <events> <seconds> <out.wav> [gain]
 ```
 
 The SDRAM model in `sim/models/sdram_model.v` checks the datasheet timings in clocks and can be
@@ -912,7 +907,6 @@ run (I2S output, 48 kHz stereo) goes to `build/sim/audio.wav`.
 | `tools/s2/framestats.sh race`, `tools/s2/racestats.c`, `tools/s2/perf_race.py`, `tools/s2/check_cull_s2.sh <commit>`, `tools/s2/sim_race.sh` | the race's frame time (`docs/screamer2/performance.md` section 7): a race on the PC with the game's driver at all four cars and the counters per frame (and per piece), the frame times along a lap from them, a check that the cull of this tree hands on the same pieces in the same order and draws the same pictures as the tree of another commit (7 tracks), and the viewer's race in the simulation with its frame timeline; `tools/fw.sh PROF=1` builds the cycle counters of `firmware/prof.h` for it, `CODE_PAD=n` / `CODE_PAD2=n` move the code to see what the caches' alignment costs |
 | `tools/music_model.sh`, `tools/host/music_model.c`, `music_hw.c`, `music_hw_patch.py` | the music ring against the loads on the PC ("The menus' music"): `music.c` and `slot.c` on a model of the APF's data slot, the mixer's ring and the CPU's clock; scenarios, random sessions and negative controls; `music_hw.c` is also linked into `tools/menu_screens.sh`, which runs the page code on it |
 | `tools/musicwav.py` | the menus' song in the simulation: `make <folder>` writes a made-up CD image (`GAME.GOG`, `GAME.DAT`) whose frames carry their place, `check <wav>` decodes the place of the sound the real mixer made of it and reports the silences (holds) and any jump |
-| `tools/fmcheck.sh [song ...]`, `tools/fmsongs.py`, `tools/host/fmdump.c`, `tools/host/fmref.c` | the FM music on the PC: `fmsongs.py` reads the songs of `DATA/MUSIC.DAT` independently (tracks, messages, lengths); `fmdump.c` runs `firmware/fm.c` against a model of the hardware's write queue; `fmref.c` is openscreamer's driver with the chip replaced by a log; `fmcheck.sh` runs all of them (Docker) and compares the register writes tick by tick |
 | `tools/dis.sh [-h] [-f] <from> <to>` | disassembles part of `STARTL.EXE` (`-h`: `STARTH.EXE`) at the addresses of OpenScreamer's notes; `tools/unle.py` (from OpenScreamer) unpacks the program into `build/exe/` on first use |
 | `tools/dosram.py` | reads the memory of the original game running in DOSBox, to compare with the firmware |
 | `tools/release_zip.py` | after `tools/package.sh`: the release archive `build/release/Chainy.Screamer2_<version>.zip` (version from `core/core.json`), refusing to include game data |

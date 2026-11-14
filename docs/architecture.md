@@ -39,7 +39,7 @@ blanking.
 | SDRAM | Program, geometry, game state, textures of the current track (`MAPn.MLB`, up to 3 MB, through the 16 KB texture cache) |
 | SDRAM | Sound effects (`DATA/SOUND.DAT`, unpacked; the mixer reads the samples directly) |
 | SDRAM | Music: the ring of the CD stream (256 KB) |
-| Block RAM | Two framebuffers (2 x 64 KB) and two palettes, boot RAM, CPU caches, geometry unit buffer, texture and mesh caches, transparency table (`MAPn.SMG`), the mixer's lines (32 x 32 bytes), the FM chip's write queue (256 x 32 bits) and its ROMs and delay lines |
+| Block RAM | Two framebuffers (2 x 64 KB) and two palettes, boot RAM, CPU caches, geometry unit buffer, texture and mesh caches, transparency table (`MAPn.SMG`), the mixer's lines (32 x 32 bytes) |
 | SRAM, cram0, cram1 | not used |
 
 One texture cache line costs about 30 clocks from the SDRAM and about 130 from the (asynchronous)
@@ -320,47 +320,19 @@ says where the tracks begin in `GAME.GOG` (raw, 2352 bytes per sector). In the m
 (`docs/soc.md`, "Sound"), which `firmware/music.c` keeps filled with read commands that the CPU
 only starts: the Pocket does the rest through the bridge while the frame is drawn. Which track
 plays where is the game's (`CD_TRACKS`; the menus' song is CD track 2): `docs/development.md`,
-"Sound (the race)" and "The menus' music".
-
-**FM music** (Screamer 1's; OpenScreamer's notes sections 17 and 32; `firmware/fm.c`, `core/src/fpga/core/opl.v`).
-Screamer 2 has no MIDI songs (no `MUSIC.DAT`), so in this core the chip never plays; the unit and its
-firmware are still in it, as the sister core has them:
-Screamer 1 plays `MUSICn.HMP` instead of the CD's track when the machine has no CD, through the
-sound card's FM chip, the OPL2 of the AdLib. In the core the chip is JTOPL (Jose Tejada, GPL-3.0,
-`core/src/fpga/core/jtopl/`, with six corrections that make it match the real chip), clocked at
-3.579545 MHz by a fractional divider from `clk_74a`, so that it makes 49,716 samples a second and
-pitch is true (`sim/opl` measures a 875.4 Hz note to within 0.05 %). Its output is mono; it is
-interpolated linearly to 48 kHz and starts the mixer's sums, so effects, CD music and FM music add up
-before the limiter, and without FM the mixer is bit for bit as before (`tools/sim.sh audio`).
-The firmware is HMI's player and driver as the game has them: it steps the songs' tracks 120 times
-a second, sends their messages to the driver (nine voices, instruments from the banks, levels from
-channel volume and velocity, pitch bend, drums on channel 10, every rule and its address in the
-comments of `fm.c`) and a song that has ended is started again. `tools/fmcheck.sh` runs it on the PC
-against openscreamer's driver for all seven songs: the same 36,000 to 100,000 register writes each,
-tick by tick. The CPU runs once a frame but notes are due to 8 ms, so each write goes into a queue
-in hardware with the time at which the chip is to get it, about 60 ms ahead; the queue (256 writes,
-one M10K) releases them in time and spaces them 36 us apart as the original's driver did. The game's
-music master (the CD player's MU) and the pause's fade reach the chip as the driver's note levels,
-as in the original; the CD master only the CD. Source: the Pocket menu's Music Source, Auto (the CD
-image if its tracks are there, else FM if `MUSIC.DAT` is) or FM Synth (always FM); the game's own
-MUSIC option switches both off. A change of Music Source takes effect at once: the song that plays
-goes on from its start on the other source (a song paused meanwhile resumes that way). The CD player of the pause lists tracks 2 to 8 for the seven songs;
-leaving it with another track plays that song from its start. Level: the gain `FM_GAIN` is 50 of 32
-(1.56 times what the chip makes, `FM_GAIN_DEFAULT` in `fm.c`); songs rendered through the real chip
-(`tools/sim.sh opl play`) have an RMS of 1,900 to 3,000 against 2,400 to 2,900 for the CD tracks as the
-mixer plays them, peaks 11,000 and 14,900 against 16,400. By ear it is not tuned.
+"Sound (the race)" and "The menus' music". Screamer 1's FM music (the OPL2 chip for its MIDI songs) was
+in this core up to release 1.1.0 and never played: Screamer 2 has no such songs.
 
 ## Resource usage
 
-Measured (Quartus build of 2026-11-14, with the second controller's buttons, stick and triggers; timing holds at 74.25 MHz: setup +0.95 ns, hold
-+0.07 ns; fitter seed 7, seed 6 missed hold): 11,470 of 18,480 ALMs (62 %), 292 of
-308 M10K (95 %, of which 16 the table of routine 224), 34 of 66 DSP (52 %). The FM music costs 646
-ALMs, 10 M10K (the write queue 1, JTOPL's shift registers 6, its sine and exponential tables 2 and a
-register 1; they could go into MLABs for logic if block RAM runs out) and 3 DSP. From build to build the
+Measured (Quartus build of 2026-11-14, the first without Screamer 1's FM chip; timing holds at 74.25 MHz: setup +0.95 ns, hold
++0.02 ns; fitter seed 7): 10,986 of 18,480 ALMs (59 %), 282 of 308 M10K (92 %, of which 16 the table of
+routine 224), 31 of 66 DSP (47 %). The FM chip had cost 646 ALMs, 10 M10K and 3 DSP in the build before
+(11,470 ALMs, 292 M10K, 34 DSP). From build to build the
 logic fluctuates by a few hundred ALMs: placement packs differently densely, and where timing is
 tight the fitter rebuilds logic and registers (physical synthesis).
 
-![Space budget in the FPGA: logic 62 %, block RAM 95 %, DSP 52 %](resources.svg)
+![Space budget in the FPGA: logic 59 %, block RAM 92 %, DSP 47 %](resources.svg)
 
 The picture is produced by `tools/make_budget_svg.py`: the measured rows from the fitter report
 (`core/src/fpga/output_files/ap_core.fit.rpt`, table "Resource Utilization by Entity"). Regenerate
@@ -368,23 +340,22 @@ after every build; the script also writes this table.
 
 | Component | ALMs | M10K | DSP |
 |---|---|---|---|
-| Analogue frame (bridge, PLLs) | 421 | 2 | - |
-| Framebuffer x2 + video | 120 | 130 | - |
-| VexRiscv + 2x 8 KB cache | 1,262 | 19 | 4 |
-| FPU (RV32F) | 1,458 | 5 | 4 |
-| CFU (16.16 multiplication) | 9 | - | 3 |
+| Analogue frame (bridge, PLLs) | 465 | 2 | - |
+| Framebuffer x2 + video | 124 | 130 | - |
+| VexRiscv + 2x 8 KB cache | 1,253 | 19 | 4 |
+| FPU (RV32F) | 1,501 | 5 | 4 |
+| CFU (16.16 multiplication) | 8 | - | 3 |
 | Boot RAM 32 KB + log | - | 36 | - |
-| Geometry unit | 1,266 | 23 | 4 |
-| Clipper | 951 | 6 | 2 |
-| Setup unit | 1,506 | 7 | 4 |
-| Rasterizer | 1,155 | 2 | 5 |
-| Textures: pipeline + cache | 502 | 47 | 4 |
-| Blitter (background, HUD) | 500 | 2 | - |
-| SDRAM controller + ports | 309 | 2 | - |
-| Audio: mixer 32 voices + music, I2S | 593 | 1 | 1 |
-| FM music: OPL2 chip + write queue | 646 | 10 | 3 |
-| Bus, registers, arbiter | 636 | - | - |
-| **built** | **11,334 (61 %)** | **292 (95 %)** | **34 (52 %)** |
+| Geometry unit | 1,257 | 23 | 4 |
+| Clipper | 955 | 6 | 2 |
+| Setup unit | 1,493 | 7 | 4 |
+| Rasterizer | 1,246 | 2 | 5 |
+| Textures: pipeline + cache | 696 | 47 | 4 |
+| Blitter (background, HUD) | 483 | 2 | - |
+| SDRAM controller + ports | 319 | 2 | - |
+| Audio: mixer 32 voices + music, I2S | 568 | 1 | 1 |
+| Bus, registers, arbiter | 617 | - | - |
+| **built** | **10,985 (59 %)** | **282 (92 %)** | **31 (47 %)** |
 
 Block RAM is the scarce resource, and logic becomes tight too: from about 80 % utilisation it is
 hard on the Cyclone V to hold the clock frequency. This shows at build time (timing analysis;

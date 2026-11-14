@@ -136,8 +136,7 @@ soc soc (
     .audio_sclk         ( audio_sclk ),
     .audio_lrck         ( audio_lrck ),
     .audio_dac          ( audio_dac ),
-    .sim_status         ( sim_status ),
-    .opt_music          ( )
+    .sim_status         ( sim_status )
 );
 
 // no PLL in the simulation: every phase step ends by pll_dps's timeout

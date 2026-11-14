@@ -1,8 +1,8 @@
 # Screamer 2 against the Screamer core: what carries over
 
 (A record of the start. The Screamer 1 firmware files the tables name, `drive.c`, `opp.c`, `ghost.c`, `hud.c`, `menu.c`, `champ.c`,
-`intro.c`, `efx.c`, `scenery.c`, `sound.c`, `speech.c`, `tb_spl.c`, and its PC renderer `tools/render.sh` were taken out of this
-repository on 2026-11-14; they are in the sister project, github.com/dennisbohn/openfpga-screamer.)
+`intro.c`, `efx.c`, `scenery.c`, `sound.c`, `speech.c`, `tb_spl.c`, `fm.c` with the FM chip (`opl.v`, JTOPL), and its PC renderer
+`tools/render.sh` were taken out of this repository on 2026-11-14; they are in the sister project, github.com/dennisbohn/openfpga-screamer.)
 
 Study of 2026-11-03 on branch `compare` (started from the Screamer core at release 1.0.2). Read-only
 on the game; no Quartus build, no simulation, nothing run on the Pocket. Reference: OpenScreamer's

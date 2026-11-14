@@ -460,7 +460,7 @@ found and writes the slot back with it: an existing shorter file (the 1,120 byte
 | 12 | 4 | CRC-32 of the best times (bytes 448 .. 19,347) |
 | 16 | 4 | the player's name: three printable characters and 0 (`MIL`) |
 | 20 | 8 | the GAME SETTINGS rows, each the index of its value in the page's list: TRANSMISSION (0 AUTOMATIC), DETAIL LEVEL (2 HIGH), NUMBER OF LAPS (1: 3 laps), ARCADE ENEMIES SKILL (1 NORMAL), MULTIPLAYER ENEMIES (0 OFF), TIME ATTACK GHOST CAR (0 ON), DAMAGES (0 OFF), MUSIC (0 ON). The start menu's laps, level and gearbox rows are the rows 2, 3 and 0 |
-| 28 | 6 | volumes: effects, CD, FM music; three `u16`, 0 .. 0x7FFF, 0x6000 is the nominal level of `snd_master()`, `music_master()`, `fm_master()` (0x6000 each) |
+| 28 | 6 | volumes: effects, CD, the game's MIDI volume (kept, not used: there are no MIDI songs); three `u16`, 0 .. 0x7FFF, 0x6000 is the nominal level (0x6000 each) |
 | 34 | 1 | the view a race starts in (the game's view number 1 .. 7; 2, the first from the car) |
 | 35 | 3 | the start menu's last choices: track 1 .. 7, team 1 .. 4, car 1 .. 5 as the files number them (1, 1, 1) |
 | 38 | 1 | the highest league open, 0 .. 3 (0) |

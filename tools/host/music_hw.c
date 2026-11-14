@@ -7,16 +7,6 @@
 #include <string.h>
 
 /* what music.c links to and the song does not need: no FM songs */
-int fm_init(const uint8_t *f, uint32_t s) { (void)f; (void)s; return 0; }
-int fm_play(int n) { (void)n; return 0; }
-void fm_frame(void) {}
-void fm_stop(void) {}
-void fm_pause(void) {}
-void fm_resume(void) {}
-void fm_master(int32_t v) { (void)v; }
-void fm_fade(int32_t f) { (void)f; }
-int fm_playing(void) { return 0; }
-void fm_stats(uint32_t *a, uint32_t *b, uint32_t *c) { *a = *b = *c = 0; }
 
 #define CPU_HZ      74250000ull
 #define RING_FRAMES 65536u

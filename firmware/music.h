@@ -1,11 +1,11 @@
 /*
  * The music: the CD's audio tracks as the game plays them (openscreamer docs/NOTES.md section
- * 17, MUSIC), from GOG's image of the disc, read straight off the SD card. SCREAM.gog (data
+ * 17, MUSIC), from GOG's image of the disc, read straight off the SD card. GAME.GOG (data
  * slot 22) is the raw disc, 2352 bytes a sector, the audio 44.1 kHz 16-bit stereo as the mixer
- * takes it; SCREAM.DAT (slot 21) is its cue sheet, which says where each track begins (INDEX 01;
- * a track ends where the next begins, the last at the end of the image). The game's song number
- * n is CD_TRACKS in GEN.DAT's MENU.DTR (menu 2, tracks 1-6: 5, 3, 4, 6, 7, 1), and it asks the
- * drive for CD track n + 1; the drive's poll plays it again when it ends, so a song loops.
+ * takes it; GAME.DAT (slot 21) is its cue sheet, which says where each track begins (INDEX 01;
+ * a track ends where the next begins, the last at the end of the image). Which CD track a race
+ * or the menu plays is the caller's (CD_TRACKS of MISC.DTR: s2sound.h, s2menumusic.h); the
+ * drive's poll plays it again when it ends, so a song loops.
  *
  * The mixer (audio.v, hw.h AU_MUSIC*) plays the music from a ring of 256 KB in the SDRAM at
  * 0x4000 of 0x7fff: the game sets the CD master to 0x6000 (0.75 as MSCDEX takes it), and like
@@ -26,18 +26,12 @@
 #pragma once
 #include <stdint.h>
 
-/* The cue sheet from its data slot and the song numbers from GEN.DAT (whole in memory; without
-   MENU.DTR the game's own values): the CD's audio tracks, 0 without the image */
-int music_init(const uint8_t *gen, uint32_t gen_size);
-/* GAME SETTINGS' MUSIC (s2menumusic.c, viewer.c set it from the save): 0 off, a call to play only stops the music */
+/* The cue sheet from its data slot: 1 if the image has audio tracks, 0 without it */
+int music_init(void);
+/* GAME SETTINGS' MUSIC (s2menumusic.c, viewer.c set it from the save): 0 off, music_cd() only stops the music */
 extern int music_on;
-/* Song k: 0 the menu's, 1-6 the race tracks'. Unless it plays already, the music before stops
-   and the song starts: its first reads are started and music_frame() brings them in over the next
-   frames (the first 96 KB, a tenth of a second or two; the mixer starts after that, so nothing of
-   the ring's old content is ever played and no frame waits for the 224 KB of a whole fill, 170 ms). */
-void music_play(int k);
 /* CD track n from its start, even if it plays already, and again at
-   its end (0x2636c with the repeat flag, as music_play). Screamer 2: the menu's song is track 2,
+   its end (0x2636c with the repeat flag). The menu's song is track 2,
    the races' are CD_TRACKS of MISC.DTR (s2sound.h, s2menumusic.h). */
 void music_cd(int n);
 /* The CD player's stop (0x26458, MSCDEX's STOP AUDIO while it plays: a pause) and resume
@@ -61,9 +55,6 @@ void music_fade(int32_t f);
 /* The game's CD master volume v of 0x7fff (0x1d2bc, CHOICE.DAT's +0x448; the CD player
    changes it): the music's volume is two thirds of it, MASTER at the game's 0x6000 */
 void music_master(int32_t v);
-/* The game's MIDI master volume (0x1d2c0, CHOICE.DAT's +0x44c, the CD player's MU): the FM
-   music's, see fm.h */
-void music_master_mu(int32_t v);
 /* For the CD player: the disc's first and last audio track (0 without the image) and the CD
    track playing (0 none) */
 int music_disc(int *lo, int *hi);
