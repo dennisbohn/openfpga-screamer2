@@ -29,5 +29,5 @@ How to make SCREAMER2.zip
     Compression level Store, archive name SCREAMER2.zip.
 
 Put only DATA, GFX and ANIMS into the ZIP; the other files of the install folder are not needed.
-ANIMS (the animated scenes of the menus and the intro) is not needed yet: the core lists its files in grey
-and works without them. DATA and GFX are needed.
+DATA and GFX are needed. ANIMS holds the scenes shown after a won league of the championship: without
+it the core lists its files in grey and works, but leaves those scenes out.

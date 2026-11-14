@@ -1,57 +1,128 @@
-# Screamer 2 for the Analogue Pocket (work in progress)
+<img src="core/dist/platforms/_images/screamer2.png" alt="Screamer 2" width="521">
 
-Started from the Screamer core (analogue-pocket/screamer, release 1.0.2, commit 3b12f21): the
-same RISC-V soft core with its 3D units, the SDRAM, the audio and the build tools.
+# Screamer 2 for the Analogue Pocket
 
-Plan: measure what Screamer 2 needs against what the hardware does (docs/screamer2/), then show
-a Screamer 2 track on the Pocket with the Screamer renderer, then cars, physics and menus.
-Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Screamer 2`.
+An [openFPGA](https://www.analogue.co/developer) core that runs *Screamer 2* (Milestone / Virgin
+Interactive, 1996, MS-DOS) on the Analogue Pocket.
 
-## Decisions
+The game's logic runs as C firmware on a RISC-V soft core (VexRiscv, 74.25 MHz), and the 3D
+work is done by dedicated hardware units: geometry, triangle setup, rasterizer, blitter and an
+audio mixer. The core reads the **unchanged original game files** from the SD card. No game
+data is part of this repository or of its releases.
 
-- **Identity:** core `Chainy.Screamer2`, platform `screamer2`, version 0.1.0 (no release yet), game
-  files in `Assets/screamer2/common/`, saves in `Saves/screamer2/Chainy.Screamer2/`. The platform
-  image is still Screamer's until there is one for this game.
-- **Game files:** one ZIP of the game's `DATA`, `GFX` and `ANIMS` folders in a single data slot
-  (`SCREAMER2.zip`), plus the music image `GAME.GOG` and its cue sheet `GAME.DAT` in slots of their own
-  (the 32-slot limit, see docs/screamer2/comparison.md). Entries stored ("Store", fast) or deflated
-  (slow to load, the player is told before); other compression is refused in plain words. Built:
-  `firmware/zip.c`, the files screen `firmware/files.c`, tested by `tools/check_zip.sh`.
-- **Quality:** the VGA version (320x200, 256 colours) at DETAIL HIGH with the original's level of
-  detail (docs/screamer2/performance.md, section 6). No quality options in the menu, as in Screamer.
-- **Track viewer (milestone 2):** the firmware builds a Screamer 2 track image from the ZIP (`track_build_s2()`,
-  checked byte for byte against `tools/s2/make_track_s2.py` for all seven tracks) and shows it from the game's
-  chase camera over a car driving the road at 150 km/h, with four cars (player + 3), through the hardware
-  path with the original's level of detail at DETAIL HIGH (placed meshes 6,000 / 9,000 units, cars 2,000 /
-  6,000; far plane from TRACK_DATA). A timing overlay (B) and `debug.txt` give the frame times to hold against the
-  forecast of docs/screamer2/performance.md. Buttons and what to look for: docs/development.md, "Viewer". Known
-  gaps: the cars' windows show the original's environment picture (sliding with the car), no fade, night, the original's menus (most are built, see below; docs/screamer2/menus.md has what is left); the ride is silent (the race has sound, next bullet).
-- **The menu:** after a loading screen and the intro (the attract sequence: logos, a race of four computer cars under trackside cameras, the credits; any button leads on) and, on a new save, TEAM SELECTION and ENTER YOUR NAME, the original's options room: the team's room as a 3D scene, the camera gliding between five stations
-  with left / right (ARCADE, CHAMPIONSHIP, TIME ATTACK, MULTIPLAYER, GAME SETTINGS), B or Start take the choice, A or Select go back to TEAM SELECTION (`firmware/s2room.c`; docs/development.md "The options room").
-  The stations lead to ARCADE (the original's arcade pages: the title with the team's four cars driving past, TRACK with the tracks' pictures, CAR, TRANSMISSION; B or Start go on, A or Select go back), CHAMPIONSHIP (the four leagues: LEAGUE SELECTION, WELCOME with the league's track plates flying in,
-  the races with the LEAGUE REPORT after each, what winning opens and the desk scene, a 3D room with your car, after a league is won (league 4 shows the team's new fifth car as well); before each race the CAR page with its set-ups Standard / Custom 1 .. 4 and CUSTOMIZE, which change the car as in the original, both in the team's room with the camera going round the car or flying to each item: docs/development.md "The championship", "CUSTOMIZE and the set-ups", "The garage"), TIME ATTACK (TRACK SELECTION with the turning 3D map, the same CAR page, 3 LAPS or FREE RUN with its five splits, the race
-  against the ghost of the track's best run, re-simulated from recorded controls; docs/development.md "Time attack"), MULTIPLAYER (COMBAT MODE: two players on a split screen, the second on the Dock's second controller) and GAME SETTINGS
-  (laps, level, gearbox, ...; VIEW HIGH SCORES). Everything is open from the start. Start in the race opens the pause menu (RESUME, RESTART, EXIT); the end screen of an arcade or championship race offers REPLAY (the race run again from the player's recorded
-  controls, from the trackside cameras with the original's band; docs/development.md "Replay"). The choices are kept across power-ups. 30 s with no button in the room (or on TEAM SELECTION, as the original) starts its attract sequence: the Virgin and Milestone logos, then a race of four computer cars under the trackside cameras out of white with the credits of `ATTRACT.TXT` over it, a different track each time (`firmware/s2attract.c`; docs/development.md "The attract sequence"); any button ends it.
-  Docs: docs/development.md, "The menu".
-- **Driving mode (a race):** a race from the menu puts you and three computer cars on the game's start grid, holds them for
-  the start lights (3, 2, 1, GO) and races three laps: you drive with Screamer 1's buttons (B gas, Y brake, d-pad steering,
-  L / R gears), from the original's views (X changes the view as in Screamer 1: INCAR, INSIDE with the cockpit, NEAR, BACK the chase camera; Select the rear-view mirror; docs/screamer2/hud.md section 5), with speed, gear, lap, position and times on the screen. The computer cars
-  each wear their own team's model and paint (by default teams 2 to 4's cars 2 to 4, the player's is team 1's car 1; the menu changes the player's and the computers get the other teams; the image holds exactly those four, `race_grid`, docs/development.md "Teams") and are driven by the game's own driver along its line (`firmware/race.c`); laps and places are counted on that line. The car is the game's own model in single precision (`firmware/s2car.c`, ported from
-  OpenScreamer's routines; the car's numbers read from the game's files, `firmware/s2params.c`), checked against traces of
-  the original's routines (docs/screamer2/driving.md): equal on level ground, in the first wall hit and in a jump, the
-  car's place kept as a float (the original's whole-number places hold a car back at 50 steps a second). The stand-in
-  `firmware/s2car_stub.c` is only built when `s2car.c` is missing (the race needs the real one). Docs: docs/development.md, "Driving mode".
-- **Sound (the race):** the music is the CD track the original plays for the track (`CD_TRACKS` of `MISC.DTR`; the optional
-  `GAME.GOG` + `GAME.DAT`, without them no music and no error), started with the race and playing on until you leave it (the original's CD is never faded); the end screen eases the effects out as the original does; the effects come
-  from `DATA/SOUND.DAT` in the ZIP: every car's engine (pitch from its revs, volume and stereo place from the camera's distance),
-  your tyres (squeal, rolling on rough ground), wall and car knocks and a landing, all by the original's own rules
-  (`firmware/s2snd.c`, tested natively with `tools/s2/check_sound.sh`; `firmware/s2sound.c` plays them). Open: the volume balance (not
-  heard yet), the car-against-car knock is the firmware's closing
-  speed, no menu sounds in the start menu. The original has no sound for the start lights or the gears. **The menus have the original's song** (CD track 2, MUSIC ON): it begins with the first page after the intro and after every race, goes on through the pages, begins again at the desk scene and when GAME SETTINGS' MUSIC
-  is turned on, and stops with MUSIC OFF or when a race begins. The CD plays through loads, the core cannot: a long load (the options room's build, the desk scene) holds the song and it goes on from where it stood once the page is up; short reads do not chop it (not heard yet). Docs: docs/development.md, "Sound" and "The menus' music".
-- **Animated scenery (the race):** the tracks' moving things run along their paths as the original runs them at DETAIL HIGH (`firmware/s2anim.c`): the helicopters of
-  Columbia, Egypt and Switzerland (Egypt's comes 7 s into the racing), England's and Columbia's flocks of birds, California's airship, cable cars and bulldozers, Finland's trains;
-  and the sounds that stand in places (crowds, market, mill, traffic, works, wolves, cows, ...), heard from the camera. Their materials are the track's `MISC.MLB`, which the
-  track image now holds. The helicopters' rotors are see-through (the game's routine 208) and are drawn through the wheel smoke's table (docs/development.md, "Wheel smoke and shadows"). Checked against the running original's memory (`tools/s2/check_anim_s2.sh`, `tools/s2/dosbox_anim.py`). Docs: docs/development.md, "Animated scenery".
-- **Obstacles and sparks (the race):** the cones, fences, chests and crates that stand on England's, California's, Egypt's and Switzerland's roads (`firmware/s2props.c`) are knocked by the cars, fly, bounce and tumble as the original has it (it does nothing to the car that knocks one), and two cars touching or a car's knock against a wall throw sparks. Checked against the running original's memory frame by frame (`tools/s2/check_props_s2.sh`). Docs: docs/development.md, "Obstacles and sparks".
+It is the sister project of [Screamer for the Analogue Pocket](https://github.com/dennisbohn/openfpga-screamer)
+and shares its hardware.
+
+## Features
+
+- All seven tracks and the four teams with their cars, three computer opponents, the obstacles on
+  the road, sparks, wheel smoke, shadows and the moving scenery (helicopters, trains, birds, ...)
+- Arcade, Championship (the four leagues with their award scenes) and Time Attack against the
+  ghost of your best run (3 LAPS or FREE RUN)
+- Combat Mode: two players on a split screen, in the Dock with two controllers
+- The four views from the car, the rear-view mirror, and replays from the trackside cameras
+- The game's menus: the options room, the car set-ups with CUSTOMIZE, GAME SETTINGS, the high
+  scores and the name entry, saved between sessions; the intro and the attract sequence
+- Music from the game's CD image, the sound effects of the race and of the menus
+- Up to 50 frames per second at the Pocket's native 320 x 200 picture, perspective-correct textures
+- Pocket integration: Core Controls remapping, a docked controller's stick works as the d-pad
+
+As in the original, three tracks, the first league and four cars of each team are open at the
+start. Winning leagues of the championship opens the other tracks and leagues and the teams'
+fifth cars.
+
+Not supported: network and serial-link play (the menu entries are left out), the weather (every
+race is a clear day), the SVGA mode and the DETAIL LEVEL setting (the core always shows the VGA
+picture at the highest detail), the link port.
+
+## Installation
+
+1. Unzip the release archive into the root of the SD card.
+2. Copy your own game files to `Assets/screamer2/common/` on the SD card. For the GOG version, see
+   below.
+3. Start *Screamer 2* from the Pocket's core list. You find it in the group *Computer*.
+
+The core has been tested only with the GOG release of the game. Other releases might work if their
+files are the same.
+
+### GOG version
+
+The game has about 140 files, more than a core can name one by one, so the core reads them from a
+single ZIP archive that you make yourself. Three files go to `Assets/screamer2/common/`:
+
+| File | What it is |
+|---|---|
+| `SCREAMER2.zip` | One ZIP of the folders `DATA`, `GFX` and `ANIMS` of the game's install folder. |
+| `GAME.GOG` | The CD image with the game's music, from the install folder, as it is. |
+| `GAME.DAT` | The cue sheet of the CD image, from the install folder, as it is. |
+
+`GAME.GOG` and `GAME.DAT` are optional: without them there is no music.
+
+Make the ZIP with the compression method **Store** (no compression), which the core reads fast.
+Deflate, the usual ZIP compression, works too, but loading is slow, and the core says so. Other
+methods are not supported.
+
+- **Windows 11 24H2 or later:** select the three folders `DATA`, `GFX` and `ANIMS` together,
+  right-click, *Compress to*, *Additional options*; archive format ZIP, compression method Store,
+  archive name `SCREAMER2.zip`.
+- **Other Windows versions:** open a command prompt in the install folder and run
+  `tar --format zip --options zip:compression=store -cf SCREAMER2.zip DATA GFX ANIMS`
+- **7-Zip:** select the three folders, *Add to archive...*; archive format zip, compression level
+  Store, archive name `SCREAMER2.zip`.
+
+When it starts, the core checks the files. If something is missing or wrong with the ZIP, it shows
+the list of the files and says what to do. The same instructions are in
+`Assets/screamer2/common/README.txt` of the release.
+
+Saves and the debug log go to `Saves/screamer2/Chainy.Screamer2/`. `debug.txt` helps when something
+goes wrong. The Pocket writes it when the core is quit.
+
+## Controls
+
+The defaults can be changed in the Pocket menu under *Core Controls*.
+
+| Action | Button |
+|---|---|
+| Steer, move in the menus | D-pad |
+| Accelerate / OK | B |
+| Brake | Y |
+| Handbrake / Back | A |
+| Next view from the car | X |
+| Gear up / down (manual gearbox) | R / L |
+| Rear-view mirror / Back | Select |
+| Pause menu / OK | Start |
+
+In Combat Mode the first player uses the first controller of the Dock and the second player the
+second one.
+
+## Building
+
+Quartus Prime Lite 18.1 and the firmware toolchain run in Docker, so you need Docker, a shell
+and Python 3. From the repository root:
+
+```sh
+tools/fw.sh          # firmware: build/firmware/firmware.bin, program.bin
+tools/build.sh       # bitstream: core/output/bitstream.rbf_r
+tools/package.sh     # the SD card layout in build/sdcard/
+tools/deploy.sh /i   # package and copy to the SD card at /i, with your game files
+```
+
+`tools/fw.sh DEBUG=1` builds the development firmware: a frame time display, statistics in
+`debug.txt` and everything open from the start. How the core works and how it was built is in
+[docs/](docs/), beginning with [docs/development.md](docs/development.md).
+
+## Credits
+
+- [OpenScreamer](https://github.com/ItsDanik/openscreamer) (GPL-3.0): the reference for the
+  game's logic and file formats
+- [VexRiscv](https://github.com/SpinalHDL/VexRiscv) (MIT): the CPU
+- Analogue's [core template](https://github.com/open-fpga/core-template): `core/src/fpga/apf/`
+  and the JSON templates in `core/`
+- [font8x8](https://github.com/dhepper/font8x8) (public domain): the firmware's test font
+
+*Screamer 2* belongs to its respective owners. This project is not affiliated with them or
+with Analogue.
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE).

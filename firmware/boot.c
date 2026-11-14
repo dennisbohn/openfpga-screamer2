@@ -25,7 +25,7 @@ extern const uint8_t __image_start[], __image_end[];   /* link.ld: what firmware
 static int ok[3];               /* self-tests: integer, float, CFU */
 static uint32_t results;        /* SYS_SIM bits 20..0 */
 static int (*const tests[3])(void) = { selftest_int, selftest_float, selftest_cfu };
-static const char *const test_names[3] = { "Ganzzahl", "Fliesskomma", "CFU" };
+static const char *const test_names[3] = { "Integer", "Float", "CFU" };
 static const char *const log_names[3] = { "integer", "float", "cfu" };
 
 static void log_head(const char *what, uint32_t n)
@@ -131,7 +131,7 @@ int main(void)
             dlog_char('\n');
         }
         volatile uint8_t *fb = FB(!(st & VID_FRONT));
-        draw_frame(fb, "SCREAMER POCKET - SPEICHERTEST");
+        draw_frame(fb, "SCREAMER 2 - MEMORY TEST");
         draw_results(fb, note);
         VID_SWAP = 1;
         log_head("frames drawn: ", ++drawn);

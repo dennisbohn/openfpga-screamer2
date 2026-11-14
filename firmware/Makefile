@@ -36,6 +36,17 @@ PADFLAG = $(if $(CODE_PAD),-Wl$(comma)--defsym=CODE_PAD=$(CODE_PAD)) $(if $(CODE
 # EXTRA_CFLAGS=... TAG=name: a build with other defines in build/firmware-name (tools/fw.sh), not copied
 CFLAGS  += $(EXTRA_CFLAGS)
 
+# DEBUG=1 builds for development (debug.h): the timing overlay, debug.txt's statistics and button record, the
+# shortcut to the desk scenes, the ride, and everything open from the start (s2save.h). The default is a
+# release build without them, with the original's gating. UNLOCK_ALL=0 / 1 sets the gating by itself.
+DEBUG ?= 0
+ifneq ($(DEBUG),0)
+CFLAGS  += -DDEBUG=1
+UNLOCK_ALL ?= 1
+endif
+UNLOCK_ALL ?= 0
+CFLAGS  += -DS2SAVE_UNLOCK_ALL=$(UNLOCK_ALL)
+
 # PROF=1: cycle counters for the simulation (prof.h), in build/firmware-prof
 ifneq ($(PROF),)
 CFLAGS  += -DS2_PROF

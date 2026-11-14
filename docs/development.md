@@ -23,6 +23,27 @@ The firmware is built by GCC 14 and picolibc from Debian trixie in Docker
 (`firmware/docker/Dockerfile`); `tools/fw.sh` builds the image on first use. See
 [firmware/README.md](../firmware/README.md).
 
+**Release and debug builds.** `firmware/debug.h` has the flag `DEBUG`, which is 0 unless the build says
+`DEBUG=1` (`tools/fw.sh DEBUG=1`, in `build/firmware-debug/`, not copied to `build/assets/`).
+
+- A release has none of what was built to measure and to test: no timing overlay and no statistics behind it,
+  no live first line, no visit, late-frame or button lines in `debug.txt`, no shortcut to the desk scenes, no
+  ride (a race that cannot start goes back to the menu), and the original's gating instead of everything open
+  from the start (`S2SAVE_UNLOCK_ALL`, which the Makefile sets from `UNLOCK_ALL`: 0 in a release, 1 in a debug
+  build; `tools/fw.sh UNLOCK_ALL=1 TAG=open` is a release with everything open).
+- What stays is the boot log, the files, the menu's and the championship's lines, the faults, the frame's
+  timeline marks (microseconds; the hot code's place in the boot RAM was measured with them) and the
+  simulation's own hooks.
+- The simulation and the tools that read the statistics use the debug build (`tools/simcheck.sh` takes
+  `build/firmware-debug` unless `SIM_FW` names another; the measuring variants `PROF=1` and `TAG=...` of
+  `tools/fw.sh` are debug builds unless `DEBUG=0` is given). Wherever this file speaks of the overlay, the
+  statistics of `debug.txt`, the ride or "everything open", it is the debug build.
+- The debug build of the commit that brought the flag is byte for byte the firmware before it
+  (`program.bin` 352,632 bytes, crc32 d745726c); the release is 345,192 bytes.
+- A release is made from `tools/fw.sh` alone, so a release cannot contain the debug code by accident:
+  `tools/fw.sh`, `tools/build.sh` if the hardware changed, `tools/package.sh`, `python -I tools/release_zip.py`
+  (`build/release/Chainy.Screamer2_<version>.zip`, the version of `core/core.json`).
+
 A release holds the bitstream, the core's JSON files, the platform files and the firmware,
 never game data. `tools/deploy.sh <sd card> [game folder]` additionally copies your own game
 files (default folder `C:/GOG Games/Screamer 2`, or `$GAME_DIR`): `SCREAMER2.zip`, `GAME.GOG`
@@ -79,7 +100,7 @@ far plane from TRACK_DATA, 50,000, track 4 60,000; pieces out to far + 8,192). T
 
 ### The menu
 
-The menu is the original's options room ("The options room" below, `firmware/s2room.c`, `firmware/s2menu.c`): the team's room with five stations, ARCADE, CHAMPIONSHIP, TIME ATTACK, MULTIPLAYER and GAME SETTINGS (laps, level, gearbox, ... with VIEW HIGH SCORES), and ESC for TEAM SELECTION and ENTER YOUR NAME (docs/screamer2/menus.md has the original's screens). Everything is open from the start (the build default `S2SAVE_UNLOCK_ALL`): all seven tracks, all four teams and their five cars, all four leagues of the championship. If the room cannot be built (the log says so) the arcade pages stand in for it. The list that was the menu before the room (START RACE on any track at once, the ride, laps and level rows) is gone.
+The menu is the original's options room ("The options room" below, `firmware/s2room.c`, `firmware/s2menu.c`): the team's room with five stations, ARCADE, CHAMPIONSHIP, TIME ATTACK, MULTIPLAYER and GAME SETTINGS (laps, level, gearbox, ... with VIEW HIGH SCORES), and ESC for TEAM SELECTION and ENTER YOUR NAME (docs/screamer2/menus.md has the original's screens). In a debug build everything is open from the start (`S2SAVE_UNLOCK_ALL`, "Release and debug builds" above): all seven tracks, all four teams and their five cars, all four leagues of the championship; a release has the original's gating (three tracks, league 1 and four cars a team at first). If the room cannot be built (the log says so) the arcade pages stand in for it. The list that was the menu before the room (START RACE on any track at once, the ride, laps and level rows) is gone.
 
 **The arcade pages** (`firmware/s2arcade.c`, details in docs/screamer2/menus.md section 6): title (ARCADE_L with the team's four cars driving past, "The arcade title's cars" below; ACCELERATE TO CONTINUE blinking) -> TRACK (the tracks' pictures with their banners,
 the lit frame) -> CAR (a 2D stand-in for the 3D page: team, car and its name plate) -> TRANSMISSION (AUTOMATIC / MANUAL) -> the race. B or Start go on (the picture fades out over half a
@@ -136,7 +157,7 @@ the laps GAME SETTINGS' NUMBER OF LAPS. The race is the arcade's: a league race 
 | A or Select | LEAGUE SELECTION: back to the options room; WELCOME: back to the selection; the TRACK page and the REPORT between two races: ask LEAVING LEAGUE? ARE YOU SURE ? (the TRACK page before the first race goes back to the selection), YES leaves the league for LEAGUE SELECTION |
 
 The original's TRACK page (the turning 3D map, row 7, `firmware/s2trackpage.c`) comes between WELCOME / the report and each race. The CAR page with its set-ups (row 12, below) follows the TRACK page. WELCOME flies the league's track plates over its picture and ends by itself, a won league is followed by the desk scene ("The desk scene and WELCOME's plates", below). Left out: the weather. The leagues open, the tracks opened and the fifth cars are the save's (`S2S_LEAGUE_OPEN`, `S2S_TRACKS_OPEN`, `s2save_car5_open`; no new field);
-the build opens everything by default (`S2SAVE_UNLOCK_ALL` 1), so NOT AVAILABLE shows with `tools/fw.sh EXTRA_CFLAGS=-DS2SAVE_UNLOCK_ALL=0 TAG=x`. The player's total and best lap of a league race go into the championship's best-times lists (HI SCORES, CHAMPIONSHIP; the LOADING screen shows them). The log has
+a debug build opens everything (`S2SAVE_UNLOCK_ALL` 1), so NOT AVAILABLE shows in a release or with `tools/fw.sh DEBUG=1 UNLOCK_ALL=0 TAG=x`. The player's total and best lap of a league race go into the championship's best-times lists (HI SCORES, CHAMPIONSHIP; the LOADING screen shows them). The log has
 `league: 2 begins` and `league: race 3 T4 first car 0` (the car's index in the grid, 0 the player; "(player left)" when he left through the pause menu).
 
 Tests: `tools/s2/check_league_s2.sh` (the rules on the PC with the real `s2save.c`), `tools/menu_screens.sh` (the pages and the championship's end screen against `tools/ui_league_ref.py`, scripted buttons), `python -I tools/s2/dosbox_arcade.py --league` against the running original (below, Tools).
@@ -283,7 +304,7 @@ Tests: `tools/menu_screens.sh` (`tools/host/attract_screen.c` against `tools/att
 Start puts the player and three computer cars on the game's start grid (the player's car last, the others in front of him,
 two rows of two, 2,000 units apart, as the game's `0x2f519` places them), holds them for 3 seconds with the start lights (3, 2,
 1, then GO!), and lets the player race the laps of the menu (3 by default) against them (`firmware/race.c`, docs/screamer2/driving.md, "The race"). The buttons are Screamer 1's
-(`core/input.json`, README "Controls": B accelerate, Y brake, d-pad steering, L / R the gears), the camera is
+(`core/input.json`, README.md "Controls": B accelerate, Y brake, d-pad steering, L / R the gears), the camera is
 the player's view (the chase camera, the car physics', or the views from the car: "The views from the car" below). The physics steps 20 ms at a time by real elapsed time (a video
 frame is 20 ms; at most 4 steps per frame, as Screamer 1's race), so a slow frame makes the picture slower, not
 the cars. The four cars (`firmware/s2car.c`) each wear their own team's model and paint: by default the player's is team 1's car 1
@@ -302,7 +323,7 @@ comes over the race ("End of the race and the two pages" below).
 | L / R | gear down / up on a manual gearbox (on the step the button goes down; the gearbox is chosen on the TRANSMISSION page or in GAME SETTINGS, there is no button for it in the race: d-pad up used to toggle it and was hit by mistake while steering, with the stick of a docked controller too) |
 | X | the next view from the car, as Screamer 1's X changes its camera (INCAR, INSIDE, NEAR, BACK in turn: the original's F1 .. F4, "Vollbildschirm", "Am Steuer", "Wagendach", "Blick von hinten" in the manual; kept in the save for the next race; not after the finish) |
 | Select | the rear-view mirror on / off (the original's M; off at every race's start; not in a replay, where Select ends it); with the mirror on the whole far plane is in the glass and the pass costs about 8 ms on top of the race, so the pictures come as fast as the frames do (no hold to 25 a second since 2026-11-13) |
-| L and R together | the timing overlay on / off (first line: the work of a picture in ms, mean and worst of the last second, and the pictures of that second, 50 fps or 25 with the mirror on; the ms are not the time between two pictures) |
+| L and R together | a debug build only: the timing overlay on / off (first line: the work of a picture in ms, mean and worst of the last second, and the pictures of that second, 50 fps or 25 with the mirror on; the ms are not the time between two pictures) |
 | Start | the pause menu (RESUME, RESTART, EXIT) |
 | After the finish | the end screen: d-pad left / right choose RACE AGAIN or EXIT, B or Start take it (after the four seconds of CONGRATULATIONS) |
 | Start | the pause menu (RESUME, RESTART, EXIT; not once the player has finished), the original's Esc; B or Start take the item, A or Select resume |

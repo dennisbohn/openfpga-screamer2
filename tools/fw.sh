@@ -3,7 +3,12 @@
 # (image screamer-fw:trixie-20261005, built on first use) and copy firmware.bin (the boot
 # loader) and program.bin (the program in the SDRAM) to build/assets/, from where
 # tools/package.sh puts them on the SD card.
-# Usage: tools/fw.sh                 the firmware, copied to build/assets/
+# Usage: tools/fw.sh                 the release firmware, copied to build/assets/ (no development code: firmware/debug.h)
+#        tools/fw.sh DEBUG=1         the development firmware in build/firmware-debug/, not copied: the timing overlay (L + R in a race), the statistics
+#                                    and the button record in debug.txt, the shortcut to the desk scenes, the ride, everything open from the start.
+#                                    The simulation and the tools that read the log's statistics need this build. The variants below (PROF=, TAG=) are
+#                                    debug builds too unless DEBUG=0 is given with them.
+#        tools/fw.sh UNLOCK_ALL=1 TAG=open   the release's code with everything open from the start (or DEBUG=1 UNLOCK_ALL=0 TAG=x: a debug build with the original's gating)
 #        tools/fw.sh FAULT=IFETCH    a fault test for sim/soc in build/firmware-IFETCH/, not copied
 #        tools/fw.sh EXTRA_CFLAGS=-DX=1 TAG=x   other defines, in build/firmware-x/, not copied (e.g. -DHW_FULL_CYCLES=100: the computers' steps run in the scene at once)
 #        tools/fw.sh EXTRA_CFLAGS=-DS2_SIM_END=1 TAG=simend   the end of the race drawn over frames 2 to 9 of the simulated race, with its cost in the log ("end screen frame 3: 3341 us")
@@ -33,13 +38,19 @@ fi
 
 fault=""
 prof=""
+debug=""
 for arg in "$@"; do
-    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; PROF=*) prof=-prof ;; CODE_PAD=*) prof=$prof-pad${arg#CODE_PAD=} ;; CODE_PAD2=*) prof=$prof-padb${arg#CODE_PAD2=} ;; TAG=*) prof=$prof-${arg#TAG=} ;; esac
+    case "$arg" in FAULT=*) fault=${arg#FAULT=} ;; PROF=*) prof=-prof ;; CODE_PAD=*) prof=$prof-pad${arg#CODE_PAD=} ;; CODE_PAD2=*) prof=$prof-padb${arg#CODE_PAD2=} ;; TAG=*) prof=$prof-${arg#TAG=} ;; DEBUG=*) debug=${arg#DEBUG=} ;; esac
 done
+# the measuring variants are debug builds (their log lines are the debug build's) unless the caller says DEBUG=0
+extra=""
+case "$*" in *DEBUG=*|*UNLOCK_ALL=*) ;; *) [ -n "$prof" ] && { extra="DEBUG=1"; debug=1; } ;; esac
+[ "$debug" = 0 ] && debug=""
+[ -n "$debug" ] && [ -z "$prof" ] && prof=-debug
 out=firmware${fault:+-$fault}$prof
 
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/work" -w /work/firmware "$image" \
-    make --no-print-directory OUT=../build/$out "$@" info
+    make --no-print-directory OUT=../build/$out "$@" $extra info
 
 bin="$root/build/$out/firmware.bin"
 prog="$root/build/$out/program.bin"
@@ -54,7 +65,7 @@ if [ "$prog_size" -gt "$prog_limit" ]; then
     exit 1
 fi
 if [ -n "$fault$prof" ]; then
-    echo "not copied: build/$out/firmware.bin, $size bytes"
+    echo "not copied: build/$out/firmware.bin, $size bytes${debug:+ (a debug build)}"
     exit 0
 fi
 assets="$root/build/assets/screamer2/Chainy.Screamer2"

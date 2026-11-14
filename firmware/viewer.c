@@ -45,6 +45,7 @@
 #include "s2fx.h"
 #include "s2props.h"
 #include "prof.h"
+#include "debug.h"
 #ifdef S2_SIM_REPLAY
 #include "sim_replay_data.h"            /* a Pocket's race for the simulation (tools/s2/replay_header.py, made from its debug.txt; not committed) */
 #endif
@@ -147,21 +148,23 @@ static void screen_text(int n, const char *l1, const char *l2, const char *l3, i
     for (int i = 0; i < 5; i++) VID_PAL[i] = pal[i];
     fb_fill(fb, 0, 0, FB_W, FB_H, BLACK);
     fb_fill(fb, 0, 0, FB_W, 8, WHITE);
-    con_text(fb, 1, 0, "SCREAMER 2 - TRACK VIEWER", BLACK, WHITE);
+    con_text(fb, 1, 0, DEBUG ? "SCREAMER 2 - TRACK VIEWER" : "SCREAMER 2", BLACK, WHITE);
     char line[32];
     fmt_udec(fmt_str(line, "TRACK "), (uint32_t)n);
     con_text(fb, 14, 10, line, err ? RED : WHITE, BLACK);
     if (l1) con_text(fb, 20 - (int)__builtin_strlen(l1) / 2, 12, l1, err ? RED : GREEN, BLACK);
     if (l2) con_text(fb, 20 - (int)__builtin_strlen(l2) / 2, 13, l2, WHITE, BLACK);
     if (l3) con_text(fb, 20 - (int)__builtin_strlen(l3) / 2, 14, l3, GREY, BLACK);
-    con_text(fb, 1, 15, "RIDE   d-pad left/right: track", GREY, BLACK);
-    con_text(fb, 1, 16, "       A: cars 4/0/1  B: timing", GREY, BLACK);
-    con_text(fb, 1, 17, "       Start: drive  Select+B: menu", GREY, BLACK);
-    con_text(fb, 1, 19, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
-    con_text(fb, 1, 20, "       A handbrake  L/R gears", GREY, BLACK);
-    con_text(fb, 1, 21, "       X: view  Select: mirror", GREY, BLACK);
-    con_text(fb, 1, 22, "       L+R together: timing overlay", GREY, BLACK);
-    con_text(fb, 1, 23, "       Start: pause menu (restart, exit)", GREY, BLACK);
+    if (DEBUG) {                        /* the buttons of the ride and of the race, with the debug build's own */
+        con_text(fb, 1, 15, "RIDE   d-pad left/right: track", GREY, BLACK);
+        con_text(fb, 1, 16, "       A: cars 4/0/1  B: timing", GREY, BLACK);
+        con_text(fb, 1, 17, "       Start: drive  Select+B: menu", GREY, BLACK);
+        con_text(fb, 1, 19, "DRIVE  d-pad: steer  B gas  Y brake", GREY, BLACK);
+        con_text(fb, 1, 20, "       A handbrake  L/R gears", GREY, BLACK);
+        con_text(fb, 1, 21, "       X: view  Select: mirror", GREY, BLACK);
+        con_text(fb, 1, 22, "       L+R together: timing overlay", GREY, BLACK);
+        con_text(fb, 1, 23, "       Start: pause menu (restart, exit)", GREY, BLACK);
+    }
     VID_SWAP = 1;
 }
 
@@ -356,7 +359,7 @@ static void log_stats(int n, int cars, const struct stats *s)
 static void leave(int n, int cars, const struct stats *s)
 {
     s2snd_stop();                       /* the race's sound, before a track's load takes the data slot */
-    if (s->n >= 50) log_stats(n, cars, s);
+    if (DEBUG && s->n >= 50) log_stats(n, cars, s);
 }
 
 /* the race of the driving mode (race.h): the player's car is car 0; the gearbox the player chose (cfg.manual, from the
@@ -815,7 +818,7 @@ static int race_buttons(struct visit *v, struct frame *f, int *out)
     if ((f->press & KEY_X) && !race_replaying() && !cut_done && !combat_mode) set_view(s2cam_next_view());     /* X: the next view from the car, as Screamer 1's X changes its camera (the original's F1 .. F4 in turn: full screen, at the wheel, the roof, from behind; not once the player has finished) */
     if ((f->press & KEY_SELECT) && !race_replaying() && !cut_done && !combat_mode && s2cam_get_view() != S2CAM_TRACKSIDE) mirror_on = !mirror_on;      /* Select: the rear-view mirror on and off (the original's M; not in a replay, where Select ends it) */
     const uint32_t ov_keys = combat_mode ? f->pad[0] : f->keys, ov_press = combat_mode ? f->pad_press[0] : f->press;   /* (combat mode: the first player's L and R, not one of each player's gears) */
-    if ((ov_press & (KEY_L | KEY_R)) && (ov_keys & KEY_L) && (ov_keys & KEY_R)) *v->overlay = !*v->overlay;     /* L and R together: the timing overlay (the owner's measuring tool; nothing else uses both) */
+    if (DEBUG && (ov_press & (KEY_L | KEY_R)) && (ov_keys & KEY_L) && (ov_keys & KEY_R)) *v->overlay = !*v->overlay;     /* L and R together: the timing overlay (the owner's measuring tool, a debug build's: debug.h; nothing else uses both) */
     if (!race_replaying() && race_car(0)->manual != manual) {   /* nothing in a race changes the gearbox (the TRANSMISSION page and GAME SETTINGS choose it; d-pad up used to toggle it and was pressed by mistake while steering): if it differs it is a fault, logged once with the step and put back */
         static int logged;
         if (!logged++) {
@@ -922,7 +925,7 @@ static void frame_scene(struct visit *v, struct frame *f)
            frame and the scripted buttons), at most DRIVE_MAX_STEPS as Screamer 1's race does */
         uint32_t steps = sim || !v->drawn ? 1 : f->dvf > DRIVE_MAX_STEPS ? DRIVE_MAX_STEPS : f->dvf;
         const uint32_t pv = ((f->keys >> 2) & 3) | (((f->keys >> 4) & 3) << 2) | (((f->keys >> 7) & 1) << 4);     /* left, right, A, B, Y (the frame's steps all take these) */
-        if (!sim && !attract_mode && !combat_mode && pv != v->in_prev && v->in_bytes < INPUT_LOG_BYTES) {
+        if (DEBUG && !sim && !attract_mode && !combat_mode && pv != v->in_prev && v->in_bytes < INPUT_LOG_BYTES) {     /* (a debug build's: a release keeps no record of the buttons) */
             char l[12], *q = fmt_udec(l, race_steps() - v->in_step);
             *q++ = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"[pv];
             *q++ = '\n';
@@ -1169,7 +1172,7 @@ static void frame_text(struct visit *v, struct frame *f)
 {
     /* the timing, drawn over the picture once the rasterizer and the blitter are done; in the driving mode without the race screen also the
        speed and the gear (top right) */
-    if (*v->overlay) {
+    if (DEBUG && *v->overlay) {
         char l[40], *p;
         p = fmt_ms(l, v->shown_mean);
         p = fmt_ms(fmt_str(p, " ms  max "), v->shown_max);
@@ -1223,6 +1226,7 @@ static void frame_text(struct visit *v, struct frame *f)
 /* The statistics of the visit and of the last second, debug.txt's lines */
 static void frame_stats(struct visit *v, struct frame *f)
 {
+    if (!DEBUG) return;                                 /* a release measures and logs nothing of its frames (debug.h) */
     /* the statistics of the visit and of the last second (a frame the sequence's logos veil drew nothing: it is left out) */
     static struct stats scrap;
     struct stats *sa = f->veiled ? &scrap : &v->st_all;
@@ -1349,9 +1353,9 @@ static int visit(int n, int *cars, int *overlay, int *drive)
     v->s = resume_s;
     v->floor_z = road_floor() - FALL_UNITS;
     resume_s = 0.0f;
-    if (*drive && !race_start(n, v->floor_z)) {       /* no race on this track: the ride instead (the championship stops) */
+    if (*drive && !race_start(n, v->floor_z)) {       /* no race on this track: the ride instead in a debug build (the championship stops), else the menu */
         *drive = 0;
-        return league_mode || attack_mode ? 0 : -n;
+        return !DEBUG || league_mode || attack_mode ? 0 : -n;
     }
     league_started = league_mode;
 #ifdef S2_SIM_REPLAY
@@ -1456,14 +1460,14 @@ static int league_race(struct zip *z, int n, int *cars, int *overlay)
 /* The championship (STARTL.EXE 0x4337d ..): LEAGUE SELECTION, WELCOME TO LEAGUE n, then the league's races on the tracks in the menu's order, each followed by the
    LEAGUE REPORT; after the last the report shows the win or the loss and the selection comes back. The player's team and car are the menu's, the laps and the
    gearbox the GAME SETTINGS', the computers' level the league's (s2league.h). Returns when the player leaves for the start menu.
-   A shortcut for looking at the desk scenes (the core's own): L and R held while ENTER takes a league on LEAGUE SELECTION, and still held when the page has faded, show the scene
+   A shortcut for looking at the desk scenes (the core's own, in a debug build only): L and R held while ENTER takes a league on LEAGUE SELECTION, and still held when the page has faded, show the scene
    a win of that league shows (league 4: the fifth car's after it, always) with the menu's team and car, then the selection again; nothing is saved. */
 static void league_run(struct zip *z, int *cars, int *overlay)
 {
     static int league_at;                               /* the cursor of LEAGUE SELECTION stays where it was (the original's 0x128a10) */
     for (;;) {
         if (s2lp_select(&league_at) != S2LP_GO) return;                 /* (ESC, or the picture is missing) */
-        if ((in_keys() & (KEY_L | KEY_R)) == (KEY_L | KEY_R)) {         /* the shortcut to the league's desk scene */
+        if (DEBUG && (in_keys() & (KEY_L | KEY_R)) == (KEY_L | KEY_R)) {        /* the shortcut to the league's desk scene (a debug build's: debug.h) */
             dlog_str("league: desk scene by L + R\n");
             s2desk_won(league_at, cfg.team, cfg.car);
             if (league_at == 3 && cfg.car == 5) s2desk_won(4, cfg.team, 5);     /* (a win with the fifth car does not show its scene again: here it does) */
@@ -1758,7 +1762,7 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
     results = boot_results;
     sim = (SYS_FLAGS & FLAG_SIM) != 0;
     sim_frames = sim ? (slot_size(RACE_SLOT) ? slot_size(RACE_SLOT) : 8) : 0;
-    int n = sim && slot_size(TRACK_SLOT) ? (int)slot_size(TRACK_SLOT) : 1, cars = 4, overlay = 1;
+    int n = sim && slot_size(TRACK_SLOT) ? (int)slot_size(TRACK_SLOT) : 1, cars = 4, overlay = DEBUG;     /* (the timing overlay: a debug build starts with it on, a release has none) */
     int drive = sim && (in_keys() & KEY_START);         /* in the simulation Start held (SIM_KEYS=8000): the driving mode */
     dlog_str("viewer: start\n");
     s2menu_init(z);
@@ -1841,15 +1845,15 @@ void __attribute__((noreturn)) viewer_run(uint32_t boot_results)
             } else {                                    /* what stopped it is in the log; left and right try another, B the menu */
                 char l[40];
                 fmt_str(fmt_str(l, "Could not set up "), what);
-                screen_text(n, l, "see debug.txt in the Saves folder", "d-pad left/right: another track  B: menu", 1);
+                screen_text(n, l, "see debug.txt in the Saves folder", DEBUG ? "d-pad left/right: another track  B: menu" : "B: back to the menu", 1);
                 uint32_t keys_before = in_keys();
                 int menu = 0;
                 while (!menu) {
                     wait_swap_done();
                     uint32_t keys = in_keys(), press = keys & ~keys_before;
                     keys_before = keys;
-                    if (press & KEY_RIGHT) { n = n % TRACKS + 1; break; }
-                    if (press & KEY_LEFT) { n = (n + TRACKS - 2) % TRACKS + 1; break; }
+                    if (DEBUG && (press & KEY_RIGHT)) { n = n % TRACKS + 1; break; }
+                    if (DEBUG && (press & KEY_LEFT)) { n = (n + TRACKS - 2) % TRACKS + 1; break; }
                     menu = !sim && (press & KEY_B);
                 }
                 if (menu) {

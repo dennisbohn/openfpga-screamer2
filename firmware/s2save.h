@@ -22,9 +22,10 @@
 #define S2SAVE_TIMES_SIZE   18900
 #define S2SAVE_SIZE         19348           /* core/data.json: size_maximum 36,864 leaves room for later versions */
 
-/* Everything that may be open from the start for testing: 1 = every track, league and bonus car is open, whatever the save says
-   (the build's default, tools/fw.sh EXTRA_CFLAGS=-DS2SAVE_UNLOCK_ALL=0 TAG=x for the original's gating); the variable is the
-   runtime switch and is not saved */
+/* Everything that may be open from the start for testing: 1 = every track, league and bonus car is open, whatever the save says.
+   The firmware's Makefile sets it: 0 in a release, the original's gating (three tracks, league 1 and four cars a team at first;
+   the championship opens the rest), and 1 in a debug build (tools/fw.sh DEBUG=1; UNLOCK_ALL=0 or 1 on the command line says
+   otherwise). The 1 below is what the PC tests compile with. The variable is the runtime switch and is not saved */
 #ifndef S2SAVE_UNLOCK_ALL
 #define S2SAVE_UNLOCK_ALL   1
 #endif

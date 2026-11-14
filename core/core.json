@@ -8,9 +8,9 @@
             "shortname": "Screamer2",
             "description": "Screamer 2 (1996): RISC-V soft core and a hardware 3D renderer",
             "author": "Chainy",
-            "url": "",
-            "version": "0.1.0",
-            "date_release": "2026-11-03"
+            "url": "https://github.com/dennisbohn/openfpga-screamer2",
+            "version": "1.0.0",
+            "date_release": "2026-11-14"
         },
         "framework": {
             "target_product": "Analogue Pocket",

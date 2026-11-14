@@ -2,7 +2,7 @@
 # The viewer's race in the Verilator simulation on one track, with the frame timeline of the last frame, the visit line and the
 # first line of the log (docs/development.md "Driving mode", docs/screamer2/performance.md section 7).
 # Usage: tools/s2/sim_race.sh <dir with firmware.bin and program.bin> <track image> <track 1..7> <frames> <name>
-#   e.g. cp build/firmware/firmware.bin build/firmware/program.bin build/sim/x/ ;
+#   e.g. cp build/firmware-debug/firmware.bin build/firmware-debug/program.bin build/sim/x/ (tools/fw.sh DEBUG=1: the statistics are the debug build's) ;
 #        tools/s2/sim_race.sh build/sim/x build/s2/track4.bin 4 220 x4
 #   220 frames = 150 on the grid and 70 after GO, the gas held; about 9 minutes (several at a time are fine). The log goes
 #   to build/sim/<name>.log (the picture to <name>.rgb, the debug.txt to <name>_log.txt), build/sim/<name>.done says when it ended.
