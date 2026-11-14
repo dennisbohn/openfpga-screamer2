@@ -1,7 +1,7 @@
 /*
  * The files screen (firmware/files.c) on the PC: the same code that runs on the Pocket, with a
  * data slot read that serves a ZIP from a file, drawn into a raw RGB frame for tools/rgb2png.py.
- * The SDRAM and the registers are mapped at their addresses as in tools/host/render.c, so the
+ * The SDRAM and the registers are mapped at their addresses as in tools/s2/render_s2.c, so the
  * palette the screen writes can be read back. The debug log goes to stdout.
  *
  * Usage: files_screen <SCREAMER2.zip or -> <out.rgb> [music] [load]

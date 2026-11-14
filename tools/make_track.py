@@ -1,8 +1,9 @@
-"""One track for the Pocket (firmware/track.c, car.c), from the game files: the reference.
+"""One track of Screamer 1 as an image for the Pocket (version 6), from that game's files.
 
-The core builds this image itself from the original containers on the SD card
-(firmware/track_build.c); this script is kept only as the reference that
-tools/check_track_build.sh compares the firmware's build with, byte for byte.
+Kept for Screamer 2: tools/s2/make_track_s2.py runs this script's functions through an adapter
+for Screamer 2's files and makes its image (version 7) with them, the reference that the
+firmware's own build (firmware/track_build.c, track_build_s2()) is compared with, byte for byte
+(tools/s2/check_track_build_s2.sh). The firmware itself no longer reads version 6.
 
 Usage: python tools/make_track.py <GFX/MAPnL.DAT> <DATA/MAPn.DAT> <DATA/GEN.DAT> <out.bin>
                                   <preview.png>

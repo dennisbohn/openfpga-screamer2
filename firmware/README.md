@@ -17,8 +17,8 @@ reads the game's ZIP from its data slot (`zip.c`) and shows the list of the game
 green where they are, red where a needed one is missing, grey for the optional ones, and in plain words
 what is wrong with the ZIP. When nothing is missing the screen is a LOADING screen (with a notice if the ZIP is compressed): the first race's small
 files are read whole as a test, logging the time of each (`zip: <name> method <m> <bytes> bytes in <ms> ms`), and the program goes on at once. Where something is missing the list stays.
-When the files are all there the viewer brings up the original's LOADING picture of the intro's track as soon as the 2D toolkit can draw it, and the intro follows (the attract sequence, `s2attract.c`); any button leads to the menu (the options room, `s2room.c`, run by `s2menu.c`) and then the viewer and the race (`viewer.c`); the Screamer 1 game code
-is still in the tree and not reached. A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
+When the files are all there the viewer brings up the original's LOADING picture of the intro's track as soon as the 2D toolkit can draw it, and the intro follows (the attract sequence, `s2attract.c`); any button leads to the menu (the options room, `s2room.c`, run by `s2menu.c`) and then the viewer and the race (`viewer.c`).
+A crash (trap) ends up in the log with `mcause`, `mepc` and `mtval`.
 
 ## Building
 
@@ -38,22 +38,20 @@ and package versions pinned); the script builds the image on first use. The resu
 |---|---|
 | `start.S`, `link.ld`, `boot.c` | boot loader: jump at `0x0`, trap entry at `0x20`, everything in the boot RAM below 24 KB |
 | `start_prog.S`, `link_prog.ld`, `prog_crc.py` | program: header, start, its own trap entry; the build writes the CRC-32 into the header |
-| `main.c` | program flow: loading, menus, race loop, pause, replay, restart |
+| `main.c` | the program's start: the saves, the files screen, then the game (`viewer.c`); the hand-over of pieces to the geometry unit and of commands to the blitter, the frame's timeline |
+| `viewer.c`, `road.c`, `race.c` | the game's flow (intro, menu, the races and what follows them), the scene of a frame, the race of the four cars (docs/development.md, docs/screamer2/) |
 | `hw.h` | addresses and registers from `docs/soc.md`, `rdcycle`, `fixmul` (CFU), cache instructions |
 | `slot.c`, `dat.c`, `crc32.c` | data slots (deferred load), the game's `.DAT` containers, CRC-32 |
 | `zip.c` | the game's single ZIP in a data slot: the central directory (up to 512 files, names matched on the end of the path), stored entries read through word-aligned slot reads, deflated entries inflated into the destination buffer (own inflate, 64 KB input chunks, CRC-32 checked). 110 KB of .bss; tested by `tools/check_zip.sh` |
 | `setup.c`, `geom.c`, `raster.c`, `blit.c` | C models of the hardware units and their drivers: setup, geometry, rasterizer, blitter. Each model is bit-exact with its Verilog. |
 | `mixer.c` | C model of the audio mixer (`audio.v`) |
-| `track.c`, `track_build.c`, `tb_gfx.c`, `tb_hud.c`, `tb_mmp.c`, `tb_spl.c` | the track: drawing it, and building its image from the game's own files |
+| `track.c`, `track_build.c`, `tb_gfx.c`, `tb_hud.c`, `tb_mmp.c` | the track: drawing it, and building its image from the game's own files |
 | `s2teams.c` | the cars of the race, each its own team's (`race_grid`): reads the two entries of each car from the team container in the ZIP and unpacks them for the track image |
-| `efx.c` | Screamer 1's effects through its lookup table (glass, shadows, smoke); Screamer 2's are `smg.c` and `s2fx.c` |
 | `smg.c` | the see-through table in the hardware's 64 rows (docs/development.md "Wheel smoke and shadows"): the image builder gives each texel the see-through textures use a row, copies the textures with their texels as rows and makes the table; tested against `tools/s2/smg_ref.py` by `tools/s2/check_smg_s2.sh` and the image check |
 | `s2fx.c` | wheel smoke and shadows of the race: the puffs of the four cars (the game's rule of `0x204ae`), the shadows (`0x1f4a7`), as objects for `track_draw_cam()`; checked against recordings of the running game (`tools/s2/check_fx_s2.sh`) |
-| `drive.c`, `car.c` | the player's car: engine, gearbox, brakes, steering, walls, crashes, cameras |
-| `opp.c`, `scenery.c`, `ghost.c` | opponents, props and moving scenery, the time-attack ghost |
-| `champ.c`, `save.c` | the championship, saved data (nonvolatile data slots) |
-| `menu.c`, `hud.c`, `intro.c` | menus, the race screen, the intro |
-| `sound.c`, `speech.c`, `music.c` | sound effects, the race commentary, the music: streamed from the CD image (the ring filled over the frames, a song a long blocking read would starve held and resumed: `slot.c`'s hook, docs/development.md "The menus' music"), or the MIDI songs on the FM chip |
+| `car.c` | a car's model as an object for the drawing: its blocks in the game's order for the camera, the wheels turned and steered (the cars' physics is `s2car.c`) |
+| `save.c` | the saved data read at the start (nonvolatile data slots; the layout is `s2save.c`'s and `s2ghost.c`'s) |
+| `music.c` | the music: streamed from the CD image (the ring filled over the frames, a song a long blocking read would starve held and resumed: `slot.c`'s hook, docs/development.md "The menus' music"); Screamer 1's MIDI songs on the FM chip are still in it and never play (Screamer 2 has none) |
 | `s2menumusic.c` | the menus' song, CD track 2: begins with a page outside a race, restarted by the desk scene and GAME SETTINGS' MUSIC row (`tools/music_model.sh` tests the ring against the loads, `tools/menu_screens.sh` the page code on the same model) |
 | `s2menu.c` | Screamer 2's menu: its run on the options room (`s2menu_room`, `s2room_menu()` by default; the arcade pages stand in if the room cannot be built), the names from `DATA/LOCAL.DAT`, the choices kept in the save (`s2save.c`); the grid, the kept choices and the run on a stand-in room are tested on the PC (`tools/menu_screens.sh`) |
 | `s2room.c` | the options room (docs/screamer2/menus.md section 6, row 8): the team's room (`MENU<t>1.DAT`) built like a track by `track_build_s2()` without cars and drawn by the track's engine, the five stations of `P_<t>.MCM` (read from `DATA/GEN.DAT`, with the records of the CAR pages and CUSTOMIZE), the camera's glides (the original's easing, checked frame by frame against the running game), the band, texts, arrows and the fade out; `s2room_scene()` is the picture of the room with objects in it, which the CAR pages use too, and the room's one table of darkening; `tools/menu_screens.sh` (`tools/ui_room_ref.py`), `tools/room.sh` against the running original |
@@ -76,7 +74,7 @@ and package versions pinned); the script builds the image on first use. The resu
 | `s2cockpit.c` | the views from the car (docs/screamer2/hud.md section 5; no hardware): the cameras of INCAR, NEAR, INSIDE and the rear-view mirror, the scene's rows, the dashboards' table (`CRUSCOTTI` of `CRUSC.DTR`), the needles' lines and the gear lamp's place of `STARTL.EXE` 0x46755; `tools/s2/check_cockpit_s2.sh` |
 | `s2dash.c` | the cockpits' pictures (`COCK1..8_L.PKC`, `MIRROR_L.PKC` of `GFX/GAME1.DAT`) as blitter boxes and the instruments drawn from them: the cockpit, the gear lamp, two needles, the mirror's frame |
 | `s2end.c`, `s2pages.c` | the end of the race (CONGRATULATIONS, REPLAY / RACE AGAIN / EXIT, the best times; the player's times into the save) and the GAME SETTINGS, HI SCORES and MULTIPLAYER MENU pages, on the toolkit (docs/screamer2/menus.md section 6) |
-| `fm.c` | the FM music: HMI's song player and OPL2 driver, queueing the chip's register writes with their times |
+| `fm.c` | Screamer 1's FM music: HMI's song player and OPL2 driver, queueing the chip's register writes with their times. Screamer 2 has no such songs: linked, never played |
 | `files.c` | the files screen: the ZIP's state, every file green/red/grey, the notice for a compressed ZIP, the read test |
 | `console.c`, `screen.c`, `dlog.c`, `selftest.c`, `memtest.c`, `trap.c` | text drawing, the test band, the debug log, self-tests, the memory test, the trap handler |
 | `font8x8_basic.h` | font from [dhepper/font8x8](https://github.com/dhepper/font8x8) (public domain), unchanged |

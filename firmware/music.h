@@ -9,7 +9,7 @@
  *
  * The mixer (audio.v, hw.h AU_MUSIC*) plays the music from a ring of 256 KB in the SDRAM at
  * 0x4000 of 0x7fff: the game sets the CD master to 0x6000 (0.75 as MSCDEX takes it), and like
- * the effects' master (sound.h) it is two thirds of that here, which keeps the game's balance of
+ * the effects' master was in Screamer 1 it is two thirds of that here, which kept that game's balance of
  * music and effects and the sum mostly inside 16 bits (at 0x6000 the start line's engines and
  * the music clipped in the simulation, 267 frames in a second). music_frame() keeps the ring
  * filled ahead of the mixer's place with reads of 32 KB that the CPU only starts (slot_start):
@@ -29,14 +29,14 @@
 /* The cue sheet from its data slot and the song numbers from GEN.DAT (whole in memory; without
    MENU.DTR the game's own values): the CD's audio tracks, 0 without the image */
 int music_init(const uint8_t *gen, uint32_t gen_size);
-/* The options page's MUSIC (menu.h): 0 off, music_play only stops the music */
+/* GAME SETTINGS' MUSIC (s2menumusic.c, viewer.c set it from the save): 0 off, a call to play only stops the music */
 extern int music_on;
 /* Song k: 0 the menu's, 1-6 the race tracks'. Unless it plays already, the music before stops
    and the song starts: its first reads are started and music_frame() brings them in over the next
    frames (the first 96 KB, a tenth of a second or two; the mixer starts after that, so nothing of
    the ring's old content is ever played and no frame waits for the 224 KB of a whole fill, 170 ms). */
 void music_play(int k);
-/* The CD player's (hud.h): CD track n from its start, even if it plays already, and again at
+/* CD track n from its start, even if it plays already, and again at
    its end (0x2636c with the repeat flag, as music_play). Screamer 2: the menu's song is track 2,
    the races' are CD_TRACKS of MISC.DTR (s2sound.h, s2menumusic.h). */
 void music_cd(int n);

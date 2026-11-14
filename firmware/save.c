@@ -3,7 +3,6 @@
  */
 #include "save.h"
 #include "hw.h"
-#include "champ.h"
 #include "s2save.h"
 #include "slot.h"
 #include "dlog.h"
@@ -17,7 +16,6 @@ static int load(uint32_t id, uint32_t addr, uint32_t size)
 
 void save_load(void)
 {
-    choice_defaults();              /* Screamer 1's block, plain memory now (champ.h); its unreached code and menu_options_load() read it */
     s2save_load();
     int a = load(SAVE_ATTACK_SLOT, SAVE_ATTACK_ADDR, SAVE_ATTACK_SIZE);
     if(!a) memset((void *)(uintptr_t)SAVE_ATTACK_ADDR, 0, SAVE_ATTACK_SIZE);

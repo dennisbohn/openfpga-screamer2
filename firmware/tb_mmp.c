@@ -96,45 +96,6 @@ bad:
     return 0;
 }
 
-/* the grid cell column or row of a coordinate, (v + 2^20) >> 13 as Python shifts */
-static int32_t grid_of(int32_t v) { return (int32_t)(((int64_t)v + 0x100000) >> 13); }
-
-int tb_mmp_road_angle(const uint8_t *mmp, uint32_t size, int32_t x, int32_t y, float *angle)
-{
-    int bad = 0, found = 0;
-    int32_t best = 0x7FFFFFF8, kx = grid_of(x), ky = grid_of(y);
-    float a = 0.0f;
-    for(int32_t gy = ky - 1; gy <= ky + 1; gy++) {
-        if(gy < 0 || gy >= GRID) continue;
-        int32_t row = rd32(mmp, size, 4 * (uint32_t)gy, &bad);
-        if(bad || row < -1) return 0;
-        if(row == -1) continue;
-        for(int32_t gx = kx - 1; gx <= kx + 1; gx++) {
-            if(gx < 0 || gx >= GRID) continue;
-            int32_t at = rd32(mmp, size, (uint32_t)row + 4 * (uint32_t)gx, &bad);
-            struct cell c;
-            if(bad || at < -1) return 0;
-            if(at == -1) continue;
-            if(!read_cell(mmp, size, (uint32_t)at, &c)) return 0;
-            for(uint32_t k = 0; k < c.ndirs; k++) {
-                const uint8_t *e = mmp + c.dirs + DIR_LEN * k;
-                /* the game's imul and add: int32, wrapping */
-                uint32_t dx = get32(e + 4) - (uint32_t)x, dy = get32(e + 8) - (uint32_t)y;
-                int32_t d = (int32_t)(dx * dx + dy * dy);
-                if(d < best) {
-                    best = d;
-                    memcpy(&a, e, 4);
-                    found = 1;
-                }
-            }
-        }
-    }
-    if(!found) return 0;
-    if(a >= 6.28318548f) a -= 6.28318548f;      /* 2 pi in float32, the game's 0x100410 */
-    *angle = a;
-    return 1;
-}
-
 /* the cell's j-th record in the game's draw-list order: run 1 first, then run 0 */
 static uint32_t record(const struct cell *c, uint32_t j)
 {

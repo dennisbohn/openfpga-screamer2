@@ -47,28 +47,6 @@ void blit_line(struct blit_list *l, int x0, int y0, int x1, int y1, int cx0, int
     c[3] = ((uint32_t)cx1 & 0x1FF) | ((uint32_t)cy1 & 0x1FF) << 16 | (uint32_t)colour << 24;
 }
 
-int blit_text(struct blit_list *l, const uint8_t *base, const struct blit_image *img, const struct blit_font *f,
-              int x, int y, const char *s, int colour, int draw)
-{
-    int cell = (int)f->widest + 2, fixed = 0, gap = 1, x0 = x;
-    for(const unsigned char *p = (const unsigned char *)s; *p; p++) {
-        int ch = *p;
-        if(ch < (int)f->first || ch >= (int)(f->first + f->count)) {
-            if(ch == 1) fixed = 1;
-            else if(ch == 2) fixed = 0;
-            else if(ch == 3) gap = 0;
-            else if(ch == 4) gap = 1;
-            continue;
-        }
-        const struct blit_image *g = &img[f->first_image + (uint32_t)(ch - (int)f->first)];
-        int w = g->w;
-        if(draw) blit_copy(l, base + g->off, w, g->h, w, x + gap + (fixed ? (cell - (w + 1)) / 2 : 0), y,
-                           BLIT_FONT, colour);
-        x += fixed ? cell : w + 1 + gap;
-    }
-    return x - x0;
-}
-
 static void put(volatile uint8_t *fb, int x, int y, int v)
 {
     fb[y * 320 + x] = (uint8_t)v;

@@ -28,7 +28,7 @@ static inline float opaquef(float x) { return x; }
 open(p, "w").write(t)
 PY
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); else mount=$root/build; fi
-LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c s2ghost.c race.c s2cam.c s2cockpit.c"
+LIST="road.c track.c geom.c setup.c raster.c car.c blit.c dlog.c crc32.c dat.c console.c tb_hud.c tb_mmp.c s2car.c s2params.c s2ghost.c race.c s2cam.c s2cockpit.c"
 rec=/b/check/dosbox_cockpit/cockpit_t1.bin
 crusc=/b/check/dosbox_cockpit/cockpit_t1.crusc.bin
 args="/b/s2/cockpit"

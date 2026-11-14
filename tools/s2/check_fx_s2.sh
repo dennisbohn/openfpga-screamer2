@@ -45,7 +45,7 @@ static inline float opaquef(float x) { return x; }
 open(p, "w").write(t)
 PY
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
-LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c s2car.c s2params.c race.c s2ghost.c s2fx.c"
+LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c tb_hud.c tb_mmp.c s2car.c s2params.c race.c s2ghost.c s2fx.c"
 san="-fsanitize=address,undefined -fno-sanitize=shift -fno-sanitize-recover"      # (geom.c's model shifts negative numbers left, as the hardware does: not flagged)
 [ $mode = render ] && san=""            # (the picture is drawn through fixed mappings of the SDRAM: no sanitizer shadow there)
 args="$mode /b/s2/ref$track.bin $track /b/check/$(basename "$recd")/smoke_t$track.bin $fb $nobj"

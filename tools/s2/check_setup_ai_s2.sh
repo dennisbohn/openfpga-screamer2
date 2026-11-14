@@ -47,7 +47,7 @@ static inline float opaquef(float x) { return x; }
 open(p, "w").write(t)
 PY
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); ref_mount=$(cygpath -wa "$ref"); else mount=$root/build; game_mount=$game; ref_mount=$ref; fi
-LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c s2ghost.c"
+LIST="road.c track.c geom.c setup.c raster.c car.c blit.c dlog.c crc32.c dat.c console.c tb_hud.c tb_mmp.c s2car.c s2params.c s2ghost.c"
 runs=""
 for n in 1 2 3 4 5 6 7; do
     runs="$runs && echo track $n && ./check_setup_ai_s2 /b/s2/aisetup$n.bin $n /ref/traces_race/aisetup.t$n.g1.bin /ref/traces_race/aisetup.t$n.g2.bin"

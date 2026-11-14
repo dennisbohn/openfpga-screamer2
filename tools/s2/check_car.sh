@@ -63,7 +63,7 @@ if command -v cygpath >/dev/null 2>&1; then
 else
     mount=$root/build; game_mount=$game; ref_mount=$ref
 fi
-LIST="track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c s2params.c s2car.c"
+LIST="track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c tb_hud.c tb_mmp.c s2params.c s2car.c"
 
 # the runs: one line each into a script for the container, each with the car's place cut to whole numbers as the
 # game does (the first run: it follows the reference step for step) and with the place kept as a float (the firmware)

@@ -37,13 +37,6 @@ void blit_copy(struct blit_list *l, const uint8_t *src, int w, int h, int stride
 void blit_fill(struct blit_list *l, int x, int y, int w, int h, int colour);
 /* a line from (x0, y0) to (x1, y1), its pixels inside [cx0, cx1) x [cy0, cy1) */
 void blit_line(struct blit_list *l, int x0, int y0, int x1, int y1, int cx0, int cy0, int cx1, int cy1, int colour);
-/* text as the game's 0x24fc0 sets it: a character takes its width and an empty column, and
-   one more before it unless switched off; in the string, byte 1 = fixed pitch (every
-   character the widest + 2, centred), 2 = proportional, 3 / 4 = the column before off / on;
-   characters the font does not have are left out. Returns the width; draws if draw. The
-   images are the race screen section's (base, table). */
-int blit_text(struct blit_list *l, const uint8_t *base, const struct blit_image *img, const struct blit_font *f,
-              int x, int y, const char *s, int colour, int draw);
 
 /* the C model: the commands into fb (320 x 200 bytes) */
 void blit_model(volatile uint8_t *fb, const struct blit_list *l);

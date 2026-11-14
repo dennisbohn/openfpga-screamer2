@@ -10,7 +10,7 @@
 # and, with NOLOD=1 at build, the sweeps without the level of detail. The tables of performance.md are the
 # study's record.
 # Needs: tools/s2/framestats.sh build; build/check/track<n>.bin (tools/make_track.py, made by
-# tools/simcheck.sh or tools/render.sh); build/s2/track<n>.bin (tools/s2/make_track_s2.py <Screamer 2 folder> n
+# tools/simcheck.sh); build/s2/track<n>.bin (tools/s2/make_track_s2.py <Screamer 2 folder> n
 # build/s2/track<n>.bin); for the model also the S1 start frames: build/sim/t<n>.log (SIM_TRACK=n
 # tools/simcheck.sh t<n>) and build/stats/start<n>.csv (tools/s2/framestats.sh start n).
 # About 2 minutes. Output: build/stats/out/*.csv, build/stats/out/forecast.md (printed).

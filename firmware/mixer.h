@@ -3,7 +3,7 @@
  * unsigned samples in the SDRAM, one pass per output frame of 48 kHz. Its registers are the
  * hardware's (hw.h AU_*); a register written between two passes takes effect in the next.
  * sim/audio checks the hardware against it sample by sample; the firmware drives the hardware
- * through sound.c.
+ * through s2sound.c (the effects) and music.c.
  *
  * A pass, voice by voice: a playing voice that was (re)started takes its first byte as its
  * place, with no fraction and its loop count, and is heard from the next pass on; any other

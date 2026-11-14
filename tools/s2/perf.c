@@ -1,6 +1,6 @@
 /*
  * Counters and cache models for tools/s2/perf.h. SDRAM byte address = pointer - SDRAM_BASE (the
- * PC maps the SDRAM at the firmware's address, as tools/host/render.c does).
+ * PC maps the SDRAM at the firmware's address, as tools/s2/render_s2.c does).
  */
 #include <stdlib.h>
 #include <math.h>
@@ -140,7 +140,7 @@ void perf_row(FILE *f)
 #undef X
 }
 
-/* tools/host/render.c draws exactly one frame: PERF_OUT=file dumps its counters at exit */
+/* a tool that draws exactly one frame: PERF_OUT=file dumps its counters at exit */
 __attribute__((destructor)) static void perf_dump(void)
 {
     const char *path = getenv("PERF_OUT");

@@ -29,7 +29,7 @@ struct s2_road_kind;
 #define S2SND_GROUND    0x12
 #define S2SND_TUNNEL    0x19            /* added to an engine's sample number in a tunnel */
 #define S2SND_RANGE     50000.0f        /* how far an engine carries (0x1ff8e) */
-#define S2SND_FX_MASTER 0x2000          /* the effects' master volume, of 0x7fff: Screamer 1's two thirds of the game's 0x6000 (sound.h)
+#define S2SND_FX_MASTER 0x2000          /* the effects' master volume, of 0x7fff: Screamer 1's two thirds of the game's 0x6000
                                            halved again, since four engines, a squeal and a knock clipped the sum in the simulation (the
                                            music is at 0x4000, music.c). How the game balances them is not in its program (the CD's
                                            analogue mix): to be set by ear */
@@ -66,7 +66,7 @@ int s2snd_cd_tracks(const uint8_t *game_dat, uint32_t size, int out[7]);
 uint32_t s2snd_step(uint32_t rate);
 
 /* The registers' volume: the game's volume of a voice (0 .. 0x7fff, the sample's own times the distance
-   and so on), the effects' master volume (sound.c's two thirds of the game's) and the pan (0 left, 0x8000
+   and so on), the effects' master volume (S2SND_FX_MASTER) and the pan (0 left, 0x8000
    the middle, 0xffff right; the middle is full on both sides, a voice off it fades out of the far one in a
    straight line, as HMI's driver does) as AU_VOL: left in bits 7..0, right in 15..8 */
 uint32_t s2snd_vol_reg(uint32_t vol, int32_t pan);

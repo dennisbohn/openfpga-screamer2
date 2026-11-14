@@ -23,7 +23,11 @@ docker_sh() { MSYS_NO_PATHCONV=1 docker run --rm "$@"; }
 # the car physics behind firmware/s2car.h: the real s2car*.c when there is s2car.c, else the stand-in (firmware/Makefile)
 car=s2car_stub.c
 if [ -f "$root/firmware/s2car.c" ]; then car=$(cd "$root/firmware" && ls s2car*.c | grep -v '^s2car_stub.c$' | tr '\n' ' '); car="$car s2params.c"; fi
-LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c $car"
+LIST="road.c track.c geom.c setup.c raster.c car.c blit.c dlog.c crc32.c dat.c console.c tb_hud.c tb_mmp.c $car"
+# a tree from before Screamer 1's game was taken out (tools/s2/check_cull_s2.sh runs this script in a reference commit's tree): its car.c needs these
+for f in drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_spl.c; do
+    [ -f "$root/firmware/$f" ] && LIST="$LIST $f"
+done
 
 cmd=$1
 shift

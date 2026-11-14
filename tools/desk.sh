@@ -44,7 +44,7 @@ else
     mount=$root/build
     game_mount=$game
 fi
-LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c s2env.c s2anim.c s2params.c blit.c geom.c setup.c raster.c track.c car.c track_build.c smg.c tb_mmp.c tb_gfx.c tb_hud.c tb_spl.c s2save.c champ.c"
+LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c s2env.c s2anim.c s2params.c blit.c geom.c setup.c raster.c track.c car.c track_build.c smg.c tb_mmp.c tb_gfx.c tb_hud.c s2save.c"
 set +e
 MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e TEAM="$TEAM" -e CAR="$CAR" -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c '
     cd /b/host/desk && gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -D"ZIP_ADDR(p)=zip_addr(p)" -o ../desk_match host/desk_match.c '"$LIST"' -lm &&

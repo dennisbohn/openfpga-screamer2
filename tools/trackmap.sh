@@ -69,7 +69,7 @@ else
     mount=$root/build
     game_mount=$game
 fi
-LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c blit.c geom.c setup.c raster.c track.c car.c s2end.c s2load.c s2save.c champ.c s2league.c"
+LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c blit.c geom.c setup.c raster.c track.c car.c s2end.c s2load.c s2save.c s2league.c"
 MSYS_NO_PATHCONV=1 docker run --rm -e DUMP="$DUMP" -e ONLY="$ONLY" -e SWEEP="$SWEEP" -e SHOT="$SHOT" -e TA_RAM=/b/check/trackmap/ram_taend.txt -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh "$image" -c "
     cd /b/host/trackmap && gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_match host/trackmap_match.c $LIST -lm &&
     gcc -O2 -w -ffunction-sections -fdata-sections -Wl,--gc-sections -DGU_MAX_VERT=1024 -D'ZIP_ADDR(p)=zip_addr(p)' -o ../trackmap_whole host/trackmap_match.c $LIST -lm &&

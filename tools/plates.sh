@@ -44,7 +44,7 @@ else
     mount=$root/build
     game_mount=$game
 fi
-LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c blit.c geom.c setup.c raster.c track.c car.c s2save.c champ.c s2league.c s2end.c s2load.c"
+LIST="dlog.c console.c zip.c dat.c crc32.c s2gfx.c s2scene.c blit.c geom.c setup.c raster.c track.c car.c s2save.c s2league.c s2end.c s2load.c"
 DEFS=""
 [ -n "$ROLL" ] && DEFS="-DPLATE_ROLL_SIGN=${ROLL}.0f"
 set +e

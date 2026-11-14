@@ -22,6 +22,24 @@
 #define S2SAVE_TIMES_SIZE   18900
 #define S2SAVE_SIZE         19348           /* core/data.json: size_maximum 36,864 leaves room for later versions */
 
+/* The old layout, read once and replaced (s2save_load()): the core's first builds kept the start menu's choices in the unused fields of
+   Screamer 1's settings file, 0x460 bytes as that game reads CONFIG\CHOICE.DAT (little-endian). Of it the track, the team (intro), the
+   car, the laps, the difficulty and the marker with the gearbox (failed) are read; the rest is that game's and means nothing here. */
+#define CHOICE_SIZE 0x460
+struct choice_rec { float time[5]; char name[5][4]; int32_t flag[5], mode[5]; };
+struct choice_dat {
+    int32_t car, track;                     /* +0x000 */
+    char name[4];                           /* +0x008 */
+    int32_t detail, difficulty, laps;       /* +0x00c */
+    int32_t stage, prev, total;             /* +0x018 */
+    float time[6];                          /* +0x024 */
+    int32_t pos[6], pts[6];                 /* +0x03c */
+    struct choice_rec lap[6], race[6];      /* +0x06c, +0x24c */
+    int32_t bullet, view, intro, speech, music;     /* +0x42c */
+    int32_t failed;                         /* +0x440 */
+    int32_t volume[3], unused1, level, level_shown, difficulties;   /* +0x444 .. +0x45c */
+};
+
 /* Everything that may be open from the start for testing: 1 = every track, league and bonus car is open, whatever the save says.
    The firmware's Makefile sets it: 0 in a release, the original's gating (three tracks, league 1 and four cars a team at first;
    the championship opens the rest), and 1 in a debug build (tools/fw.sh DEBUG=1; UNLOCK_ALL=0 or 1 on the command line says

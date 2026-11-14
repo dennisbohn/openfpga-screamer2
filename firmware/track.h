@@ -11,7 +11,6 @@
 #include "raster.h"
 #include "setup.h"
 #include "geom.h"
-#include "drive.h"
 #include "blit.h"
 
 /* Whether a track file is at file (its header); then its blocks can be checked with
@@ -22,10 +21,6 @@ int track_init(void);
 
 /* The track's palette, 256 x 0x00RRGGBB */
 const uint32_t *track_palette(void);
-
-/* Path points of the camera's lap; point i (modulo the length) */
-uint32_t track_path_length(void);
-void track_path_point(uint32_t i, float *x, float *y, float *h);
 
 /* What lies under the point (x, y): 1 and, if h, the height of the drivable surface there and
    whether that piece is grass (its name's fourth letter is 'e'); 0 over nothing. The game's
@@ -43,17 +38,19 @@ int track_under(float x, float y, float *h, int *grass);
    (the game's second question, whether there is ground at all, which the walls ask), so held is 1 whenever
    the answer is 1. 0 over nothing. */
 int track_ground_s2(int x, int y, int *held, int *height, int normal[3], int *kind);
-/* after track_under found a height: the tilt that lays a thing heading yaw on that face, as the
-   game stands an opponent (0x1cb9c), given its forward (fx, fy) = (sin yaw, -cos yaw); pitch +
-   nose up, roll + right side up */
-void track_under_tilt(float fx, float fy, float *pitch, float *roll);
 
-/* MAPn.MRK: the lap's markers. slip is the cornering factor from that marker on (0 on the
-   straights), flags 2 the line or a checkpoint */
-struct track_marker { int32_t radius, kind; float pace, slip; int32_t flags, x, height, y; };
-const struct track_marker *track_markers(int *n);
+/* A row of the image's cars section, in the layout of CARS_DATA in Screamer 1's CARS.DTR as tools/make_track.py writes it. The
+   firmware reads the livery word alone: track_build_s2() puts the car a row's model is into it (s2car.c, image_model()). */
+struct car_spec {
+    char  name[12];         /* "AUTO00" */
+    int32_t livery;
+    float maxspd, maxrpm, grip, accel;
+    int32_t automatic;
+    int32_t nshift;
+    float ratio[7];
+};
 
-/* CARS.DTR's rows, and per car model (AUTOnn) its wheels' places and its .3DX file */
+/* The cars section's rows, and per car model (AUTOnn) its wheels' places and its .3DX file */
 struct track_model { float wheelbase, axle_front, axle_rear, half_track; uint32_t mesh, mesh_size; };
 const struct car_spec *track_cars(int *n);
 const struct track_model *track_models(int *n);
@@ -66,9 +63,6 @@ struct track_wall { float angle; int32_t x, y, x1, y1, x2, y2; };
 const struct track_dir *track_dirs(int *n);
 const struct track_wall *track_walls(int *n);
 
-/* The animation clock (0x1fcc4): + 0.3 a second, one turn in 3.33 s; the track's textures
-   play their frames by it */
-void track_clock(uint32_t steps);
 /* the texture phase the clock gives (a record's +0x20 of -1: the pieces, the moving scenery) */
 uint32_t track_phase(void);
 /* the clock set to a, 0 .. 1 of its turn, by something that runs it at its own pace (the options room: 0.2 a second; Screamer 2's race: 0.3 of the step's length a frame, viewer.c) */
@@ -77,36 +71,10 @@ void track_clock_set(float a);
 /* where the player starts: place and heading (forward = (sin a, -cos a)) */
 void track_start(float *x, float *y, float *yaw);
 
-/* TRACK_DATA of MAPnA.DTR: seconds added at the line and checkpoints, the bumper cam's height */
-int track_bonus_time(void);
-int track_camera_hi(void);
-
-/* The opponents (MAPnOPP.SPL, OPPONENTS of the difficulty's MAPn?.DTR): opponent k drives
-   spline k, the last spline is the player's line; a spline is nodes with a point (the start
-   node's is a place on the grid), the next node and two handles. Returns the splines. */
-struct track_opp_row { float max_spd, accel, brakes, skill, sband; };
-struct track_spline_node { int32_t x, y, z, next, in_x, in_y, out_x, out_y; };
-int track_opp_count(int *rows);
-const struct track_opp_row *track_opp_rows(void);
-const struct track_spline_node *track_opp_spline(int k, int *start, int *n);
-
 /* The backdrop (MAPn.BCK): 512 x 256 palette indices, rows of 512 bytes, the last row twice;
    the palette index below it (TRACK_DATA's color) */
 const uint8_t *track_backdrop(void);
 int track_ground_colour(void);
-
-/* The race screen section (tools/make_track.py): its start, the image table, the fonts, the
-   two pictures' boxes (IMPLET_L the labels, IMPRES_L the outside views' rev counter: first
-   image, count), GAME.TXT's line k */
-const uint8_t *track_hud(void);
-const struct blit_image *track_hud_images(int *n);
-const struct blit_font *track_hud_fonts(int *n);
-void track_hud_picture(int k, int *first, int *count);
-const char *track_hud_text(int k);
-
-/* Screamer 2 draws at DETAIL HIGH only (the H01 set, the far plane from TRACK_DATA in the image's
-   header): this does nothing now. Screamer 1's option, still called by its code in the tree. */
-void track_detail(int level);
 
 /* The original's level of detail of a block (docs/screamer2/performance.md, section 6): 0, 1 or 2 for a
    block whose middle is dist units from the camera. moving: a car or another moving object (levels
@@ -128,12 +96,6 @@ int track_lod_level(float dist, int moving);
 #ifndef LOD_SCALE
 #define LOD_SCALE 1.0f
 #endif
-
-/* The file's size and its blocks of 256 KB from offset 0x100 on, each with a CRC-32 in the
-   header: whether block k (0 .. track_blocks() - 1) arrived as written */
-uint32_t track_size(void);
-int track_blocks(void);
-int track_block_ok(int k);
 
 struct track_stats {
     uint32_t pieces;                            /* placements handed to the geometry unit */
@@ -223,7 +185,7 @@ void track_reflection_rate(float k);
 uint32_t track_object_reflection(const struct track_cam *cam, float x, float y, float h, struct track_refl *s);
 
 /* One block placed as b as a piece for the geometry unit, seen from cam with the race's lens:
-   for a model drawn without a track (the menu's, menu.h) */
+   for a model drawn without a track (a page's) */
 void track_block_piece(const struct track_cam *cam, const struct track_block *b, struct gu_piece *g);
 
 /* The change of the drawing key for a mesh (an object of the UNR or a .3DX file) by its class: minus the 16-bit word
@@ -250,6 +212,3 @@ void track_draw_cam(volatile uint8_t *fb, const struct rs_clip *clip, const stru
    track_view_mirror(). */
 void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const struct track_cam *cam,
                        struct track_object *objs, int nobj, struct track_stats *st);
-
-/* The view from path position pos (path points, 8 fraction bits), clipped to clip */
-void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, struct track_stats *st);

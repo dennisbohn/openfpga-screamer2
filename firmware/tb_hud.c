@@ -1,9 +1,5 @@
 /*
- * The race screen section (tb_hud.h). The files:
- *   GAMEL.SPR  int32 count, size; count x int32 x, y, width, height, offset; the pixels
- *   GAMEL.FNT  u8 fonts - 1; per font int32 height, first character, count; per font count x
- *              int32 width, offset; int32 size; the pixels, two a byte (high half first),
- *              rows of (width + 1) / 2 bytes
+ * A .PKC picture as boxes (tb_hud.h). The file:
  *   .PKC       320 x 200: int32 n < 0 skips -n pixels (see-through), n >= 0 is followed by n
  *              pixels; the picture ends at its last pixel or the file's last whole int32
  * A picture becomes boxes as make_track.py's pkc() finds them: the rows with pixels (a byte
@@ -15,7 +11,6 @@
 
 #define PKC_W   320             /* a .PKC picture's size */
 #define PKC_H   200
-#define LINES   26              /* GAME.TXT's lines in the section, 32 bytes each */
 
 static uint32_t rd32(const uint8_t *p)
 {
@@ -160,96 +155,3 @@ uint32_t tb_hud_picture(const uint8_t *d, uint32_t size, uint8_t *out, uint32_t 
     return s.at;
 }
 
-/* Python's str.splitlines() breaks in latin-1 */
-static int line_break(uint8_t c)
-{
-    return (c >= 0x0A && c <= 0x0D) || (c >= 0x1C && c <= 0x1E) || c == 0x85;
-}
-
-uint32_t tb_hud_build(const uint8_t *spr, uint32_t spr_size, const uint8_t *fnt, uint32_t fnt_size,
-                      const uint8_t *implet, uint32_t implet_size, const uint8_t *impres, uint32_t impres_size,
-                      const uint8_t *txt, uint32_t txt_size, uint8_t *out, uint32_t cap)
-{
-    /* the counts first: the table's size places the pixels */
-    if(spr_size < 8 || fnt_size < 1) return 0;
-    uint32_t nspr = rd32(spr);
-    if(nspr > (spr_size - 8) / 20) return 0;
-    uint32_t nf = fnt[0] + 1u, glyphs = 1 + 12 * nf, pixels = glyphs, nglyph = 0;
-    if(glyphs > fnt_size) return 0;
-    for(uint32_t f = 0; f < nf; f++) {
-        const uint8_t *h = fnt + 1 + 12 * f;
-        uint32_t count = rd32(h + 8);
-        if((rd32(h) | rd32(h + 4) | count) & 0x80000000u || count > (fnt_size - pixels) / 8) return 0;
-        pixels += 8 * count;
-        nglyph += count;
-    }
-    pixels += 4;                                        /* the pixels' size */
-    int32_t nlet = pkc(implet, implet_size, NULL), nres = pkc(impres, impres_size, NULL);
-    if(nlet < 0 || nres < 0) return 0;
-    uint32_t nimg = nspr + nglyph + (uint32_t)nlet + (uint32_t)nres;
-    uint64_t head = 8 + 12 * (uint64_t)nimg + 20 * nf + 16 + 32 * LINES;
-    if(head > cap) return 0;
-    struct sink s = { out, cap, 8, (uint32_t)head };
-    wr32(out, nimg);
-    wr32(out + 4, nf);
-
-    /* the sprites, their offsets as the place */
-    const uint8_t *base = spr + 8 + 20 * nspr;
-    uint32_t left = spr_size - 8 - 20 * nspr;
-    for(uint32_t i = 0; i < nspr; i++) {
-        const uint8_t *r = spr + 8 + 20 * i;
-        int32_t w = (int32_t)rd32(r + 8), h = (int32_t)rd32(r + 12);
-        uint32_t at = rd32(r + 16);
-        uint8_t *px = image(&s, w, h, (int32_t)rd32(r), (int32_t)rd32(r + 4));
-        if(!px) return 0;
-        uint32_t n = (uint32_t)w * (uint32_t)h;
-        if(!n) continue;
-        if(at > left || n > left - at) return 0;
-        memcpy(px, base + at, n);
-    }
-
-    /* the fonts' characters, each pixel its shade */
-    uint8_t *ft = out + 8 + 12 * nimg;
-    for(uint32_t f = 0, first = nspr; f < nf; f++) {
-        const uint8_t *hd = fnt + 1 + 12 * f;
-        int32_t h = (int32_t)rd32(hd);
-        uint32_t count = rd32(hd + 8), widest = 1;
-        for(uint32_t i = 0; i < count; i++, glyphs += 8) {
-            int32_t w = (int32_t)rd32(fnt + glyphs), at = (int32_t)rd32(fnt + glyphs + 4);
-            uint8_t *px = image(&s, w, h, 0, 0);
-            if(!px) return 0;
-            if((uint32_t)w > widest) widest = (uint32_t)w;
-            if(!w || !h) continue;
-            uint32_t bw = ((uint32_t)w + 1) / 2;
-            int64_t lo = (int64_t)pixels + at, hi = lo + (int64_t)(h - 1) * bw + (w - 1) / 2;
-            if(lo < 0 || hi >= fnt_size) return 0;
-            const uint8_t *row = fnt + lo;
-            for(int32_t r = 0; r < h; r++, row += bw)
-                for(int32_t c = 0; c < w; c++) *px++ = (uint8_t)(row[c >> 1] >> (c & 1 ? 0 : 4) & 15);
-        }
-        wr32(ft, (uint32_t)h);
-        wr32(ft + 4, rd32(hd + 4));
-        wr32(ft + 8, count);
-        wr32(ft + 12, widest);
-        wr32(ft + 16, first);
-        ft += 20;
-        first += count;
-    }
-
-    /* the two pictures as boxes at their places */
-    if(pkc(implet, implet_size, &s) != nlet || pkc(impres, impres_size, &s) != nres) return 0;
-    wr32(ft, nspr + nglyph);
-    wr32(ft + 4, (uint32_t)nlet);
-    wr32(ft + 8, nspr + nglyph + (uint32_t)nlet);
-    wr32(ft + 12, (uint32_t)nres);
-    ft += 16;
-
-    /* GAME.TXT's lines as Python's splitlines() cuts them, 31 bytes at most */
-    memset(ft, 0, 32 * LINES);
-    for(uint32_t l = 0, i = 0; l < LINES && i < txt_size; l++) {
-        for(uint32_t n = 0; i < txt_size && !line_break(txt[i]); i++)
-            if(n < 31) ft[32 * l + n++] = txt[i];
-        if(i < txt_size) i += txt[i] == '\r' && i + 1 < txt_size && txt[i + 1] == '\n' ? 2 : 1;
-    }
-    return s.at;
-}

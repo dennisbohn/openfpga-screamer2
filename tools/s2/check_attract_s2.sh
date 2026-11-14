@@ -57,8 +57,9 @@ cp "$root/tools/s2/normal_hash.c" "$bsrc/"
 git -C "$root" show "$base:tools/s2/check_ghost_s2.c" > "$bsrc/check_ghost_s2.c"       # (the base's own: s2gh_rec_begin has taken the set-up since)
 patch_hw "$bsrc"
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
-LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c s2ghost.c race.c s2cam.c s2cockpit.c"
-BASE_LIST=${LIST% s2cockpit.c}            # (the base commit has no views from the car: its s2cam.c does not need s2cockpit.c)
+LIST="road.c track.c geom.c setup.c raster.c car.c blit.c dlog.c crc32.c dat.c console.c tb_hud.c tb_mmp.c s2car.c s2params.c s2ghost.c race.c s2cam.c s2cockpit.c"
+# the base commit's own list: it has no views from the car (its s2cam.c does not need s2cockpit.c), and its car.c still needs Screamer 1's game
+BASE_LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c s2ghost.c race.c s2cam.c"
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -e ATTRACT_DUMP=/b/s2 -e S2_GAME=/game -v "$mount:/b" -v "$game_mount:/game:ro" --entrypoint sh verilator/verilator:v5.050 -c "
     cd /b/s2/attractsrc && gcc -O2 -g -w -fsanitize=address,undefined -fno-sanitize-recover -o ../check_attract_s2 check_attract_s2.c $LIST -lm &&
     gcc -O2 -w -o ../normal_hash_new normal_hash.c $LIST -lm &&

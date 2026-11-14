@@ -46,7 +46,7 @@ git -C "$root" show "$BASE:firmware/s2car.h" > "$base/s2car.h"
 printf 'float s2car_damage_scale = 1.0f;\n' > "$base/shim.c"          # (the commit before has no such variable: the test's own, which nothing reads)
 printf 'extern float s2car_damage_scale;\n' > "$base/shim.h"
 if command -v cygpath >/dev/null 2>&1; then mount=$(cygpath -wa "$root/build"); game_mount=$(cygpath -wa "$game"); else mount=$root/build; game_mount=$game; fi
-LIST="track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c s2params.c s2car.c"
+LIST="track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c tb_hud.c tb_mmp.c s2params.c s2car.c"
 WRAP="-Wl,--wrap=track_ground_s2,--wrap=track_dirs,--wrap=track_walls,--wrap=sinf,--wrap=cosf,--wrap=atanf"
 script="$out/damage_runs.sh"
 : > "$script"

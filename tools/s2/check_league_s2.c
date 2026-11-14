@@ -18,7 +18,6 @@
 #include "../../firmware/s2league.h"
 #include "../../firmware/s2save.h"
 #include "../../firmware/save.h"
-#include "../../firmware/champ.h"
 #include "../../firmware/slot.h"
 #include "../../firmware/dlog.h"
 #include <stdio.h>

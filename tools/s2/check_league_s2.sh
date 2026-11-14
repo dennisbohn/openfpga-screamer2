@@ -17,6 +17,6 @@ else
 fi
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -v "$mount:/work" -w /work --entrypoint sh "$image" -c "
     gcc -O2 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover \
-        firmware/s2league.c firmware/s2save.c firmware/champ.c firmware/crc32.c tools/s2/check_league_s2.c -o build/s2/check_league_s2 -lm &&
+        firmware/s2league.c firmware/s2save.c firmware/crc32.c tools/s2/check_league_s2.c -o build/s2/check_league_s2 -lm &&
     build/s2/check_league_s2
 "

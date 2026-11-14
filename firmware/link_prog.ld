@@ -25,7 +25,6 @@ SECTIONS
     .header : {
         __image_start = .;
         KEEP(*(.text.header))       /* start_prog.S: header, entry, trap entry */
-        KEEP(*(.text.start))
     } > SDRAM
 
     /* The code the I-cache misses on most (link_boot.ld lists it), run from the boot RAM: a miss there takes some 11 clocks (a line a word a clock, no waiting for the SDRAM, which

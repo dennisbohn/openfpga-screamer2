@@ -18,7 +18,7 @@ py=python3
 mkdir -p "$out"
 "$py" -I "$root/tools/files_screens.py" "$man" "$out"
 
-# the firmware's sources with hw.h's RISC-V instructions made plain C (as tools/render.sh does)
+# the firmware's sources with hw.h's RISC-V instructions made plain C (as tools/s2/render_s2.sh does)
 src="$root/build/host/files"
 mkdir -p "$src/host"
 cp "$root"/firmware/*.c "$root"/firmware/*.h "$src/"

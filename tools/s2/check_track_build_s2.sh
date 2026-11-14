@@ -6,7 +6,7 @@
 # (the reference), for each of the seven tracks, with three grids: the race's default (team 1 car 1, team 2 car 2,
 # team 3 car 3, team 4 car 4), one out of order (bonus cars, a car twice) and the five cars of team 1 (the images of
 # the physics check, check_car.sh), and for the four teams' rooms of the options room (GFX/MENU<t>1.DAT: no cars, no track data; S2ROOM=1 of the
-# reference). The S1 pattern is tools/check_track_build.sh. Then tools/s2/check_cars_s2.sh:
+# reference). Then tools/s2/check_cars_s2.sh:
 # the cars loader (firmware/s2teams.c) on the ZIP, stored and deflated.
 # Usage: tools/s2/check_track_build_s2.sh [game folder] [tracks, default "1 2 3 4 5 6 7"]   (the four rooms are checked with the default tracks only)
 #   game folder   the original game (its GFX and DATA folders, as unzipped), default $GAME_DIR or
@@ -52,7 +52,7 @@ else
     mount=$root
     game_mount=$game
 fi
-src="firmware/track_build.c firmware/smg.c firmware/s2env.c firmware/dat.c firmware/tb_mmp.c firmware/tb_spl.c firmware/tb_gfx.c \
+src="firmware/track_build.c firmware/smg.c firmware/s2env.c firmware/dat.c firmware/tb_mmp.c firmware/tb_gfx.c \
      firmware/tb_hud.c firmware/crc32.c firmware/s2teams.c firmware/zip.c tools/s2/check_track_build_s2.c"
 runs=""
 for n in $tracks; do

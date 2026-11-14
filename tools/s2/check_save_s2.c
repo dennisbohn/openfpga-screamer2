@@ -20,7 +20,6 @@
 #define _GNU_SOURCE
 #include "../../firmware/s2save.h"
 #include "../../firmware/save.h"
-#include "../../firmware/champ.h"
 #include "../../firmware/slot.h"
 #include "../../firmware/dlog.h"
 #include <math.h>
@@ -505,6 +504,29 @@ static void test_round_trip(void)
     CHECK(!memcmp(win, good, S2SAVE_SIZE), "the file read back is the file written");
     check_sealed("round trip");
     CHECK(set_size_calls == 1, "the slot size entered once");
+}
+
+/* the old layout's block as Screamer 1 has it without a file (its defaults: the names GRA, the records' times, the view, the volumes) */
+static struct choice_dat choice;
+
+static void choice_defaults(void)
+{
+    memset(&choice, 0, sizeof choice);
+    memcpy(choice.name, "GRA", 4);
+    for(int i = 0; i < 6; i++) {
+        choice.pos[i] = -1;
+        for(int k = 0; k < 5; k++) {
+            choice.lap[i].time[k] = 180.0f;
+            choice.race[i].time[k] = 900.0f;
+            memcpy(choice.lap[i].name[k], "GRA", 4);
+            memcpy(choice.race[i].name[k], "GRA", 4);
+        }
+    }
+    choice.view = 2;
+    choice.speech = choice.music = 1;
+    for(int k = 0; k < 3; k++) choice.volume[k] = 0x6000;
+    choice.unused1 = 1;
+    choice.difficulties = 2;
 }
 
 static void old_block(uint8_t *out, int track, int team, int car, int laps, int skill, int manual, int marker)

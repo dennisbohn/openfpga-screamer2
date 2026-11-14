@@ -97,7 +97,7 @@ if command -v cygpath >/dev/null 2>&1; then
 else
     mount=$out; game_mount=$game; ref_mount=$ref/traces_race; fw_mount=$work
 fi
-LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c menu.c champ.c intro.c hud.c tb_hud.c tb_spl.c tb_mmp.c s2car.c s2params.c s2ghost.c"
+LIST="road.c track.c geom.c setup.c raster.c blit.c dlog.c crc32.c dat.c console.c car.c tb_hud.c tb_mmp.c s2car.c s2params.c s2ghost.c"
 MSYS_NO_PATHCONV=1 docker run --rm -e S2_GAME=/game -v "$fw_mount:/src" -v "$mount:/o" -v "$game_mount:/game:ro" -v "$ref_mount:/r:ro" --entrypoint sh verilator/verilator:v5.050 -c "
     cd /src && gcc -O2 -w -DS2_WHOLE_PLACES=1 -o /o/race_replay race_replay_s2.c $LIST -lm && cd /o && sh /o/runs.sh"
 

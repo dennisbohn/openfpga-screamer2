@@ -3,7 +3,6 @@
  */
 #include "s2save.h"
 #include "save.h"
-#include "champ.h"
 #include "crc32.h"
 #include "slot.h"
 #include "dlog.h"
@@ -48,6 +47,7 @@ _Static_assert(sizeof(struct head) == S2SAVE_MAIN_OFF, "header");
 _Static_assert(sizeof(struct main_part) == S2SAVE_MAIN_SIZE && offsetof(struct file, m) == S2SAVE_MAIN_OFF, "main part");
 _Static_assert(sizeof(((struct file *)0)->t) == S2SAVE_TIMES_SIZE && offsetof(struct file, t) == S2SAVE_TIMES_OFF, "times");
 _Static_assert(sizeof(struct file) == S2SAVE_SIZE && sizeof(struct s2save_row) == 12, "size");
+_Static_assert(sizeof(struct choice_dat) == CHOICE_SIZE, "the old layout");
 _Static_assert(S2SAVE_SIZE <= SAVE_ATTACK_ADDR - SAVE_CHOICE_ADDR, "the window of the slot");
 
 #define sv  ((struct file *)(uintptr_t)SAVE_CHOICE_ADDR)
@@ -181,7 +181,7 @@ static uint32_t old32(uint32_t off)
     return v;
 }
 
-/* the old layout: Screamer 1's CHOICE.DAT block (champ.h) whose unused fields held the start menu's choices */
+/* the old layout: Screamer 1's CHOICE.DAT block (s2save.h) whose unused fields held the start menu's choices */
 static const char *migrate(void)
 {
     if ((old32(offsetof(struct choice_dat, failed)) & 0xFFFF0000u) != OLD_MAGIC) {

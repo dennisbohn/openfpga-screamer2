@@ -32,7 +32,7 @@ static inline float opaquef(float x) { return x; }
 open(p, "w").write(t)
 PY
 python -I "$root/tools/s2/perf_patch.py" "$src"
-LIST="road.c track.c geom.c setup.c raster.c car.c drive.c opp.c ghost.c efx.c scenery.c sound.c speech.c blit.c dlog.c crc32.c dat.c console.c menu.c champ.c intro.c tb_hud.c tb_spl.c tb_mmp.c hud.c s2car.c s2params.c race.c s2ghost.c s2cam.c s2cockpit.c"
+LIST="road.c track.c geom.c setup.c raster.c car.c blit.c dlog.c crc32.c dat.c console.c tb_hud.c tb_mmp.c s2car.c s2params.c race.c s2ghost.c s2cam.c s2cockpit.c"
 MSYS_NO_PATHCONV=1 docker run --rm -v "$mount:/b" --entrypoint sh $img -c "cd /b/stats/src_m && gcc -O2 -w -include perf.h -DRS_TRACE -o ../mirrorstats_s2 mirrorstats.c perf.c $LIST -lm"
 for n in $tracks; do
     cp "$root/build/s2/track$n.bin" "$st/track$n.bin"

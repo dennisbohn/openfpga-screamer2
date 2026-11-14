@@ -45,7 +45,7 @@ else
 fi
 MSYS_NO_PATHCONV=1 docker run --rm -e ASAN_OPTIONS=detect_leaks=0 -v "$mount:/work" -v "$game_mount:/game:ro" -w /work --entrypoint sh "$image" -c "
     gcc -O2 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover \
-        firmware/s2anim.c firmware/s2params.c firmware/dat.c firmware/track_build.c firmware/smg.c firmware/s2env.c firmware/tb_mmp.c firmware/tb_spl.c firmware/tb_gfx.c \
+        firmware/s2anim.c firmware/s2params.c firmware/dat.c firmware/track_build.c firmware/smg.c firmware/s2env.c firmware/tb_mmp.c firmware/tb_gfx.c \
         firmware/tb_hud.c firmware/crc32.c tools/s2/check_anim_s2.c -o build/s2/check_anim -lm &&
     for t in 1 2 3 4 5 6 7; do build/s2/check_anim /game \$t < build/s2/anim_scn_t\$t.txt > build/s2/anim_c_t\$t.txt 2> build/s2/anim_c_t\$t.err || exit 1; done &&
     for t in $dos; do build/s2/check_anim /game \$t < build/s2/anim_dos_scn_t\$t.txt > build/s2/anim_dos_c_t\$t.txt 2> /dev/null || exit 1; done

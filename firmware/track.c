@@ -26,9 +26,6 @@
  * the faces, or nearly (the data); the normal test leaves out those turned away.
  */
 #include "track.h"
-#ifdef TRACK_DUMP
-#include <stdio.h>
-#endif
 #include "crc32.h"
 #include "prof.h"
 #include <math.h>
@@ -60,8 +57,6 @@
 #define FOCAL       128.0f
 #define EYE_BACK    128.0f
 #define EYE_LINE(h) ((h) * 65 / 100)
-#define CAM_UP      700.0f      /* camera over the player's line */
-#define LOOK        12          /* path points ahead for the direction of view */
 #define PI          3.14159265f
 
 /* The game's view angles (0x829e3): each cut to a 2048th of a turn (the camera record's float,
@@ -81,22 +76,15 @@ static int32_t view_sin16(int i)          /* 16384 = 1 */
 }
 
 struct piece { int32_t obj, x, y, h, t; };
-struct pt { int32_t x, y, h; };
 struct start { int32_t x, y; float yaw; };
 
 static const uint8_t *file_start, *mlb, *unr_blob;
-static uint32_t file_size;
-static int nblocks;
 static const int32_t *unr_off;
 static int unr_count;
 static const struct piece *pieces;
 static int npieces;
-static const struct pt *path;
-static int npath;
 static const uint32_t *pal;
 static const uint16_t *ground_first, *ground_list;     /* first[65537], then the pieces */
-static const struct track_marker *markers;
-static int nmarkers;
 static const struct car_spec *cars;
 static int ncars;
 static const struct track_model *models;
@@ -108,7 +96,6 @@ static int ndirs;
 static const struct track_wall *walls;
 static int nwalls;
 static const uint8_t *piece_kinds;     /* the road kind of each placement (header 0x74), NULL if the image has none */
-static float anim;                      /* the animation clock, 0..1 */
 static uint32_t piece_phase;            /* the pieces' texture phase: the clock (record +0x20 is -1) */
 static uint32_t clock16;                /* the animation clock, 16 bits (0x21538) */
 static uint8_t multi[MAX_OBJ];          /* the mesh has several blocks or moving parts */
@@ -139,7 +126,6 @@ struct gpiece { float x, y, ox, oy, r2, c, s; int32_t obj, h, br; uint8_t kind; 
 #define MAX_GROUND  4096
 static struct gpiece gpieces[MAX_GROUND];
 static float sin_q[513];                /* sin(2 pi i / 2048) for i = 0..512 */
-static float under_n[3];                /* track_under's face: its normal in world axes (x, y, up) */
 static float far_base = 50000.0f;       /* the far plane of the image's header (track_init), the original's */
 static float far_z = 50000.0f;          /* the far plane the faces are cut at: far_base x FAR_SCALE (the mirror's pass: its own) */
 static float reach2 = (50000.0f + REACH_PLUS) * (50000.0f + REACH_PLUS);   /* the pieces' reach, squared */
@@ -363,8 +349,7 @@ int track_open(const volatile uint8_t *file)
     const uint8_t *f = (const uint8_t *)file;
     if(rd32(f) != 0x4B524353 || rd32(f + 4) != 7) return 0;    /* "SCRK", version 7 (Screamer 2) */
     file_start = f;
-    file_size = (uint32_t)rd32(f + 0x88);
-    nblocks = rd32(f + 0x8C);
+    const int nblocks = rd32(f + 0x8C);     /* the image's blocks of 256 KB, each with a CRC-32 in the header */
     if(nblocks < 1 || 0x90 + 4 * nblocks > 0x100) return 0;
     return 1;
 }
@@ -377,12 +362,8 @@ int track_init(void)
     pal = (const uint32_t *)(f + rd32(f + 0x18));
     pieces = (const struct piece *)(f + rd32(f + 0x1C));
     npieces = rd32(f + 0x20);
-    path = (const struct pt *)(f + rd32(f + 0x24));
-    npath = rd32(f + 0x28);
     ground_first = (const uint16_t *)(f + rd32(f + 0x2C));
     ground_list = ground_first + 65537;
-    markers = (const struct track_marker *)(f + rd32(f + 0x34));
-    nmarkers = rd32(f + 0x38);
     cars = (const struct car_spec *)(f + rd32(f + 0x3C));
     ncars = rd32(f + 0x40);
     models_at = f + rd32(f + 0x44);
@@ -613,25 +594,6 @@ int track_fx(struct track_fx *fx)
     return 1;
 }
 
-uint32_t track_path_length(void)
-{
-    return (uint32_t)npath;
-}
-
-void track_path_point(uint32_t i, float *x, float *y, float *h)
-{
-    const struct pt *p = &path[i % (uint32_t)npath];
-    *x = (float)p->x;
-    *y = (float)p->y;
-    *h = (float)p->h;
-}
-
-const struct track_marker *track_markers(int *n)
-{
-    *n = nmarkers;
-    return markers;
-}
-
 const struct car_spec *track_cars(int *n)
 {
     *n = ncars;
@@ -664,24 +626,6 @@ const struct track_wall *track_walls(int *n)
 uint32_t track_phase(void)
 {
     return piece_phase;
-}
-
-void track_clock(uint32_t steps)
-{
-    anim += (float)steps * 0.02f * 0.3f;
-    while(anim >= 1.0f) anim -= 1.0f;
-    clock16 = (uint32_t)(anim * 65535.0f);
-    piece_phase = clock16 & 0x3FFF;
-}
-
-int track_bonus_time(void)
-{
-    return rd32(file_start + 0x70);
-}
-
-int track_camera_hi(void)
-{
-    return rd32(file_start + 0x74);
 }
 
 const uint8_t *track_backdrop(void)
@@ -748,38 +692,6 @@ void track_backdrop_blit_mirror(struct blit_list *l, const struct rs_clip *clip,
     backdrop_blit(l, clip, cam, 1);
 }
 
-const uint8_t *track_hud(void)
-{
-    return file_start + rd32(file_start + 0x68);
-}
-
-const struct blit_image *track_hud_images(int *n)
-{
-    const uint8_t *h = track_hud();
-    *n = rd32(h);
-    return (const struct blit_image *)(h + 8);
-}
-
-const struct blit_font *track_hud_fonts(int *n)
-{
-    const uint8_t *h = track_hud();
-    *n = rd32(h + 4);
-    return (const struct blit_font *)(h + 8 + 12 * rd32(h));
-}
-
-void track_hud_picture(int k, int *first, int *count)
-{
-    const uint8_t *h = track_hud(), *p = h + 8 + 12 * rd32(h) + 20 * rd32(h + 4) + 8 * k;
-    *first = rd32(p);
-    *count = rd32(p + 4);
-}
-
-const char *track_hud_text(int k)
-{
-    const uint8_t *h = track_hud();
-    return (const char *)(h + 8 + 12 * rd32(h) + 20 * rd32(h + 4) + 16 + 32 * k);
-}
-
 void track_start(float *x, float *y, float *yaw)
 {
     *x = (float)start->x;
@@ -787,10 +699,9 @@ void track_start(float *x, float *y, float *yaw)
     *yaw = start->yaw;
 }
 
-/* track_under's test of face q of placement gp at (lx, lz) in its frame (c, s its turn): 1 the
-   point is over it (*h, under_n set if a height is asked for), 0 the next face */
-static inline int under_face(const struct cface *q, const struct gpiece *gp, float lx, float lz, float c, float s,
-                             float *h, int *grass)
+/* track_under's test of face q of placement gp at (lx, lz) in its frame: 1 the point is over it
+   (*h set if a height is asked for), 0 the next face */
+static inline int under_face(const struct cface *q, const struct gpiece *gp, float lx, float lz, float *h, int *grass)
 {
     /* (each test's comparisons all asked for before any answer is used: they come back side by
        side, and the CPU waits once) */
@@ -817,9 +728,6 @@ static inline int under_face(const struct cface *q, const struct gpiece *gp, flo
     if(q->n[1] == 0) return 0;
     int num = ((int)lx - q->v[0]) * q->n[0] + ((int)lz - q->v[2]) * q->n[2];
     *h = (float)gp->h + (float)q->v[1] + (float)(-num / q->n[1]);
-    under_n[0] = (float)q->n[0] * c - (float)q->n[2] * s;
-    under_n[1] = (float)q->n[0] * s + (float)q->n[2] * c;
-    under_n[2] = (float)q->n[1];
     return 1;
 }
 
@@ -848,10 +756,10 @@ int track_under(float x, float y, float *h, int *grass)
                     INT_NOW2(iz, ix);                   /* (cgrid_cell's, both asked for at once) */
                     int k = cgrid_clamp(iz) * CGRID + cgrid_clamp(ix);
                     for(const uint16_t *li = clist + g->at[k], *le = clist + g->at[k + 1]; li < le; li++)
-                        if(under_face(f0 + *li, gp, lx, lz, c, s, h, grass)) return 1;
+                        if(under_face(f0 + *li, gp, lx, lz, h, grass)) return 1;
                 } else
                     for(const struct cface *q = f0; q < fe; q++)
-                        if(under_face(q, gp, lx, lz, c, s, h, grass)) return 1;
+                        if(under_face(q, gp, lx, lz, h, grass)) return 1;
         }
     }
     return 0;
@@ -934,40 +842,6 @@ int track_ground_s2(int x, int y, int *held, int *height, int normal[3], int *ki
     return 0;
 }
 
-/* how the game stands a thing heading yaw on the face track_under found (0x1cb9c, an
-   opponent): the face's normal turned into its frame, each level part x pi / 46080 of the
-   normal's 16384 units an angle (1.117 x the slope); pitch + nose up, roll + right side up */
-void track_under_tilt(float fx, float fy, float *pitch, float *roll)
-{
-    float nx = under_n[0], ny = under_n[1], nz = under_n[2];
-    float len = sqrtf(nx * nx + ny * ny + nz * nz);
-    if(nz < 0.0f) len = -len;
-    if(len != 0.0f) { nx /= len; ny /= len; }
-    *pitch = -1.117f * (nx * fx + ny * fy);
-    *roll = 1.117f * (nx * -fy + ny * fx);
-}
-
-int track_opp_count(int *rows)
-{
-    const uint8_t *o = file_start + rd32(file_start + 0x80);
-    *rows = rd32(o + 4);
-    return rd32(o);
-}
-
-const struct track_opp_row *track_opp_rows(void)
-{
-    return (const struct track_opp_row *)(file_start + rd32(file_start + 0x80) + 8);
-}
-
-const struct track_spline_node *track_opp_spline(int k, int *start, int *n)
-{
-    const uint8_t *o = file_start + rd32(file_start + 0x80), *p = o + 8 + 20 * rd32(o + 4);
-    for(int j = 0; j < k; j++) p += 8 + 32 * rd32(p + 4);
-    *start = rd32(p);
-    *n = rd32(p + 4);
-    return (const struct track_spline_node *)(p + 8);
-}
-
 /* the camera's frame (track_draw_cam): forward, right, up */
 static void cam_frame(const struct track_cam *cam, float f[3], float r[3], float u[3])
 {
@@ -1002,27 +876,6 @@ static void cam_frame(const struct track_cam *cam, float f[3], float r[3], float
 void track_cam_axes(const struct track_cam *cam, float f[3], float r[3], float u[3])
 {
     cam_frame(cam, f, r, u);
-}
-
-void track_detail(int level)
-{
-    (void)level;    /* Screamer 2 draws at DETAIL HIGH only: the far plane is the image's (track_init) */
-}
-
-uint32_t track_size(void)
-{
-    return file_size;
-}
-
-int track_blocks(void)
-{
-    return nblocks;
-}
-
-int track_block_ok(int k)
-{
-    uint32_t o = 0x100 + (uint32_t)k * BLOCK, e = o + BLOCK < file_size ? o + BLOCK : file_size;
-    return o < e && crc32(file_start + o, file_start + e) == (uint32_t)rd32(file_start + 0x90 + 4 * k);
 }
 
 void track_view_mirror(const struct rs_clip *clip, struct su_view *v)
@@ -1538,15 +1391,6 @@ static void draw(volatile uint8_t *fb, const struct rs_clip *clip, const struct 
     const int nv = cull(clip, e, objs, nobj, st);
     uint32_t t_pieces = now();
     st->cyc_cull = t_pieces - t_start;
-#ifdef TRACK_DUMP                               /* the PC renderer (tools/render.sh): the list drawn */
-    for(int k = 0; k < nv; k++)
-        if((vis[k] & 0xFFFF) < npieces)
-            printf("drawn piece obj %d at %d %d %d\n", (int)pieces[vis[k] & 0xFFFF].obj, (int)pieces[vis[k] & 0xFFFF].x,
-                   (int)pieces[vis[k] & 0xFFFF].h, (int)pieces[vis[k] & 0xFFFF].y);
-        else
-            printf("drawn object at %.0f %.0f %.0f\n", objs[(vis[k] & 0xFFFF) - npieces].x,
-                   objs[(vis[k] & 0xFFFF) - npieces].h, objs[(vis[k] & 0xFFFF) - npieces].y);
-#endif
     objects_make(cam, e, objs, nv);
     hand_over(fb, clip, e, objs, nv, st);
     st->cyc_piece = now() - t_pieces - st->cyc_out;
@@ -1584,31 +1428,10 @@ void track_draw_mirror(volatile uint8_t *fb, const struct rs_clip *clip, const s
     mirror_pass = 0;
 }
 
-void track_draw(volatile uint8_t *fb, const struct rs_clip *clip, uint32_t pos, struct track_stats *st)
-{
-    /* the camera on the player's line, looking LOOK points ahead and a little down */
-    if(npath < LOOK + 2) return;                /* (Screamer 2's images have no path) */
-    uint32_t i0 = (pos >> 8) % (uint32_t)npath, i1 = (i0 + 1) % (uint32_t)npath;
-    uint32_t il = (i0 + LOOK) % (uint32_t)npath;
-    float fr = (float)(pos & 255) / 256.0f;
-    float cx = path[i0].x + (path[i1].x - path[i0].x) * fr;
-    float cy = path[i0].y + (path[i1].y - path[i0].y) * fr;
-    float ch = path[i0].h + (path[i1].h - path[i0].h) * fr + CAM_UP;
-    float fx = path[il].x - cx, fy = path[il].y - cy, fh = path[il].h + CAM_UP - 250.0f - ch;
-    float l = __builtin_sqrtf(fx * fx + fy * fy + fh * fh);
-    fx /= l; fy /= l; fh /= l;
-    float rx = fy, ry = -fx;                    /* right = forward x up, level */
-    l = __builtin_sqrtf(rx * rx + ry * ry);
-    rx /= l; ry /= l;
-    const struct eye e = { { cx, cy, ch }, { fx, fy, fh }, { rx, ry, 0.0f }, { ry * fh, -rx * fh, rx * fy - ry * fx } };     /* up = right x forward */
-    draw(fb, clip, 0, &e, 0, 0, st);
-}
-
 /* the animation clock set to a (0 .. 1 of its turn) by something that runs it at its own pace: the options room's textures play at 0.2 a turn a second (STARTL.EXE 0x39000), the
    race's at 0.3. */
 void track_clock_set(float a)
 {
-    anim = a;
-    clock16 = (uint32_t)(anim * 65535.0f);
+    clock16 = (uint32_t)(a * 65535.0f);
     piece_phase = clock16 & 0x3FFF;
 }
