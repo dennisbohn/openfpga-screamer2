@@ -12,7 +12,7 @@ Reference: OpenScreamer's docs/NOTES2.md and the game files in `C:\GOG Games\Scr
 
 ## Decisions
 
-- **Identity:** core `Chainy.Screamer2`, platform `screamer2`, version 1.1.0 (1.0.0 was the first release, 2026-11-14), game
+- **Identity:** core `Chainy.Screamer2`, platform `screamer2`, version 1.1.1 (1.0.0 was the first release, 2026-11-14), game
   files in `Assets/screamer2/common/`, saves in `Saves/screamer2/Chainy.Screamer2/`. The platform
   image is the game's own since release 1.0.0.
 - **Game files:** one ZIP of the game's `DATA`, `GFX` and `ANIMS` folders in a single data slot
